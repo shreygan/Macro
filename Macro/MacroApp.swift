@@ -31,7 +31,8 @@ struct MacroApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WelcomeView()
+//            WelcomeView()
+            MainView()
         }
         .modelContainer(sharedModelContainer)
     }
