@@ -36,7 +36,6 @@ struct GoalSetupView: View {
 
     var body: some View {
         VStack {
-
             HStack(spacing: 8) {
                 Text("Set Your Macro Goals")
                     .font(.system(.title2, design: .rounded))
