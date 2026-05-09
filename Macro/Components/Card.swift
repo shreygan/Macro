@@ -44,7 +44,6 @@ struct Card<Content: View, MenuContent: View>: View {
                     y: 4
                 )
         )
-//        .compositingGroup()
 
         Group {
             if MenuContent.self != EmptyView.self {
@@ -123,7 +122,7 @@ extension Card {
                     Label("Duplicate", systemImage: "plus.square.on.square")
                 }
 
-                Divider()  // Native separator
+                Divider()
 
                 Button(role: .destructive) {
                     print("Delete tapped")

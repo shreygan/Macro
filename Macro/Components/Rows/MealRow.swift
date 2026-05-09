@@ -17,7 +17,6 @@ struct MealRow: View {
     var fat: String? = nil
     var fiber: String? = nil
 
-    // If you provide an action, it becomes clickable and shows the chevron!
     var action: (() -> Void)? = nil
 
     var body: some View {

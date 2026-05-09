@@ -48,23 +48,6 @@ struct BaseRowLayout<RightContent: View>: View {
                 }
             }
 
-            //            if let icon = icon {
-            //                Image(systemName: icon)
-            //                    .font(.system(size: 20))
-            //                    .foregroundColor(iconTint)
-            //                    .frame(width: 28)
-            //            }
-            //
-            //            if let icon = icon {
-            //                icon
-            //                    .resizable()
-            //                    .scaledToFit()
-            //                    .frame(height: titleFontSize * 1.4)
-            //                    .alignmentGuide(.lastTextBaseline) { dimensions in
-            //                        dimensions.height * 0.75
-            //                    }
-            //            }
-
             VStack(alignment: .leading, spacing: 2) {
 
                 HStack(alignment: .firstTextBaseline, spacing: 4) {

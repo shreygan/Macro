@@ -23,7 +23,6 @@ struct PillRow: View {
             titleExtension: titleExtension,
             subtitle: subtitle
         ) {
-            // Drop the pill into the right-hand slot!
             InputPill(text: $text, unit: unit)
         }
     }

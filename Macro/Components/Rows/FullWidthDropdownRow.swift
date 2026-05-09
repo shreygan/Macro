@@ -16,16 +16,13 @@ struct FullWidthDropdownRow: View {
     var body: some View {
         HStack(spacing: 8) {
             
-            // 1. The Left Side: Always-Active Text Field
             TextField(placeholder, text: $selection)
                 .font(.system(size: 16))
                 .frame(maxWidth: .infinity, alignment: .leading)
             
-            // 2. The Right Side: The Dropdown Hitbox
             Menu {
                 ForEach(options, id: \.self) { option in
                     Button(option) {
-                        // Automatically replaces the text field's content!
                         selection = option
                     }
                 }
@@ -33,12 +30,10 @@ struct FullWidthDropdownRow: View {
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.tertiary)
-                    // 👇 We give the chevron a wide, invisible frame so it's super easy to tap
                     .frame(width: 44, alignment: .trailing)
                     .contentShape(Rectangle())
             }
         }
-        // Matches your exact rigid grid architecture
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
     }
