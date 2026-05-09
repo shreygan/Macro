@@ -48,9 +48,9 @@ struct FullWidthDropdownRow: View {
             ZStack {
                 Color.gray.opacity(0.15).ignoresSafeArea()
 
-                Card(title: "QUICK ADD") {
+                Card("QUICK ADD") {
 
-                    RowGroup(separator: .divider) {
+                    RowGroup(.divider) {
                         FullWidthInputRow(
                             placeholder: "Search for food...",
                             text: $foodSearch

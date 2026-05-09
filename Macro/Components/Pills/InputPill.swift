@@ -46,7 +46,7 @@ struct InputPill: View {
                 Color.background.ignoresSafeArea()
 
                 Card {
-                    RowGroup(separator: .divider) {
+                    RowGroup(.divider) {
                         PillRow(
                             icon: .system("scalemass"),
                             title: "Current Weight",

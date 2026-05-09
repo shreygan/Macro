@@ -103,7 +103,7 @@ struct DropdownPill: View {
             ZStack {
                 Color.gray.opacity(0.15).ignoresSafeArea()
                 
-                Card(title: "PORTION") {
+                Card("PORTION") {
                     BaseRowLayout(
                         icon: .system("cup.and.saucer.fill", tint: .blue),
                         title: "Serving Size"

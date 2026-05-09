@@ -17,6 +17,14 @@ struct RowGroup<Content: View>: View {
     var separator: SeparatorStyle = .divider
     @ViewBuilder var content: Content
 
+    init(
+        _ separator: SeparatorStyle = .divider,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.separator = separator
+        self.content = content()
+    }
+
     var body: some View {
         _VariadicView.Tree(RowGroupLayout(separator: separator)) {
             content
@@ -37,7 +45,7 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
                     switch separator {
                     case .divider:
                         Divider()
-                            .padding(.leading, 16)
+                            .padding(.horizontal, 16)
                     case .spacing(let space):
                         Spacer()
                             .frame(height: space)
@@ -58,7 +66,7 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
 
             Card {
 
-                RowGroup(separator: .divider) {
+                RowGroup(.divider) {
 
                     MealRow(
                         title: "Breakfast",
@@ -88,7 +96,7 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
             Spacer()
 
             Card {
-                RowGroup(separator: .spacing(8)) {
+                RowGroup(.spacing(8)) {
 
                     MealRow(
                         title: "Breakfast",
@@ -117,7 +125,7 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
 
             Spacer()
 
-            Card(title: "Hello") {
+            Card("Hello") {
                 ButtonRow(
                     title: "Log New Meal",
                     tint: .accentColor,
