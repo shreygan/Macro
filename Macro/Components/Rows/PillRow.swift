@@ -37,7 +37,7 @@ struct PillRow: View {
             ZStack {
                 Color.gray.opacity(0.15).ignoresSafeArea()
                 
-                Card(title: "BODY METRICS") {
+                Card("BODY METRICS") {
                     PillRow(
                         icon: .system("scalemass"),
                         title: "Current Weight",

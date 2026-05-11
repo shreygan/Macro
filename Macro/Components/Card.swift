@@ -62,12 +62,13 @@ struct Card<Content: View, MenuContent: View>: View {
                 cardVisuals
             }
         }
+        .padding(.bottom, -10)
     }
 }
 
 extension Card where MenuContent == EmptyView {
     init(
-        title: String? = nil,
+        _ title: String? = nil,
         cornerRadius: CGFloat = 24.0,
         tintColor: Color = Color(white: 0.96),
         @ViewBuilder content: () -> Content
@@ -82,7 +83,7 @@ extension Card where MenuContent == EmptyView {
 
 extension Card {
     init(
-        title: String? = nil,
+        _ title: String? = nil,
         cornerRadius: CGFloat = 24.0,
         tintColor: Color = Color(white: 0.96),
         @ViewBuilder content: () -> Content,
@@ -101,7 +102,7 @@ extension Card {
         Color.gray.opacity(0.15).ignoresSafeArea()
 
         VStack {
-            Card(title: "MEAL PLAN") {
+            Card("MEAL PLAN") {
 
                 Text(
                     "Press and hold anywhere on this card to open the options menu!"

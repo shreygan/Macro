@@ -40,7 +40,7 @@ struct MainView: View {
             }
         }
         .sheet(isPresented: $showLogSheet) {
-            LogEntrySheetView()
+            NewEntrySheetView()
         }
     }
 }

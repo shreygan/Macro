@@ -10,7 +10,7 @@ import SwiftUI
 struct ButtonRow: View {
     var icon: RowIcon? = nil
     var title: String
-    var tint: Color = Color.gray.opacity(0.2)
+    var tint: Color = Color.gray.opacity(0.1)
     var textColor: Color = .primary
 
     var topPadding: CGFloat = 8
@@ -72,31 +72,31 @@ struct ButtonRow: View {
     ) {
         print("Scanner opened!")
     }
-    //    ZStack {
-    //        Color.gray.opacity(0.15).ignoresSafeArea()
-    //
-    //        Card(title: "New Entry") {
-    //
-    //            ButtonRow(title: "Save Changes", bottomPadding: 8) {
-    //                print("Saved!")
-    //            }
-    //
-    //            ButtonRow(
-    //                icon: .system("trash"),
-    //                title: "Delete Meal",
-    //                tint: .red,
-    //                textColor: .white,
-    //                bottomPadding: 8
-    //            ) {
-    //                print("Deleted!")
-    //            }
-    //
-    //            ButtonRow(
-    //                icon: .custom(Image("Calorie")),
-    //                title: "Scan Barcode"
-    //            ) {
-    //                print("Scanner opened!")
-    //            }
-    //        }
-    //    }
+//        ZStack {
+//            Color.gray.opacity(0.15).ignoresSafeArea()
+//    
+//            Card(title: "New Entry") {
+//    
+//                ButtonRow(title: "Save Changes", bottomPadding: 8) {
+//                    print("Saved!")
+//                }
+//    
+//                ButtonRow(
+//                    icon: .system("trash"),
+//                    title: "Delete Meal",
+//                    tint: .red,
+//                    textColor: .white,
+//                    bottomPadding: 8
+//                ) {
+//                    print("Deleted!")
+//                }
+//    
+//                ButtonRow(
+//                    icon: .custom(Image("Calorie")),
+//                    title: "Scan Barcode"
+//                ) {
+//                    print("Scanner opened!")
+//                }
+//            }
+//        }
 }

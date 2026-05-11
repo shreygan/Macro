@@ -12,6 +12,7 @@
 		356465A02FA33004007414C5 /* Macro.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = Macro.xcodeproj; sourceTree = "<group>"; };
 		35A79F842F8F22C200338167 /* Macro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Macro.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		35A9EA062FAD665C00BD8B80 /* Macro.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = Macro.xcodeproj; sourceTree = "<group>"; };
+		35A9ED862FB1012400BD8B80 /* Macro.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = Macro.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -82,6 +83,11 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		35A9ED882FB1012400BD8B80 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -144,6 +150,10 @@
 				{
 					ProductGroup = 356465A22FA33004007414C5 /* Products */;
 					ProjectRef = 356465A02FA33004007414C5 /* Macro.xcodeproj */;
+				},
+				{
+					ProductGroup = 35A9ED882FB1012400BD8B80 /* Products */;
+					ProjectRef = 35A9ED862FB1012400BD8B80 /* Macro.xcodeproj */;
 				},
 				{
 					ProductGroup = 355326202F9C38EA00FBFE88 /* Products */;
