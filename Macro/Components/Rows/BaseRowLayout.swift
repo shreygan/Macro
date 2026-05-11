@@ -20,7 +20,7 @@ struct BaseRowLayout<RightContent: View>: View {
     var titleExtension: String? = nil
     var subtitle: String? = nil
 
-    var titleFontSize: CGFloat = 18
+    var titleFontSize: CGFloat = 16
 
     @ViewBuilder var rightContent: RightContent
 

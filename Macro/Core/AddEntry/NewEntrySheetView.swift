@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct LogEntrySheetView: View {
+struct NewEntrySheetView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var searchText = ""
@@ -20,23 +20,26 @@ struct LogEntrySheetView: View {
                 ScrollView {
                     VStack {
                         Card("Favorites") {
-                            RowGroup(.none) {
+                            MealRow(
+                                title: "Grilled Chicken Salad",
+                                subtitle: "Sweetgreen, 1 bowl",
+                                calorie: "450",
+                                protein: "42",
+                                carbs: "12",
+                                fat: "18",
+                                fiber: "6"
+                            )
+                        } menuItems: {
+                            Button {
 
-                                MealRow(
-                                    title: "Grilled Chicken Salad",
-                                    subtitle: "Sweetgreen, 1 bowl",
-                                    calorie: "450",
-                                    protein: "42",
-                                    carbs: "12",
-                                    fat: "18",
-                                    fiber: "6"
-                                )
+                            } label: {
+                                Label("Add a Favorite", systemImage: "star")
+                            }
 
-                                ButtonRow(
-                                    icon: .system("plus"),
-                                    title: "Add Favorite"
-                                ) {
-                                }
+                            Button {
+
+                            } label: {
+                                Label("Edit Favorites", systemImage: "pencil")
                             }
                         }
                         .padding([.top, .leading, .trailing])
@@ -45,8 +48,10 @@ struct LogEntrySheetView: View {
                             ButtonRow(
                                 icon: .system("fork.knife"),
                                 title: "Add New Food",
-                                bottomPadding: 2,
-                            ) {}
+                                bottomPadding: 2
+                            ) {
+                                
+                            }
                             ButtonRow(
                                 icon: .system("cup.and.saucer"),
                                 title: "Add New Drink",
@@ -84,51 +89,10 @@ struct LogEntrySheetView: View {
                         }
                         .padding([.top, .leading, .trailing])
 
-                        Card("Test") {
-                            BaseRowLayout(
-                                icon: .system(
-                                    "cup.and.saucer.fill",
-                                    tint: .blue
-                                ),
-                                title: "Serving Size"
-                            ) {
-                                DropdownPill(
-                                    options: ["Cup", "Tbsp", "g"],
-                                    selection: .constant("Cup")
-                                )
-                            }
-                        } menuItems: {
-
-                            Button {
-                                print("Edit tapped")
-                            } label: {
-                                Label("Edit Meal", systemImage: "pencil")
-                            }
-
-                            Button {
-                                print("Duplicate tapped")
-                            } label: {
-                                Label(
-                                    "Duplicate",
-                                    systemImage: "plus.square.on.square"
-                                )
-                            }
-
-                            Divider()
-
-                            Button(role: .destructive) {
-                                print("Delete tapped")
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                        .padding([.top, .leading, .trailing])
-                        // TODO: FIX CARD HOLDING DOWN SO CAN HOLD DOWN ANYWHERE ON CARD
-
                         Spacer()
                     }
                 }
-                .navigationTitle("Log Entry")
+                .navigationTitle("New Entry")
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(
                     text: $searchText,
@@ -152,5 +116,5 @@ struct LogEntrySheetView: View {
 }
 
 #Preview {
-    LogEntrySheetView()
+    NewEntrySheetView()
 }
