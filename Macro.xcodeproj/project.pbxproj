@@ -14,6 +14,8 @@
 		35A9EA062FAD665C00BD8B80 /* Macro.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = Macro.xcodeproj; sourceTree = "<group>"; };
 		35A9ED862FB1012400BD8B80 /* Macro.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = Macro.xcodeproj; sourceTree = "<group>"; };
 		CCD780E72FB17D24004D70EC /* Macro.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = Macro.xcodeproj; sourceTree = "<group>"; };
+		CCD782B92FB1AE15004D70EC /* Macro.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = Macro.xcodeproj; sourceTree = "<group>"; };
+		CCD7835F2FB27C46004D70EC /* Macro.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = Macro.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -94,6 +96,16 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		CCD782BB2FB1AE15004D70EC /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CCD783612FB27C46004D70EC /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -162,8 +174,16 @@
 					ProjectRef = 35A9ED862FB1012400BD8B80 /* Macro.xcodeproj */;
 				},
 				{
+					ProductGroup = CCD782BB2FB1AE15004D70EC /* Products */;
+					ProjectRef = CCD782B92FB1AE15004D70EC /* Macro.xcodeproj */;
+				},
+				{
 					ProductGroup = CCD780E92FB17D24004D70EC /* Products */;
 					ProjectRef = CCD780E72FB17D24004D70EC /* Macro.xcodeproj */;
+				},
+				{
+					ProductGroup = CCD783612FB27C46004D70EC /* Products */;
+					ProjectRef = CCD7835F2FB27C46004D70EC /* Macro.xcodeproj */;
 				},
 				{
 					ProductGroup = 355326202F9C38EA00FBFE88 /* Products */;
