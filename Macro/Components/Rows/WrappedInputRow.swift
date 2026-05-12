@@ -15,9 +15,9 @@ struct WrappedInputRow: View {
     var body: some View {
         TextField(placeholder, text: $text, axis: .vertical)
             .lineLimit(1...10)
-            .keyboardType(keyboardType)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .frame(maxWidth: .infinity, alignment: .topLeading)
+            .numericKeyboardFilter(text: $text, type: keyboardType)
     }
 }

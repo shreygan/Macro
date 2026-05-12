@@ -11,15 +11,16 @@ struct InputPill: View {
     @Binding var text: String
     var unit: String? = nil
     var textFontSize: CGFloat = 16
-    var keyboardType: UIKeyboardType = .decimalPad
+    var keyboardType: UIKeyboardType = .default
+    var placeholder: String = "0"
 
     var body: some View {
         HStack(spacing: 4) {
-            TextField("0", text: $text)
+            TextField(placeholder, text: $text)
                 .font(.system(size: textFontSize))
-                .multilineTextAlignment(.trailing)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: true, vertical: false)
-                .keyboardType(keyboardType)
+                .numericKeyboardFilter(text: $text, type: keyboardType)
 
             if let unit = unit {
                 Text(unit)
@@ -39,7 +40,7 @@ struct InputPill: View {
 #Preview {
     struct PillPreviewWrapper: View {
         @State private var weight = "175"
-        @State private var bodyFat = "15"
+        @State private var bodyFat = "1"
 
         var body: some View {
             ZStack {
