@@ -17,6 +17,8 @@ struct TextInputRow: View {
     @Binding var text: String
     var keyboardType: UIKeyboardType = .default
     
+    var isEnabled: Bool = true
+    
     var body: some View {
         BaseRowLayout(
             icon: icon,
@@ -28,6 +30,41 @@ struct TextInputRow: View {
                 .multilineTextAlignment(.trailing)
                 .keyboardType(keyboardType)
                 .frame(maxWidth: 120)
+                .foregroundStyle(isEnabled ? Color(uiColor: .label) : Color(uiColor: .secondaryLabel))
+                .opacity(isEnabled ? 1.0 : 0.7)
+                .disabled(!isEnabled)
         }
     }
+}
+
+#Preview {
+    struct TextInputRow_Previews: View {
+        @State private var activeText = "955"
+        @State private var disabledText = "84"
+        
+        var body: some View {
+
+            Card {
+                RowGroup(.divider) {
+                    TextInputRow(
+                        icon: .system("flame.fill", tint: .orange),
+                        title: "Calories",
+                        titleExtension: "(kcal)",
+                        text: $activeText,
+                        isEnabled: true
+                    )
+                                
+                    TextInputRow(
+                        icon: .system("bolt.fill", tint: .blue),
+                        title: "Protein",
+                        titleExtension: "(g)",
+                        text: $disabledText,
+                        isEnabled: false
+                    )
+                }
+            }
+        }
+    }
+    
+    return TextInputRow_Previews()
 }
