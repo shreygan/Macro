@@ -35,18 +35,48 @@ struct MealRow: View {
                 }
 
                 HStack(spacing: 4) {
-                    macroStat(imageName: "Calorie", text: calorie)
-                    if let protein {
-                        macroStat(imageName: "Protein", text: protein)
+                    let formattedCalorie =
+                        Double(calorie).map {
+                            $0.formatted(
+                                .number.precision(.fractionLength(0...1))
+                            )
+                        } ?? calorie
+                    macroStat(imageName: "Calorie", text: formattedCalorie)
+
+                    if let protein, let val = Double(protein), val > 0 {
+                        macroStat(
+                            imageName: "Protein",
+                            text: val.formatted(
+                                .number.precision(.fractionLength(0...1))
+                            )
+                        )
                     }
-                    if let carbs {
-                        macroStat(imageName: "Carbs", text: carbs)
+
+                    if let carbs, let val = Double(carbs), val > 0 {
+                        macroStat(
+                            imageName: "Carbs",
+                            text: val.formatted(
+                                .number.precision(.fractionLength(0...1))
+                            )
+                        )
                     }
-                    if let fat {
-                        macroStat(imageName: "Fat", text: fat)
+
+                    if let fat, let val = Double(fat), val > 0 {
+                        macroStat(
+                            imageName: "Fat",
+                            text: val.formatted(
+                                .number.precision(.fractionLength(0...1))
+                            )
+                        )
                     }
-                    if let fiber {
-                        macroStat(imageName: "Fiber", text: fiber)
+
+                    if let fiber, let val = Double(fiber), val > 0 {
+                        macroStat(
+                            imageName: "Fiber",
+                            text: val.formatted(
+                                .number.precision(.fractionLength(0...1))
+                            )
+                        )
                     }
                 }
             }

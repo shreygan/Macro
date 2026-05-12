@@ -12,6 +12,8 @@ struct NewEntrySheetView: View {
 
     @State private var searchText = ""
 
+    @State private var showAddFoodSheet = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -50,7 +52,7 @@ struct NewEntrySheetView: View {
                                 title: "Add New Food",
                                 bottomPadding: 2
                             ) {
-                                
+                                showAddFoodSheet = true
                             }
                             ButtonRow(
                                 icon: .system("cup.and.saucer"),
@@ -111,6 +113,9 @@ struct NewEntrySheetView: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showAddFoodSheet) {
+            AddFoodSheetView()
         }
     }
 }
