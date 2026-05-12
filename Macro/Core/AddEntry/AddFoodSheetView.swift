@@ -125,7 +125,6 @@ struct AddFoodSheetView: View {
                             }
                         }
                         .padding([.leading, .trailing])
-                        .padding(.top, 8)
 
                         Card {
                             RowGroup(.divider) {
@@ -283,7 +282,8 @@ struct AddFoodSheetView: View {
                             fiber: scale(fiberValue)
                         )
                     }
-                    .padding([.bottom, .leading, .trailing])
+                    .padding([.leading, .trailing])
+                    .padding(.bottom, 16)
                     .background(.ultraThinMaterial)
                 }
 
