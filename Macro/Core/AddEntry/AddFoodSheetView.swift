@@ -17,8 +17,6 @@ struct AddFoodSheetView: View {
     @Query(sort: \ServingSizeUnit.displayOrder) var servingUnits:
         [ServingSizeUnit]
 
-    @State private var type: String = "Food"
-
     @State private var name: String = ""
     @State private var source: String = ""
     @State private var category: String = ""
@@ -104,12 +102,6 @@ struct AddFoodSheetView: View {
 
                 ScrollView {
                     VStack {
-                        Picker("Category", selection: $type) {
-                            Text("Food").tag("Food")
-                            Text("Drink").tag("Drink")
-                        }
-                        .pickerStyle(.segmented)
-                        .padding(.horizontal)
 
                         Card {
                             RowGroup(.divider) {
