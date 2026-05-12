@@ -32,21 +32,21 @@ struct LogFoodSheetView: View {
     var portionUnitOptions = ["1 Cup", "100 grams", "serving"]
     @State private var portionUnitSelection: String = "serving"
     
-    // MARK: - STATIC DATA (Original)
+    // static data
     private let calorieStatic = "955"
     private let proteinStatic = "84"
     private let carbsStatic = "68"
     private let fatStatic = "38"
     private let fiberStatic = "11"
     
-    // MARK: - DYNAMIC STORAGE (Saves your edits)
+    // dynamic data
     @State private var calorieDynamic = "955"
     @State private var proteinDynamic = "84"
     @State private var carbsDynamic = "68"
     @State private var fatDynamic = "38"
     @State private var fiberDynamic = "11"
     
-    // MARK: - DISPLAYED DATA (Binds to UI)
+    // displayed data
     @State private var calorie = "955"
     @State private var protein = "84"
     @State private var carbs = "68"
