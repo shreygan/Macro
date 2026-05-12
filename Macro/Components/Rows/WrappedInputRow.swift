@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct FullWidthInputRowWrapped: View {
+struct WrappedInputRow: View {
     var placeholder: String
     @Binding var text: String
     var keyboardType: UIKeyboardType = .default
