@@ -12,13 +12,13 @@ struct TextInputRow: View {
     var title: String
     var titleExtension: String? = nil
     var subtitle: String? = nil
-    
+
     var placeholder: String = "Enter..."
     @Binding var text: String
     var keyboardType: UIKeyboardType = .default
-    
+
     var isEnabled: Bool = true
-    
+
     var body: some View {
         BaseRowLayout(
             icon: icon,
@@ -28,11 +28,15 @@ struct TextInputRow: View {
         ) {
             TextField(placeholder, text: $text)
                 .multilineTextAlignment(.trailing)
-                .keyboardType(keyboardType)
                 .frame(maxWidth: 120)
-                .foregroundStyle(isEnabled ? Color(uiColor: .label) : Color(uiColor: .secondaryLabel))
+                .foregroundStyle(
+                    isEnabled
+                        ? Color(uiColor: .label)
+                        : Color(uiColor: .secondaryLabel)
+                )
                 .opacity(isEnabled ? 1.0 : 0.7)
                 .disabled(!isEnabled)
+                .numericKeyboardFilter(text: $text, type: keyboardType)
         }
     }
 }
@@ -41,7 +45,7 @@ struct TextInputRow: View {
     struct TextInputRow_Previews: View {
         @State private var activeText = "955"
         @State private var disabledText = "84"
-        
+
         var body: some View {
 
             Card {
@@ -53,7 +57,7 @@ struct TextInputRow: View {
                         text: $activeText,
                         isEnabled: true
                     )
-                                
+
                     TextInputRow(
                         icon: .system("bolt.fill", tint: .blue),
                         title: "Protein",
@@ -65,6 +69,6 @@ struct TextInputRow: View {
             }
         }
     }
-    
+
     return TextInputRow_Previews()
 }
