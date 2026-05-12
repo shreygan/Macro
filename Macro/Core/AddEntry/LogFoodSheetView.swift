@@ -10,50 +10,42 @@ import SwiftUI
 struct LogFoodSheetView: View {
     @Environment(\.dismiss) var dismiss
 
-    // Header info (Passed in)
     var title: String
     var titleExtension: String? = nil
     var subtitle: String? = nil
     
-    // source and category variables
     var sourceOptions: [String] = ["Home", "Work", "Other"]
     @State private var sourceSelection: String = "Home"
     
     var categoryOptions: [String] = ["Breakfast", "Lunch", "Dinner", "Snack", "Meal"]
     @State private var categorySelections: String = "Meal"
     
-    // datetime/location variables
     @State private var date = Date()
     @State private var time = Date()
     @State private var location = "TODO"
     
-    // portion variables
     @State private var portionQuantity = "1"
     var portionUnitOptions = ["1 Cup", "100 grams", "serving"]
     @State private var portionUnitSelection: String = "serving"
-    
-    // static data
+
     private let calorieStatic = "955"
     private let proteinStatic = "84"
     private let carbsStatic = "68"
     private let fatStatic = "38"
     private let fiberStatic = "11"
     
-    // dynamic data
     @State private var calorieDynamic = "955"
     @State private var proteinDynamic = "84"
     @State private var carbsDynamic = "68"
     @State private var fatDynamic = "38"
     @State private var fiberDynamic = "11"
     
-    // displayed data
     @State private var calorie = "955"
     @State private var protein = "84"
     @State private var carbs = "68"
     @State private var fat = "38"
     @State private var fiber = "11"
     
-    // UI state variables
     @State private var manualOverrideToggle: Bool = false
     @State private var notes = ""
     
