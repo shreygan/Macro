@@ -31,7 +31,7 @@ struct BaseRowLayout<RightContent: View>: View {
                 case .system(let systemName, let tint):
                     Image(systemName: systemName)
                         .font(.system(size: 14))
-                        .foregroundColor(tint)
+                        .foregroundStyle(tint)
                         .frame(width: 15)
 
                 case .custom(let image):
@@ -53,14 +53,14 @@ struct BaseRowLayout<RightContent: View>: View {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(title)
                         .font(.system(size: titleFontSize, weight: .medium))
-                        .foregroundColor(.primary)
+                        .foregroundStyle(.primary)
 
                     if let titleExtension = titleExtension {
                         Text(titleExtension)
                             .font(
                                 .system(size: titleFontSize, weight: .regular)
                             )
-                            .foregroundColor(.tertiary)
+                            .foregroundStyle(.tertiary)
 
                     }
                 }
@@ -68,7 +68,7 @@ struct BaseRowLayout<RightContent: View>: View {
                 if let subtitle = subtitle {
                     Text(subtitle)
                         .font(.system(size: 13))
-                        .foregroundColor(.tertiary)
+                        .foregroundStyle(.tertiary)
                 }
             }
 
@@ -127,7 +127,7 @@ struct BaseRowLayout<RightContent: View>: View {
 
         BaseRowLayout(title: "Simple Row") {
             Text("-")
-                .foregroundColor(.tertiary)
+                .foregroundStyle(.tertiary)
         }
 
     }
