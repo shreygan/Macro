@@ -1,5 +1,5 @@
 //
-//  FullWidthInputRowWrapped.swift
+//  WrappedInputRow.swift
 //  Macro
 //
 //  Created by Priyanka Sangha on 2026-05-11.
