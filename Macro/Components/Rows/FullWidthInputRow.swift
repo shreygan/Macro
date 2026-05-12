@@ -16,7 +16,7 @@ struct FullWidthInputRow: View {
     var body: some View {
         TextField(placeholder, text: $text)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .keyboardType(keyboardType)
+            .numericKeyboardFilter(text: $text, type: keyboardType)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
     }
@@ -25,24 +25,24 @@ struct FullWidthInputRow: View {
 #Preview {
     ZStack {
         Color.gray.opacity(0.15).ignoresSafeArea()
-        
-        Card() {
-            
+
+        Card {
+
             FullWidthInputRow(
                 placeholder: "Search for a food...",
                 text: .constant("")
             )
-            
+
             Divider().padding(.leading, 16)
-            
+
             FullWidthInputRow(
                 placeholder: "Quick add calories (kcal)",
                 text: .constant(""),
                 keyboardType: .numberPad
             )
-            
+
             Divider().padding(.leading, 16)
-            
+
             ToggleRow(
                 icon: .system("star.fill", tint: .yellow),
                 title: "Save to Favorites",

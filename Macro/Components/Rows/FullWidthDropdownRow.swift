@@ -10,20 +10,33 @@ import SwiftUI
 struct FullWidthDropdownRow: View {
     var placeholder: String
     var options: [String]
-    
+
     @Binding var selection: String
-    
+
+    @FocusState private var isTextFieldFocused: Bool
+
     var body: some View {
         HStack(spacing: 8) {
-            
+
             TextField(placeholder, text: $selection)
                 .font(.system(size: 16))
                 .frame(maxWidth: .infinity, alignment: .leading)
-            
+                .focused($isTextFieldFocused)
+
             Menu {
                 ForEach(options, id: \.self) { option in
                     Button(option) {
                         selection = option
+                    }
+                }
+
+                Divider()
+
+                Button("Custom...") {
+                    selection = ""
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isTextFieldFocused = true
                     }
                 }
             } label: {
