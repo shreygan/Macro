@@ -1,3 +1,10 @@
+//
+//  TextInputRow.swift
+//  Macro
+//
+//  Created by Shrey Gangwar on 5/7/26.
+//
+
 import SwiftUI
 
 struct TextInputRow: View {
