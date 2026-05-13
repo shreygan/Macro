@@ -127,7 +127,7 @@ struct NewEntrySheetView: View {
         }
         .sheet(isPresented: $showAddFoodSheet) {
             AddFoodSheetView(onLogInstantly: { savedFood in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4g) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     self.foodToLog = savedFood
                 }
             })
