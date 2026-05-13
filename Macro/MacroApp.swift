@@ -14,15 +14,20 @@ struct MacroApp: App {
     static let defaultCategorySources = [
         "Meal", "Snack", "Breakfast", "Lunch", "Dinner", "Dessert",
     ]
-    static let defaultServingSizeUnits = ["serving", "cup", "piece", "slice", "oz", "container", "bar"]
-    static let defaultServingSizePlural = ["servings", "cups", "pieces", "slices", nil, "containers", "bars"]
+    static let defaultServingSizeUnits = [
+        "serving", "cup", "piece", "slice", "oz", "container", "bar",
+    ]
+    static let defaultServingSizePlural = [
+        "servings", "cups", "pieces", "slices", nil, "containers", "bars",
+    ]
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             User.self,
             EntrySource.self,
             CategorySource.self,
-            ServingSizeUnit.self
+            ServingSizeUnit.self,
+            FoodItem.self,
         ])
         let modelConfiguration = ModelConfiguration(
             schema: schema,
@@ -70,7 +75,7 @@ struct MacroApp: App {
                 }
                 print("Successfully seeded default CategorySources.")
             }
-            
+
             // --- SERVING SIZE UNIT SOURCES ---
             let unitDescriptor = FetchDescriptor<ServingSizeUnit>()
             let existingUnitCount = try context.fetchCount(

@@ -68,15 +68,15 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
 
                 RowGroup(.divider) {
 
-                    MealRow(
-                        title: "Breakfast",
-                        subtitle: "Oatmeal & Eggs",
-                        calorie: "320",
-                        protein: "20g",
-                        carbs: "45g",
-                        fat: "8g",
-                        fiber: "5g"
-                    )
+//                    MealRow(
+//                        title: "Breakfast",
+//                        subtitle: "Oatmeal & Eggs",
+//                        calorie: "320",
+//                        protein: "20g",
+//                        carbs: "45g",
+//                        fat: "8g",
+//                        fiber: "5g"
+//                    )
 
                     ToggleRow(
                         icon: .system("flame.fill", tint: .orange),
@@ -98,15 +98,15 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
             Card {
                 RowGroup(.spacing(8)) {
 
-                    MealRow(
-                        title: "Breakfast",
-                        subtitle: "Oatmeal & Eggs",
-                        calorie: "320",
-                        protein: "20g",
-                        carbs: "45g",
-                        fat: "8g",
-                        fiber: "5g"
-                    )
+//                    MealRow(
+//                        title: "Breakfast",
+//                        subtitle: "Oatmeal & Eggs",
+//                        calorie: "320",
+//                        protein: "20g",
+//                        carbs: "45g",
+//                        fat: "8g",
+//                        fiber: "5g"
+//                    )
 
                     ToggleRow(
                         icon: .system("flame.fill", tint: .orange),

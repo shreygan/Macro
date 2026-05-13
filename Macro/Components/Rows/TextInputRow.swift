@@ -13,7 +13,7 @@ struct TextInputRow: View {
     var titleExtension: String? = nil
     var subtitle: String? = nil
 
-    var placeholder: String = "Enter..."
+    var placeholder: String = "-"
     @Binding var text: String
     var keyboardType: UIKeyboardType = .default
 
