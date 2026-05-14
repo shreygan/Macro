@@ -13,7 +13,6 @@ struct NewEntrySheetView: View {
     @State private var searchText = ""
 
     @State private var showAddFoodSheet = false
-    @State private var showFoodLibrarySheet = false
     @State private var foodToLog: FoodItem? = nil
 
     var body: some View {
@@ -84,16 +83,20 @@ struct NewEntrySheetView: View {
 
                         Card("Library") {
                             RowGroup(.divider) {
-                                NavigationRow(
-                                    icon: .system("fork.knife"),
-                                    title: "Foods"
+                                NavigationLink(
+                                    destination: FoodLibrarySheetView()
                                 ) {
-                                    showFoodLibrarySheet = true
+                                    NavigationRow(
+                                        icon: .system("fork.knife"),
+                                        title: "Foods"
+                                    )
                                 }
+                                .buttonStyle(.plain)
+                                
                                 NavigationRow(
                                     icon: .system("cup.and.saucer"),
                                     title: "Drinks"
-                                ) {}
+                                )
                             }
 
                         }
@@ -116,14 +119,11 @@ struct NewEntrySheetView: View {
                             dismiss()
                         } label: {
                             Image(systemName: "xmark")
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.primary)
                         }
                     }
                 }
             }
-        }
-        .sheet(isPresented: $showFoodLibrarySheet) {
-            FoodLibrarySheetView()
         }
         .sheet(isPresented: $showAddFoodSheet) {
             AddFoodSheetView(onLogInstantly: { savedFood in
