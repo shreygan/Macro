@@ -8,16 +8,125 @@
 import SwiftUI
 
 struct MealRow: View {
-    var title: String
+    var name: String
     var subtitle: String
 
     var calorie: String
-    var protein: String? = nil
-    var carbs: String? = nil
-    var fat: String? = nil
-    var fiber: String? = nil
+    var protein: String?
+    var carbs: String?
+    var fat: String?
+    var fiber: String?
 
-    var action: (() -> Void)? = nil
+    var action: (() -> Void)?
+
+    init(
+        name: String,
+        source: String,
+        isCustomDefaultServing: Bool,
+        customServingSize: String,
+        servingSize: String,
+        servingSizeUnit: String,
+        servingWeight: String,
+        servingWeightUnit: String,
+        servingUnits: [ServingSizeUnit],
+        calorie: String,
+        protein: String? = nil,
+        carbs: String? = nil,
+        fat: String? = nil,
+        fiber: String? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.name = name
+        self.calorie = calorie
+        self.protein = protein
+        self.carbs = carbs
+        self.fat = fat
+        self.fiber = fiber
+        self.action = action
+
+        let activeSize =
+            isCustomDefaultServing ? customServingSize : servingSize
+
+        let matchedUnitObject = servingUnits.first(where: {
+            $0.unit == servingSizeUnit
+        })
+        let displayUnit =
+            matchedUnitObject?.displayString(for: activeSize) ?? servingSizeUnit
+
+        self.subtitle = Self.buildSubtitle(
+            source: source,
+            activeSize: activeSize,
+            displayUnit: displayUnit,
+            servingWeight: servingWeight,
+            servingWeightUnit: servingWeightUnit,
+            isCustomDefaultServing: isCustomDefaultServing,
+            originalServingSize: servingSize
+        )
+    }
+
+    init(
+        item: FoodItem,
+        action: (() -> Void)? = nil
+    ) {
+        self.name = item.name.isEmpty ? "New Food" : item.name
+        self.calorie = String(item.calories)
+        self.protein = String(item.protein)
+        self.carbs = String(item.carbs)
+        self.fat = String(item.fat)
+        self.fiber = item.fiber.map { String($0) }
+        self.action = action
+
+        let activeSizeNum =
+            item.isCustomDefaultServing
+            ? (item.customServingSize ?? 0) : item.servingSize
+        let activeSizeStr = String(format: "%g", activeSizeNum)
+
+        let displayUnit =
+            item.servingUnit?.displayString(for: activeSizeStr) ?? ""
+
+        self.subtitle = Self.buildSubtitle(
+            source: item.source?.source ?? "",
+            activeSize: activeSizeStr,
+            displayUnit: displayUnit,
+            servingWeight: item.servingWeight.map { String($0) } ?? "",
+            servingWeightUnit: item.servingWeightUnit,
+            isCustomDefaultServing: item.isCustomDefaultServing,
+            originalServingSize: String(item.servingSize)
+        )
+    }
+
+    private static func buildSubtitle(
+        source: String,
+        activeSize: String,
+        displayUnit: String,
+        servingWeight: String,
+        servingWeightUnit: String,
+        isCustomDefaultServing: Bool,
+        originalServingSize: String
+    ) -> String {
+        var text =
+            source.isEmpty
+            ? "\(activeSize) \(displayUnit)"
+            : "\(source), \(activeSize) \(displayUnit)"
+
+        if !servingWeight.isEmpty {
+            var activeWeightText = servingWeight
+
+            if isCustomDefaultServing,
+                let originalSizeNum = Double(originalServingSize),
+                let customSizeNum = Double(activeSize),
+                let originalWeightNum = Double(servingWeight),
+                originalSizeNum > 0
+            {
+                let multiplier = customSizeNum / originalSizeNum
+                let scaledWeight = originalWeightNum * multiplier
+                activeWeightText = String(format: "%g", scaledWeight)
+            }
+
+            text += " (\(activeWeightText) \(servingWeightUnit))"
+        }
+        return text
+    }
 
     var body: some View {
         let rowContent = HStack(alignment: .center, spacing: 12) {
@@ -25,7 +134,7 @@ struct MealRow: View {
             VStack(alignment: .leading, spacing: 2) {
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
+                    Text(name)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.primary)
 
@@ -119,14 +228,25 @@ struct MealRow: View {
 }
 
 #Preview {
+    let mockUnits = [
+        ServingSizeUnit(unit: "bowl", displayOrder: 1),
+        ServingSizeUnit(unit: "chip", pluralVariant: "chips", displayOrder: 2),
+    ]
+
     ZStack {
         Color.gray.opacity(0.15).ignoresSafeArea()
 
         Card {
-
             MealRow(
-                title: "Grilled Chicken Salad",
-                subtitle: "Sweetgreen, 1 bowl",
+                name: "Grilled Chicken Salad",
+                source: "Sweetgreen",
+                isCustomDefaultServing: false,
+                customServingSize: "",
+                servingSize: "1",
+                servingSizeUnit: "bowl",
+                servingWeight: "",
+                servingWeightUnit: "",
+                servingUnits: mockUnits,
                 calorie: "450",
                 protein: "42",
                 carbs: "12",
@@ -137,15 +257,23 @@ struct MealRow: View {
             Divider().padding(.leading, 16)
 
             MealRow(
-                title: "Chips",
-                subtitle: "Lays, 11 chips (50g)",
+                name: "Chips",
+                source: "Lays",
+                isCustomDefaultServing: false,
+                customServingSize: "",
+                servingSize: "11",
+                servingSizeUnit: "chip",
+                servingWeight: "50",
+                servingWeightUnit: "g",
+                servingUnits: mockUnits,
                 calorie: "240",
                 protein: "48",
                 carbs: "6",
-                fat: "2",
+                fat: "2"
             ) {
                 print("Navigating to meal details...")
             }
         }
+        .padding()
     }
 }

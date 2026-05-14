@@ -13,6 +13,8 @@ struct NewEntrySheetView: View {
     @State private var searchText = ""
 
     @State private var showAddFoodSheet = false
+    @State private var showFoodLibrarySheet = false
+    @State private var foodToLog: FoodItem? = nil
 
     var body: some View {
         NavigationStack {
@@ -22,15 +24,19 @@ struct NewEntrySheetView: View {
                 ScrollView {
                     VStack {
                         Card("Favorites") {
-                            MealRow(
-                                title: "Grilled Chicken Salad",
-                                subtitle: "Sweetgreen, 1 bowl",
-                                calorie: "450",
-                                protein: "42",
-                                carbs: "12",
-                                fat: "18",
-                                fiber: "6"
-                            )
+                            Text("TODO")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.primary)
+                                .padding()
+                            //                            MealRow(
+                            //                                title: "Grilled Chicken Salad",
+                            //                                subtitle: "Sweetgreen, 1 bowl",
+                            //                                calorie: "450",
+                            //                                protein: "42",
+                            //                                carbs: "12",
+                            //                                fat: "18",
+                            //                                fiber: "6"
+                            //                            )
                         } menuItems: {
                             Button {
 
@@ -81,7 +87,9 @@ struct NewEntrySheetView: View {
                                 NavigationRow(
                                     icon: .system("fork.knife"),
                                     title: "Foods"
-                                ) {}
+                                ) {
+                                    showFoodLibrarySheet = true
+                                }
                                 NavigationRow(
                                     icon: .system("cup.and.saucer"),
                                     title: "Drinks"
@@ -114,8 +122,18 @@ struct NewEntrySheetView: View {
                 }
             }
         }
+        .sheet(isPresented: $showFoodLibrarySheet) {
+            FoodLibrarySheetView()
+        }
         .sheet(isPresented: $showAddFoodSheet) {
-            AddFoodSheetView()
+            AddFoodSheetView(onLogInstantly: { savedFood in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    self.foodToLog = savedFood
+                }
+            })
+        }
+        .sheet(item: $foodToLog) { food in
+            LogFoodSheetView(food: food)
         }
     }
 }

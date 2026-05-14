@@ -10,6 +10,11 @@ import SwiftUI
 
 struct AddFoodSheetView: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    var onLogInstantly: ((FoodItem) -> Void)?
+    @State private var showSuccessAlert: Bool = false
+    @State private var newlySavedFood: FoodItem? = nil
 
     @Query(sort: \EntrySource.displayOrder) var savedSources: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var savedCategories:
@@ -75,24 +80,130 @@ struct AddFoodSheetView: View {
         return text
     }
 
-    var activeMultiplier: Double {
-        if isCustomDefaultServing,
-            let originalSize = Double(servingSize),
-            let customSize = Double(customServingSize),
-            originalSize > 0
-        {
-            return customSize / originalSize
+    private var activeMultiplier: Double {
+        guard isCustomDefaultServing,
+            let target = Double(customServingSize),
+            let base = Double(servingSize)
+        else {
+            return 1.0
         }
-        return 1.0
+        return EntryHelper.calculateMultiplier(
+            targetPortion: target,
+            basePortion: base
+        )
     }
 
-    func scale(_ valueString: String) -> String? {
-        guard !valueString.isEmpty, let value = Double(valueString) else {
-            return nil
+    private func addFood() {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            print("Validation Error: Name is required.")
+            return
         }
 
-        let scaledValue = value * activeMultiplier
-        return String(format: "%g", scaledValue)
+        // SOURCE
+        var resolvedSource: EntrySource? = nil
+        let trimmedSource = source.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !trimmedSource.isEmpty {
+            if let existing = savedSources.first(where: {
+                $0.source == trimmedSource
+            }) {
+                resolvedSource = existing
+            } else {
+                let nextOrder =
+                    (savedSources.map { $0.displayOrder }.max() ?? 0) + 1
+                let newSource = EntrySource(
+                    source: trimmedSource,
+                    displayOrder: nextOrder
+                )
+                modelContext.insert(newSource)
+                resolvedSource = newSource
+            }
+        }
+
+        // CATEGORY
+        var resolvedCategory: CategorySource? = nil
+        let trimmedCategory = category.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !trimmedCategory.isEmpty {
+            if let existing = savedCategories.first(where: {
+                $0.category == trimmedCategory
+            }) {
+                resolvedCategory = existing
+            } else {
+                let nextOrder =
+                    (savedCategories.map { $0.displayOrder }.max() ?? 0) + 1
+                let newCategory = CategorySource(
+                    category: trimmedCategory,
+                    displayOrder: nextOrder
+                )
+                modelContext.insert(newCategory)
+                resolvedCategory = newCategory
+            }
+        }
+
+        // UNIT
+        var resolvedUnit: ServingSizeUnit? = nil
+        let trimmedUnit = servingSizeUnit.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !trimmedUnit.isEmpty {
+            if let existing = servingUnits.first(where: {
+                $0.unit == trimmedUnit
+            }) {
+                resolvedUnit = existing
+            } else {
+                let nextOrder =
+                    (servingUnits.map { $0.displayOrder }.max() ?? 0) + 1
+                let newUnit = ServingSizeUnit(
+                    unit: trimmedUnit,
+                    displayOrder: nextOrder
+                )
+                modelContext.insert(newUnit)
+                resolvedUnit = newUnit
+            }
+        }
+
+        func parseDouble(_ string: String) -> Double {
+            let normalized = string.replacingOccurrences(of: ",", with: ".")
+            return Double(normalized) ?? 0.0
+        }
+
+        func parseOptionalDouble(_ string: String) -> Double? {
+            let normalized = string.replacingOccurrences(of: ",", with: ".")
+            return string.isEmpty ? nil : Double(normalized)
+        }
+
+        let newFood = FoodItem(
+            name: name,
+            source: resolvedSource,
+            category: resolvedCategory,
+            servingSize: parseDouble(servingSize),
+            servingUnit: resolvedUnit,
+            servingWeight: parseOptionalDouble(servingWeight),
+            servingWeightUnit: servingWeightUnit,
+            isIngredientBased: isIngredientBased,
+            isAIEstimated: isAIEstimated,
+            calories: parseDouble(calorieValue),
+            protein: parseDouble(proteinValue),
+            carbs: parseDouble(carbsValue),
+            fat: parseDouble(fatValue),
+            fiber: parseOptionalDouble(fiberValue),
+            isCustomDefaultServing: isCustomDefaultServing,
+            customServingSize: parseOptionalDouble(customServingSize)
+        )
+
+        modelContext.insert(newFood)
+
+        do {
+            try modelContext.save()
+
+            newlySavedFood = newFood
+            showSuccessAlert = true
+        } catch {
+        }
     }
 
     var body: some View {
@@ -125,14 +236,13 @@ struct AddFoodSheetView: View {
                             }
                         }
                         .padding([.leading, .trailing])
-                        .padding(.top, 8)
 
                         Card {
                             RowGroup(.divider) {
                                 BaseRowLayout(title: "Serving Size") {
                                     InputPill(
                                         text: $servingSize,
-                                        keyboardType: .numberPad
+                                        keyboardType: .decimalPad
                                     )
                                     DropdownPill(
                                         options: servingUnits.map { $0.unit },
@@ -143,7 +253,7 @@ struct AddFoodSheetView: View {
                                 BaseRowLayout(title: "Serving Weight") {
                                     InputPill(
                                         text: $servingWeight,
-                                        keyboardType: .numberPad,
+                                        keyboardType: .decimalPad,
                                         placeholder: "-"
                                     )
                                     DropdownPill(
@@ -259,35 +369,88 @@ struct AddFoodSheetView: View {
                                 .foregroundStyle(.tertiary)
                         }
                     }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button {
-                            //                            addFood()
-                        } label: {
-                            Image(systemName: "plus")
-                                .foregroundStyle(.primary)
-                        }
-                        .tint(Color.blue)
-                        .buttonStyle(.glassProminent)
 
+                    ToolbarItem(placement: .confirmationAction) {
+                        if name.trimmingCharacters(in: .whitespacesAndNewlines)
+                            .isEmpty
+                        {
+                            Button {
+                            } label: {
+                                Image(systemName: "plus")
+                            }
+                            .disabled(true)
+                            .tint(Color.tertiary)
+                            .buttonStyle(.borderless)
+
+                        } else {
+                            Button {
+                                addFood()
+                            } label: {
+                                Image(systemName: "plus")
+                                    .foregroundStyle(.primary)
+                            }
+                            .tint(Color.blue)
+                            .buttonStyle(.glassProminent)
+
+                        }
                     }
                 }
                 .safeAreaInset(edge: .top) {
                     Card {
                         MealRow(
-                            title: name.isEmpty ? "New Food" : name,
-                            subtitle: formattedSubtitle,
-                            calorie: scale(calorieValue) ?? "0",
-                            protein: scale(proteinValue),
-                            carbs: scale(carbsValue),
-                            fat: scale(fatValue),
-                            fiber: scale(fiberValue)
+                            name: name.isEmpty ? "New Food" : name,
+                            source: source,
+                            isCustomDefaultServing: isCustomDefaultServing,
+                            customServingSize: customServingSize,
+                            servingSize: servingSize,
+                            servingSizeUnit: servingSizeUnit,
+                            servingWeight: servingWeight,
+                            servingWeightUnit: servingWeightUnit,
+                            servingUnits: servingUnits,
+                            calorie: EntryHelper.scale(
+                                calorieValue,
+                                by: activeMultiplier
+                            ),
+                            protein: EntryHelper.scale(
+                                proteinValue,
+                                by: activeMultiplier
+                            ),
+                            carbs: EntryHelper.scale(
+                                carbsValue,
+                                by: activeMultiplier
+                            ),
+                            fat: EntryHelper.scale(
+                                fatValue,
+                                by: activeMultiplier
+                            ),
+                            fiber: EntryHelper.scale(
+                                fiberValue,
+                                by: activeMultiplier
+                            )
                         )
                     }
-                    .padding([.bottom, .leading, .trailing])
+                    .padding([.leading, .trailing])
+                    .padding(.bottom, 16)
                     .background(.ultraThinMaterial)
                 }
 
             }
+        }
+        .alert(
+            "\(name) Saved!",
+            isPresented: $showSuccessAlert,
+            presenting: newlySavedFood
+        ) { food in
+
+            Button("Log Now", role: .confirm) {
+                dismiss()
+                onLogInstantly?(food)
+            }
+
+            Button("Done", role: .cancel) {
+                dismiss()
+            }
+
         }
     }
 }

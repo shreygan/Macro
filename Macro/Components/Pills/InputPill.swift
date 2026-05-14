@@ -12,7 +12,7 @@ struct InputPill: View {
     var unit: String? = nil
     var textFontSize: CGFloat = 16
     var keyboardType: UIKeyboardType = .default
-    var placeholder: String = "0"
+    var placeholder: String = "-"
 
     var body: some View {
         HStack(spacing: 4) {
