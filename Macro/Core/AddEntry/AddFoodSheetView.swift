@@ -190,7 +190,7 @@ struct AddFoodSheetView: View {
             protein: parseDouble(proteinValue),
             carbs: parseDouble(carbsValue),
             fat: parseDouble(fatValue),
-            fiber: parseOptionalDouble(fiberValue),
+            fiber: parseDouble(fiberValue),
             isCustomDefaultServing: isCustomDefaultServing,
             customServingSize: parseOptionalDouble(customServingSize)
         )
@@ -366,7 +366,7 @@ struct AddFoodSheetView: View {
                             dismiss()
                         } label: {
                             Image(systemName: "xmark")
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.primary)
                         }
                     }
 
@@ -377,6 +377,7 @@ struct AddFoodSheetView: View {
                             Button {
                             } label: {
                                 Image(systemName: "plus")
+                                    .foregroundStyle(.primary)
                             }
                             .disabled(true)
                             .tint(Color.tertiary)

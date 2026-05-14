@@ -270,7 +270,7 @@ struct LogFoodSheetView: View {
                             dismiss()
                         } label: {
                             Image(systemName: "xmark")
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.primary)
                         }
                     }
                 }

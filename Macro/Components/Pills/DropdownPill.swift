@@ -39,11 +39,12 @@ struct DropdownPill: View {
 
             } else {
                 Menu {
-                    ForEach(options, id: \.self) { option in
-                        Button(option) {
-                            selection = option
+                    Picker("Options", selection: $selection) {
+                        ForEach(options, id: \.self) { option in
+                            Text(option).tag(option)
                         }
                     }
+                    .pickerStyle(.inline)
 
                     if displayCustomOption {
                         Divider()

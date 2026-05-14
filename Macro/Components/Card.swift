@@ -164,9 +164,10 @@ extension Card {
                 NavigationRow(
                     icon: .system("chart.bar"),
                     title: "Macro History",
-                ) {
-                    print("History row tapped!")
-                }
+                )
+//                {
+//                    print("History row tapped!")
+//                }
             }
         }
     }

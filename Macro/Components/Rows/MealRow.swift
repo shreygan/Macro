@@ -73,7 +73,7 @@ struct MealRow: View {
         self.protein = String(item.protein)
         self.carbs = String(item.carbs)
         self.fat = String(item.fat)
-        self.fiber = item.fiber.map { String($0) }
+        self.fiber = String(item.fiber)
         self.action = action
 
         let activeSizeNum =

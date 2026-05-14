@@ -87,9 +87,10 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
                     NavigationRow(
                         icon: .system("chart.pie.fill", tint: .blue),
                         title: "Macro Breakdown"
-                    ) {
-                        print("Navigating...")
-                    }
+                    )
+//                    {
+//                        print("Navigating...")
+//                    }
                 }
             }
 
@@ -117,9 +118,10 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
                     NavigationRow(
                         icon: .system("chart.pie.fill", tint: .blue),
                         title: "Macro Breakdown"
-                    ) {
-                        print("Navigating...")
-                    }
+                    )
+//                    {
+//                        print("Navigating...")
+//                    }
                 }
             }
 

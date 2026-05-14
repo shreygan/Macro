@@ -28,7 +28,7 @@ class FoodItem {
     var protein: Double
     var carbs: Double
     var fat: Double
-    var fiber: Double?
+    var fiber: Double
 
     var isCustomDefaultServing: Bool
     var customServingSize: Double?
@@ -50,7 +50,7 @@ class FoodItem {
         protein: Double,
         carbs: Double,
         fat: Double,
-        fiber: Double? = nil,
+        fiber: Double,
         isCustomDefaultServing: Bool,
         customServingSize: Double? = nil,
         dateAdded: Date = Date()
