@@ -211,7 +211,7 @@ struct LogFoodSheetView: View {
                                     title: "Calories",
                                     titleExtension: "(Kcal)",
                                     text: $calorie,
-                                    keyboardType: .numberPad,
+                                    keyboardType: .decimalPad,
                                     isEnabled: manualOverrideToggle
                                 )
 
@@ -220,7 +220,7 @@ struct LogFoodSheetView: View {
                                     title: "Protein",
                                     titleExtension: "(g)",
                                     text: $protein,
-                                    keyboardType: .numberPad,
+                                    keyboardType: .decimalPad,
                                     isEnabled: manualOverrideToggle
                                 )
 
@@ -229,7 +229,7 @@ struct LogFoodSheetView: View {
                                     title: "Carbohydrates",
                                     titleExtension: "(g)",
                                     text: $carbs,
-                                    keyboardType: .numberPad,
+                                    keyboardType: .decimalPad,
                                     isEnabled: manualOverrideToggle
                                 )
 
@@ -238,7 +238,7 @@ struct LogFoodSheetView: View {
                                     title: "Fat",
                                     titleExtension: "(g)",
                                     text: $fat,
-                                    keyboardType: .numberPad,
+                                    keyboardType: .decimalPad,
                                     isEnabled: manualOverrideToggle
                                 )
 
@@ -247,7 +247,7 @@ struct LogFoodSheetView: View {
                                     title: "Fiber",
                                     titleExtension: "(g)",
                                     text: $fiber,
-                                    keyboardType: .numberPad,
+                                    keyboardType: .decimalPad,
                                     isEnabled: manualOverrideToggle
                                 )
 
@@ -262,6 +262,8 @@ struct LogFoodSheetView: View {
                         Spacer()
                     }
                 }
+                .withCustomKeyboardAccessories()
+                .scrollDismissesKeyboard(.immediately)
                 .navigationTitle("Log Food")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

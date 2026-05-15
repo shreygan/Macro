@@ -175,6 +175,7 @@ struct FoodLibrarySheetView: View {
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Food Library")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(
