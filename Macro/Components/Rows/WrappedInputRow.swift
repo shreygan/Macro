@@ -17,7 +17,7 @@ struct WrappedInputRow: View {
     var body: some View {
         TextField(placeholder, text: $text, axis: .vertical)
             .focused($isFocused)
-            .autoFloatingAccessory(for: keyboardType)
+            .autoFloatingToolbar(for: keyboardType)
             .lineLimit(1...10)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)

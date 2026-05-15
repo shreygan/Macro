@@ -21,7 +21,7 @@ struct InputPill: View {
         HStack(spacing: 4) {
             TextField(placeholder, text: $text)
                 .focused($isFocused)
-                .autoFloatingAccessory(for: keyboardType)
+                .autoFloatingToolbar(for: keyboardType)
                 .font(.system(size: textFontSize))
                 .multilineTextAlignment(.center)
                 .frame(minWidth: 10)

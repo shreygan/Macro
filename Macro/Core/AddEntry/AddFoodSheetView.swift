@@ -358,7 +358,7 @@ struct AddFoodSheetView: View {
                         Spacer()
                     }
                 }
-                .withCustomKeyboardAccessories()
+                .withCustomKeyboardToolbar()
                 .scrollDismissesKeyboard(.immediately)
                 .navigationTitle("Add New Food")
                 .navigationBarTitleDisplayMode(.inline)

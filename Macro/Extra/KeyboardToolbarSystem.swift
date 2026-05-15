@@ -7,59 +7,59 @@
 
 import SwiftUI
 
-enum KeyboardAccessoryStyle {
-    case doneButton
+enum KeyboardToolbarStyle {
+    case done
     //    case decimalPadActions
     //    case standardText
 }
 
-struct KeyboardAccessoryKey: FocusedValueKey {
-    typealias Value = KeyboardAccessoryStyle
+struct KeyboardToolbarKey: FocusedValueKey {
+    typealias Value = KeyboardToolbarStyle
 }
 
 extension FocusedValues {
     /// The property that text fields will broadcast up the view hierarchy
-    var activeKeyboardAccessory: KeyboardAccessoryStyle? {
-        get { self[KeyboardAccessoryKey.self] }
-        set { self[KeyboardAccessoryKey.self] = newValue }
+    var activeKeyboardToolbar: KeyboardToolbarStyle? {
+        get { self[KeyboardToolbarKey.self] }
+        set { self[KeyboardToolbarKey.self] = newValue }
     }
 }
 
 extension View {
     /// Attach this to the outermost container of any screen that has text inputs
-    func withCustomKeyboardAccessories() -> some View {
+    func withCustomKeyboardToolbar() -> some View {
         self.modifier(FloatingKeyboardModifier())
     }
 
     /// Automatically determines and broadcasts the correct floating toolbar based on the iOS keyboard type being used.
-    func autoFloatingAccessory(for keyboardType: UIKeyboardType) -> some View {
-        let requestedAccessory: KeyboardAccessoryStyle?
+    func autoFloatingToolbar(for keyboardType: UIKeyboardType) -> some View {
+        let requestedToolbar: KeyboardToolbarStyle?
 
         switch keyboardType {
         case .numberPad:
-            requestedAccessory = .doneButton
+            requestedToolbar = .done
         case .decimalPad:
-            requestedAccessory = .doneButton
+            requestedToolbar = .done
         default:
-            requestedAccessory = nil
+            requestedToolbar = nil
         }
 
-        return self.focusedValue(\.activeKeyboardAccessory, requestedAccessory)
+        return self.focusedValue(\.activeKeyboardToolbar, requestedToolbar)
     }
 }
 
 struct FloatingKeyboardModifier: ViewModifier {
     @State private var isSystemKeyboardVisible = false
 
-    @FocusedValue(\.activeKeyboardAccessory) var activeAccessory
+    @FocusedValue(\.activeKeyboardToolbar) var activeToolbar
 
     func body(content: Content) -> some View {
         ZStack(alignment: .bottom) {
 
             content
 
-            if isSystemKeyboardVisible, let accessory = activeAccessory {
-                accessoryView(for: accessory)
+            if isSystemKeyboardVisible, let toolbar = activeToolbar {
+                toolbarView(for: toolbar)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
@@ -84,12 +84,12 @@ struct FloatingKeyboardModifier: ViewModifier {
     }
 
     @ViewBuilder
-    private func accessoryView(for style: KeyboardAccessoryStyle) -> some View {
+    private func toolbarView(for style: KeyboardToolbarStyle) -> some View {
         HStack {
             Spacer()
 
             switch style {
-            case .doneButton:
+            case .done:
                 glassButton(icon: "checkmark", action: hideKeyboard)
             //            case .decimalPadActions:
             //                HStack(spacing: 12) {

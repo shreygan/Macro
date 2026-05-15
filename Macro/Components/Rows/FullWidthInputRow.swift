@@ -18,7 +18,7 @@ struct FullWidthInputRow: View {
     var body: some View {
         TextField(placeholder, text: $text)
             .focused($isFocused)
-            .autoFloatingAccessory(for: keyboardType)
+            .autoFloatingToolbar(for: keyboardType)
             .frame(maxWidth: .infinity, alignment: .leading)
             .numericKeyboardFilter(text: $text, type: keyboardType)
             .padding(.horizontal, 16)

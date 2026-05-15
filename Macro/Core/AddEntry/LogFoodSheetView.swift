@@ -262,7 +262,7 @@ struct LogFoodSheetView: View {
                         Spacer()
                     }
                 }
-                .withCustomKeyboardAccessories()
+                .withCustomKeyboardToolbar()
                 .scrollDismissesKeyboard(.immediately)
                 .navigationTitle("Log Food")
                 .navigationBarTitleDisplayMode(.inline)

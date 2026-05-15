@@ -31,7 +31,7 @@ struct TextInputRow: View {
         ) {
             TextField(placeholder, text: $text)
                 .focused($isFocused)
-                .autoFloatingAccessory(for: keyboardType)
+                .autoFloatingToolbar(for: keyboardType)
                 .multilineTextAlignment(.trailing)
                 .frame(maxWidth: 120)
                 .foregroundStyle(
