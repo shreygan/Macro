@@ -9,16 +9,22 @@ import SwiftUI
 
 struct InputPill: View {
     @Binding var text: String
+
     var unit: String? = nil
     var textFontSize: CGFloat = 16
     var keyboardType: UIKeyboardType = .default
     var placeholder: String = "-"
 
+    @FocusState private var isFocused: Bool
+
     var body: some View {
         HStack(spacing: 4) {
             TextField(placeholder, text: $text)
+                .focused($isFocused)
+                .autoFloatingToolbar(for: keyboardType)
                 .font(.system(size: textFontSize))
                 .multilineTextAlignment(.center)
+                .frame(minWidth: 10)
                 .fixedSize(horizontal: true, vertical: false)
                 .numericKeyboardFilter(text: $text, type: keyboardType)
 

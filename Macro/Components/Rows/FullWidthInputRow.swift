@@ -12,9 +12,13 @@ struct FullWidthInputRow: View {
     @Binding var text: String
 
     var keyboardType: UIKeyboardType = .default
+    
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         TextField(placeholder, text: $text)
+            .focused($isFocused)
+            .autoFloatingToolbar(for: keyboardType)
             .frame(maxWidth: .infinity, alignment: .leading)
             .numericKeyboardFilter(text: $text, type: keyboardType)
             .padding(.horizontal, 16)

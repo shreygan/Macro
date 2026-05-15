@@ -289,7 +289,7 @@ struct AddFoodSheetView: View {
                                         titleExtension: "(kcal)",
                                         placeholder: "-",
                                         text: $calorieValue,
-                                        keyboardType: .numberPad
+                                        keyboardType: .decimalPad
                                     )
                                     TextInputRow(
                                         icon: .custom(Image("Protein")),
@@ -297,7 +297,7 @@ struct AddFoodSheetView: View {
                                         titleExtension: "(g)",
                                         placeholder: "-",
                                         text: $proteinValue,
-                                        keyboardType: .numberPad
+                                        keyboardType: .decimalPad
                                     )
                                     TextInputRow(
                                         icon: .custom(Image("Carbs")),
@@ -305,7 +305,7 @@ struct AddFoodSheetView: View {
                                         titleExtension: "(g)",
                                         placeholder: "-",
                                         text: $carbsValue,
-                                        keyboardType: .numberPad
+                                        keyboardType: .decimalPad
                                     )
                                     TextInputRow(
                                         icon: .custom(Image("Fat")),
@@ -313,7 +313,7 @@ struct AddFoodSheetView: View {
                                         titleExtension: "(g)",
                                         placeholder: "-",
                                         text: $fatValue,
-                                        keyboardType: .numberPad
+                                        keyboardType: .decimalPad
                                     )
                                     TextInputRow(
                                         icon: .custom(Image("Fiber")),
@@ -321,7 +321,7 @@ struct AddFoodSheetView: View {
                                         titleExtension: "(g)",
                                         placeholder: "-",
                                         text: $fiberValue,
-                                        keyboardType: .numberPad
+                                        keyboardType: .decimalPad
                                     )
                                 }
 
@@ -347,7 +347,7 @@ struct AddFoodSheetView: View {
                                     ) {
                                         InputPill(
                                             text: $customServingSize,
-                                            keyboardType: .numberPad
+                                            keyboardType: .decimalPad
                                         )
                                     }
                                 }
@@ -358,6 +358,8 @@ struct AddFoodSheetView: View {
                         Spacer()
                     }
                 }
+                .withCustomKeyboardToolbar()
+                .scrollDismissesKeyboard(.immediately)
                 .navigationTitle("Add New Food")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

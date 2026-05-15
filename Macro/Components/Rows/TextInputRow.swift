@@ -12,12 +12,15 @@ struct TextInputRow: View {
     var title: String
     var titleExtension: String? = nil
     var subtitle: String? = nil
-
     var placeholder: String = "-"
+    
     @Binding var text: String
+    
     var keyboardType: UIKeyboardType = .default
 
     var isEnabled: Bool = true
+    
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         BaseRowLayout(
@@ -27,6 +30,8 @@ struct TextInputRow: View {
             subtitle: subtitle
         ) {
             TextField(placeholder, text: $text)
+                .focused($isFocused)
+                .autoFloatingToolbar(for: keyboardType)
                 .multilineTextAlignment(.trailing)
                 .frame(maxWidth: 120)
                 .foregroundStyle(
