@@ -258,6 +258,9 @@ struct LogFoodSheetView: View {
                             }
                         }
                         .padding([.top, .leading, .trailing])
+                        
+                        MealPhotoGalleryCard()
+                            .padding([.top, .leading, .trailing])
 
                         Spacer()
                     }

@@ -30,6 +30,7 @@ struct Card<Content: View, MenuContent: View>: View {
             content
         }
         .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .glassEffect(
             .regular.tint(tintColor.opacity(0.7)),
             in: .rect(cornerRadius: cornerRadius)
@@ -131,6 +132,7 @@ extension Card {
                     Label("Delete", systemImage: "trash")
                 }
             }
+            .padding()
 
             Card {
                 ToggleRow(
@@ -169,6 +171,7 @@ extension Card {
 //                    print("History row tapped!")
 //                }
             }
+            .padding()
         }
     }
 }
