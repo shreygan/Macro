@@ -27,15 +27,6 @@ struct NewEntrySheetView: View {
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.primary)
                                 .padding()
-                            //                            MealRow(
-                            //                                title: "Grilled Chicken Salad",
-                            //                                subtitle: "Sweetgreen, 1 bowl",
-                            //                                calorie: "450",
-                            //                                protein: "42",
-                            //                                carbs: "12",
-                            //                                fat: "18",
-                            //                                fiber: "6"
-                            //                            )
                         } menuItems: {
                             Button {
 
@@ -92,7 +83,7 @@ struct NewEntrySheetView: View {
                                     )
                                 }
                                 .buttonStyle(.plain)
-                                
+
                                 NavigationRow(
                                     icon: .system("cup.and.saucer"),
                                     title: "Drinks"
@@ -126,11 +117,14 @@ struct NewEntrySheetView: View {
             }
         }
         .sheet(isPresented: $showAddFoodSheet) {
-            AddFoodSheetView(onLogInstantly: { savedFood in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    self.foodToLog = savedFood
+            AddEntrySheetView(
+                entryType: .food,
+                onLogInstantly: { savedFood in
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        self.foodToLog = savedFood
+                    }
                 }
-            })
+            )
         }
         .sheet(item: $foodToLog) { food in
             LogFoodSheetView(food: food)

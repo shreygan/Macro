@@ -8,9 +8,18 @@
 import SwiftData
 import SwiftUI
 
-struct AddFoodSheetView: View {
+enum EntryType: String, Codable {
+    case food
+    case drink
+    case ingredient
+    case recipe
+}
+
+struct AddEntrySheetView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
+
+    let entryType: EntryType
 
     var onLogInstantly: ((FoodItem) -> Void)?
     @State private var showSuccessAlert: Bool = false
@@ -19,12 +28,15 @@ struct AddFoodSheetView: View {
     @Query(sort: \EntrySource.displayOrder) var savedSources: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var savedCategories:
         [CategorySource]
+    @Query(sort: \FoodGroupSource.displayOrder) var savedFoodGroups:
+        [FoodGroupSource]
     @Query(sort: \ServingSizeUnit.displayOrder) var servingUnits:
         [ServingSizeUnit]
 
     @State private var name: String = ""
     @State private var source: String = ""
     @State private var category: String = ""
+    @State private var foodGroup: String = ""
 
     @State private var servingSize: String = "1"
     @State private var servingSizeUnit: String = "serving"
@@ -32,7 +44,6 @@ struct AddFoodSheetView: View {
     @State private var servingWeight: String = ""
     @State private var servingWeightUnit: String = "g"
 
-    @State private var isIngredientBased: Bool = false
     @State private var isAIEstimated: Bool = false
 
     @State private var calorieValue: String = ""
@@ -184,7 +195,7 @@ struct AddFoodSheetView: View {
             servingUnit: resolvedUnit,
             servingWeight: parseOptionalDouble(servingWeight),
             servingWeightUnit: servingWeightUnit,
-            isIngredientBased: isIngredientBased,
+            isIngredientBased: false,
             isAIEstimated: isAIEstimated,
             calories: parseDouble(calorieValue),
             protein: parseDouble(proteinValue),
@@ -213,6 +224,14 @@ struct AddFoodSheetView: View {
 
                 ScrollView {
                     VStack {
+                        Text(
+                            entryType == .ingredient ? "Ingredients are the raw building blocks (like flour or eggs) used to build out your recipes." : "Foods are standalone items or branded products (like a protein bar or a restaurant meal)."
+                        )
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                        .padding(.bottom, 4)
+                        .multilineTextAlignment(.center)
 
                         Card {
                             RowGroup(.divider) {
@@ -225,13 +244,24 @@ struct AddFoodSheetView: View {
                                     options: savedSources.map { $0.source },
                                     selection: $source
                                 )
-                                FullWidthDropdownRow(
-                                    placeholder: "Category",
-                                    options: savedCategories.map {
-                                        $0.category
-                                    },
-                                    selection: $category
-                                )
+
+                                if entryType == .food {
+                                    FullWidthDropdownRow(
+                                        placeholder: "Category",
+                                        options: savedCategories.map {
+                                            $0.category
+                                        },
+                                        selection: $category
+                                    )
+                                } else {
+                                    FullWidthDropdownRow(
+                                        placeholder: "Food Group",
+                                        options: savedFoodGroups.map {
+                                            $0.foodGroup
+                                        },
+                                        selection: $foodGroup
+                                    )
+                                }
 
                             }
                         }
@@ -266,64 +296,48 @@ struct AddFoodSheetView: View {
                         }
                         .padding([.top, .leading, .trailing])
 
-                        ButtonRow(
-                            icon: .system("document.viewfinder"),
-                            title: "Scan Nutrition Label",
-                            topPadding: 15,
-                            bottomPadding: 5
-                        ) {
-
-                        }
-
                         Card {
                             RowGroup(.divider) {
-                                ToggleRow(
-                                    title: "Ingredient Based",
-                                    isOn: $isIngredientBased
+                                TextInputRow(
+                                    icon: .custom(Image("Calorie")),
+                                    title: "Calories",
+                                    titleExtension: "(kcal)",
+                                    placeholder: "-",
+                                    text: $calorieValue,
+                                    keyboardType: .decimalPad
                                 )
-
-                                if !isIngredientBased {
-                                    TextInputRow(
-                                        icon: .custom(Image("Calorie")),
-                                        title: "Calories",
-                                        titleExtension: "(kcal)",
-                                        placeholder: "-",
-                                        text: $calorieValue,
-                                        keyboardType: .decimalPad
-                                    )
-                                    TextInputRow(
-                                        icon: .custom(Image("Protein")),
-                                        title: "Protein",
-                                        titleExtension: "(g)",
-                                        placeholder: "-",
-                                        text: $proteinValue,
-                                        keyboardType: .decimalPad
-                                    )
-                                    TextInputRow(
-                                        icon: .custom(Image("Carbs")),
-                                        title: "Carbohydrates",
-                                        titleExtension: "(g)",
-                                        placeholder: "-",
-                                        text: $carbsValue,
-                                        keyboardType: .decimalPad
-                                    )
-                                    TextInputRow(
-                                        icon: .custom(Image("Fat")),
-                                        title: "Fat",
-                                        titleExtension: "(g)",
-                                        placeholder: "-",
-                                        text: $fatValue,
-                                        keyboardType: .decimalPad
-                                    )
-                                    TextInputRow(
-                                        icon: .custom(Image("Fiber")),
-                                        title: "Fiber",
-                                        titleExtension: "(g)",
-                                        placeholder: "-",
-                                        text: $fiberValue,
-                                        keyboardType: .decimalPad
-                                    )
-                                }
+                                TextInputRow(
+                                    icon: .custom(Image("Protein")),
+                                    title: "Protein",
+                                    titleExtension: "(g)",
+                                    placeholder: "-",
+                                    text: $proteinValue,
+                                    keyboardType: .decimalPad
+                                )
+                                TextInputRow(
+                                    icon: .custom(Image("Carbs")),
+                                    title: "Carbohydrates",
+                                    titleExtension: "(g)",
+                                    placeholder: "-",
+                                    text: $carbsValue,
+                                    keyboardType: .decimalPad
+                                )
+                                TextInputRow(
+                                    icon: .custom(Image("Fat")),
+                                    title: "Fat",
+                                    titleExtension: "(g)",
+                                    placeholder: "-",
+                                    text: $fatValue,
+                                    keyboardType: .decimalPad
+                                )
+                                TextInputRow(
+                                    icon: .custom(Image("Fiber")),
+                                    title: "Fiber",
+                                    titleExtension: "(g)",
+                                    placeholder: "-",
+                                    text: $fiberValue,
+                                    keyboardType: .decimalPad
+                                )
 
                                 ToggleRow(
                                     title: "AI Estimated Macros",
@@ -331,7 +345,7 @@ struct AddFoodSheetView: View {
                                 )
                             }
                         }
-                        .padding([.leading, .trailing])
+                        .padding([.top, .leading, .trailing])
 
                         Card {
                             RowGroup(.divider) {
@@ -360,7 +374,7 @@ struct AddFoodSheetView: View {
                 }
                 .withCustomKeyboardToolbar()
                 .scrollDismissesKeyboard(.immediately)
-                .navigationTitle("Add New Food")
+                .navigationTitle("Add New \(entryType.rawValue.capitalized)")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
@@ -401,7 +415,9 @@ struct AddFoodSheetView: View {
                 .safeAreaInset(edge: .top) {
                     Card {
                         MealRow(
-                            name: name.isEmpty ? "New Food" : name,
+                            name: name.isEmpty
+                                ? "New \(entryType.rawValue.capitalized)"
+                                : name,
                             source: source,
                             isCustomDefaultServing: isCustomDefaultServing,
                             customServingSize: customServingSize,
@@ -459,5 +475,5 @@ struct AddFoodSheetView: View {
 }
 
 #Preview {
-    AddFoodSheetView()
+    AddEntrySheetView(entryType: .food)
 }
