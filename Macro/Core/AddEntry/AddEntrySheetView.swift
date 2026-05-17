@@ -8,13 +8,6 @@
 import SwiftData
 import SwiftUI
 
-enum EntryType: String, Codable {
-    case food
-    case drink
-    case ingredient
-    case recipe
-}
-
 struct AddEntrySheetView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -23,7 +16,7 @@ struct AddEntrySheetView: View {
 
     var onLogInstantly: ((FoodItem) -> Void)?
     @State private var showSuccessAlert: Bool = false
-    @State private var newlySavedFood: FoodItem? = nil
+    @State private var newlySavedEntry: FoodItem? = nil
 
     @Query(sort: \EntrySource.displayOrder) var savedSources: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var savedCategories:
@@ -104,7 +97,7 @@ struct AddEntrySheetView: View {
         )
     }
 
-    private func addFood() {
+    private func addEntry() {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
             print("Validation Error: Name is required.")
@@ -135,23 +128,50 @@ struct AddEntrySheetView: View {
 
         // CATEGORY
         var resolvedCategory: CategorySource? = nil
-        let trimmedCategory = category.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
-        if !trimmedCategory.isEmpty {
-            if let existing = savedCategories.first(where: {
-                $0.category == trimmedCategory
-            }) {
-                resolvedCategory = existing
-            } else {
-                let nextOrder =
-                    (savedCategories.map { $0.displayOrder }.max() ?? 0) + 1
-                let newCategory = CategorySource(
-                    category: trimmedCategory,
-                    displayOrder: nextOrder
-                )
-                modelContext.insert(newCategory)
-                resolvedCategory = newCategory
+        if entryType == .food {
+            let trimmedCategory = category.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if !trimmedCategory.isEmpty {
+                if let existing = savedCategories.first(where: {
+                    $0.category == trimmedCategory
+                }) {
+                    resolvedCategory = existing
+                } else {
+                    let nextOrder =
+                        (savedCategories.map { $0.displayOrder }.max() ?? 0) + 1
+                    let newCategory = CategorySource(
+                        category: trimmedCategory,
+                        displayOrder: nextOrder
+                    )
+                    modelContext.insert(newCategory)
+                    resolvedCategory = newCategory
+                }
+            }
+        }
+
+        // FOOD GROUP
+        var resolvedFoodGroup: FoodGroupSource? = nil
+        if entryType == .ingredient {
+            let trimmedGroup = foodGroup.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if !trimmedGroup.isEmpty {
+                if let existing = savedFoodGroups.first(where: {
+                    $0.foodGroup == trimmedGroup
+                }) {
+                    resolvedFoodGroup = existing
+                } else {
+                    let nextOrder =
+                        (savedFoodGroups.map { $0.displayOrder }.max() ?? 0) + 1
+                    let newGroup = FoodGroupSource(
+                        foodGroup: trimmedGroup,
+                        isDefault: false,
+                        displayOrder: nextOrder
+                    )
+                    modelContext.insert(newGroup)
+                    resolvedFoodGroup = newGroup
+                }
             }
         }
 
@@ -187,15 +207,16 @@ struct AddEntrySheetView: View {
             return string.isEmpty ? nil : Double(normalized)
         }
 
-        let newFood = FoodItem(
+        let newEntry = FoodItem(
             name: name,
+            type: entryType,
             source: resolvedSource,
             category: resolvedCategory,
+            foodGroup: resolvedFoodGroup,
             servingSize: parseDouble(servingSize),
             servingUnit: resolvedUnit,
             servingWeight: parseOptionalDouble(servingWeight),
             servingWeightUnit: servingWeightUnit,
-            isIngredientBased: false,
             isAIEstimated: isAIEstimated,
             calories: parseDouble(calorieValue),
             protein: parseDouble(proteinValue),
@@ -206,13 +227,17 @@ struct AddEntrySheetView: View {
             customServingSize: parseOptionalDouble(customServingSize)
         )
 
-        modelContext.insert(newFood)
+        modelContext.insert(newEntry)
 
         do {
             try modelContext.save()
 
-            newlySavedFood = newFood
-            showSuccessAlert = true
+            newlySavedEntry = newEntry
+            if onLogInstantly != nil {
+                showSuccessAlert = true
+            } else {
+                dismiss()
+            }
         } catch {
         }
     }
@@ -225,7 +250,9 @@ struct AddEntrySheetView: View {
                 ScrollView {
                     VStack {
                         Text(
-                            entryType == .ingredient ? "Ingredients are the raw building blocks (like flour or eggs) used to build out your recipes." : "Foods are standalone items or branded products (like a protein bar or a restaurant meal)."
+                            entryType == .ingredient
+                                ? "Ingredients are the raw building blocks (like flour or eggs) used to build out your recipes."
+                                : "Foods are standalone items or branded products (like a protein bar or a restaurant meal)."
                         )
                         .font(.footnote)
                         .foregroundColor(.secondary)
@@ -401,7 +428,7 @@ struct AddEntrySheetView: View {
 
                         } else {
                             Button {
-                                addFood()
+                                addEntry()
                             } label: {
                                 Image(systemName: "plus")
                                     .foregroundStyle(.primary)
@@ -458,7 +485,7 @@ struct AddEntrySheetView: View {
         .alert(
             "\(name) Saved!",
             isPresented: $showSuccessAlert,
-            presenting: newlySavedFood
+            presenting: newlySavedEntry
         ) { food in
 
             Button("Log Now", role: .confirm) {
@@ -475,5 +502,5 @@ struct AddEntrySheetView: View {
 }
 
 #Preview {
-    AddEntrySheetView(entryType: .food)
+    AddEntrySheetView(entryType: .ingredient)
 }
