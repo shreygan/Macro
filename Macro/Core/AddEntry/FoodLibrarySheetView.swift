@@ -20,12 +20,15 @@ enum FoodSortOption {
 
 struct FoodLibrarySheetView: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     @Query(sort: \FoodItem.dateAdded, order: .reverse) var savedMeals:
         [FoodItem]
 
     @Query(sort: \ServingSizeUnit.displayOrder) var portionUnitOptions:
         [ServingSizeUnit]
+
+    @State private var focusManager = SwipeFocusManager()
 
     @State private var selectedFood: FoodItem?
     @State private var searchText = ""
@@ -37,8 +40,11 @@ struct FoodLibrarySheetView: View {
     @State private var selectedSources: Set<String> = []
     @State private var selectedCategories: Set<String> = []
 
-    var filteredMeals: [FoodItem] {
-        // 1. Filter by search text
+    @State private var showDeleteAlert = false
+    @State private var foodToDelete: FoodItem?
+
+    var filteredFoods: [FoodItem] {
+        // 1. Search text filter
         var result =
             searchText.isEmpty
             ? savedMeals
@@ -46,8 +52,7 @@ struct FoodLibrarySheetView: View {
                 food.name.localizedStandardContains(searchText)
             }
 
-        // 2. Filter by Source
-        // If the set is empty, we assume no filter is applied (show all).
+        // 2. Source filter
         if !selectedSources.isEmpty {
             result = result.filter { food in
                 guard let sourceName = food.source?.source else { return false }
@@ -55,7 +60,7 @@ struct FoodLibrarySheetView: View {
             }
         }
 
-        // 3. Filter by Category
+        // 3. Category filter
         if !selectedCategories.isEmpty {
             result = result.filter { food in
                 guard let categoryName = food.category?.category else {
@@ -65,7 +70,7 @@ struct FoodLibrarySheetView: View {
             }
         }
 
-        // 4. Sort the filtered results
+        // 4. Sort filtered results
         return result.sorted { lhs, rhs in
             switch sortOption {
             case .name:
@@ -93,97 +98,211 @@ struct FoodLibrarySheetView: View {
         }
     }
 
+    private func deleteFood(_ food: FoodItem) {
+        modelContext.delete(food)
+    }
+
     var body: some View {
         ZStack {
             Color.background.ignoresSafeArea()
 
+            if filteredFoods.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 64))
+                        .foregroundColor(.secondary.opacity(0.7))
+
+                    Text("No Results for \"\(searchText)\"")
+                        .font(.title3.bold())
+                        .foregroundColor(.primary)
+
+                    Text("Check the spelling or try a new search.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+
             ScrollView {
-                Card {
-                    RowGroup(.divider) {
-                        ForEach(filteredMeals) { food in
+                VStack {
+                    if !filteredFoods.isEmpty {
+                        Card {
+                            if filteredFoods.isEmpty {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.largeTitle)
+                                        .foregroundColor(.gray)
+                                    Text("No foods found")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 40)
+                                .transition(.opacity)
+                            } else {
+                                RowGroup(.divider) {
+                                    ForEach(filteredFoods) { food in
 
-                            let displayPortion =
-                                (food.isCustomDefaultServing
-                                    && food.customServingSize != nil)
-                                ? food.customServingSize!
-                                : food.servingSize
+                                        let displayPortion =
+                                            (food.isCustomDefaultServing
+                                                && food.customServingSize != nil)
+                                            ? food.customServingSize!
+                                            : food.servingSize
 
-                            let multiplier =
-                                EntryHelper.calculateMultiplier(
-                                    targetPortion: displayPortion,
-                                    basePortion: food.servingSize
-                                )
+                                        let multiplier =
+                                            EntryHelper.calculateMultiplier(
+                                                targetPortion: displayPortion,
+                                                basePortion: food.servingSize
+                                            )
 
-                            let baseCalStr = EntryHelper.format(
-                                food.calories
-                            )
-                            let baseProStr = EntryHelper.format(
-                                food.protein
-                            )
-                            let baseCarbsStr = EntryHelper.format(
-                                food.carbs
-                            )
-                            let baseFatStr = EntryHelper.format(food.fat)
-                            let baseFiberStr = EntryHelper.format(
-                                food.fiber
-                            )
+                                        let baseCalStr = EntryHelper.format(
+                                            food.calories
+                                        )
+                                        let baseProStr = EntryHelper.format(
+                                            food.protein
+                                        )
+                                        let baseCarbsStr = EntryHelper.format(
+                                            food.carbs
+                                        )
+                                        let baseFatStr = EntryHelper.format(
+                                            food.fat
+                                        )
+                                        let baseFiberStr = EntryHelper.format(
+                                            food.fiber
+                                        )
 
-                            MealRow(
-                                name: food.name,
-                                source: food.source?.source ?? "None",
-                                isCustomDefaultServing: food
-                                    .isCustomDefaultServing,
-                                customServingSize: EntryHelper.format(
-                                    food.customServingSize
-                                ),
-                                servingSize: EntryHelper.format(
-                                    displayPortion
-                                ),
-                                servingSizeUnit: food.servingUnit?.unit
-                                    ?? "serving",
-                                servingWeight: EntryHelper.format(
-                                    food.servingWeight
-                                ),
-                                servingWeightUnit: food.servingWeightUnit,
-                                servingUnits: portionUnitOptions,
+                                        CustomSwipeRow {
+                                            MealRow(
+                                                name: food.name,
+                                                source: food.source?.source
+                                                    ?? "None",
+                                                isCustomDefaultServing: food
+                                                    .isCustomDefaultServing,
+                                                customServingSize:
+                                                    EntryHelper.format(
+                                                        food.customServingSize
+                                                    ),
+                                                servingSize: EntryHelper.format(
+                                                    displayPortion
+                                                ),
+                                                servingSizeUnit: food
+                                                    .servingUnit?.unit
+                                                    ?? "serving",
+                                                servingWeight:
+                                                    EntryHelper.format(
+                                                        food.servingWeight
+                                                    ),
+                                                servingWeightUnit: food
+                                                    .servingWeightUnit,
+                                                servingUnits:
+                                                    portionUnitOptions,
 
-                                calorie: EntryHelper.scale(
-                                    baseCalStr,
-                                    by: multiplier
-                                ),
-                                protein: EntryHelper.scale(
-                                    baseProStr,
-                                    by: multiplier
-                                ),
-                                carbs: EntryHelper.scale(
-                                    baseCarbsStr,
-                                    by: multiplier
-                                ),
-                                fat: EntryHelper.scale(
-                                    baseFatStr,
-                                    by: multiplier
-                                ),
-                                fiber: EntryHelper.scale(
-                                    baseFiberStr,
-                                    by: multiplier
-                                )
-                            ) {
-                                selectedFood = food
+                                                calorie: EntryHelper.scale(
+                                                    baseCalStr,
+                                                    by: multiplier
+                                                ),
+                                                protein: EntryHelper.scale(
+                                                    baseProStr,
+                                                    by: multiplier
+                                                ),
+                                                carbs: EntryHelper.scale(
+                                                    baseCarbsStr,
+                                                    by: multiplier
+                                                ),
+                                                fat: EntryHelper.scale(
+                                                    baseFatStr,
+                                                    by: multiplier
+                                                ),
+                                                fiber: EntryHelper.scale(
+                                                    baseFiberStr,
+                                                    by: multiplier
+                                                )
+                                            ) {
+                                                selectedFood = food
+                                            }
+                                        } onDelete: {
+                                            foodToDelete = food
+                                            showDeleteAlert = true
+                                        } onEdit: {
+                                            print("Edited \(food.name)")
+                                        } onFavorite: {
+                                            print("Favorited \(food.name)")
+                                        }
+                                        .transition(
+                                            .asymmetric(
+                                                insertion: .identity,
+                                                removal: .opacity.combined(
+                                                    with: .scale(scale: 0.9)
+                                                )
+                                            )
+                                        )
+                                    }
+                                }
                             }
+                        }
+                        .padding()
+                        .transition(
+                            .opacity.combined(with: .scale(scale: 0.95))
+                        )
+                        .alert(
+                            "Delete Food",
+                            isPresented: $showDeleteAlert,
+                            presenting: foodToDelete
+                        ) { food in
+
+                            Button("Cancel", role: .cancel) {
+                                foodToDelete = nil
+                            }
+
+                            Button("Delete", role: .destructive) {
+                                let item = food
+                                foodToDelete = nil
+
+                                DispatchQueue.main.async {
+                                    modelContext.delete(item)
+                                    try? modelContext.save()
+                                }
+                            }
+
+                        } message: { food in
+                            Text(
+                                "Are you sure you want to delete \(food.name)?"
+                            )
                         }
                     }
                 }
-                .padding()
+                .animation(
+                    .spring(response: 0.4, dampingFraction: 0.8),
+                    value: filteredFoods
+                )
             }
-            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Food Library")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollDismissesKeyboard(.immediately)
+            .environment(focusManager)
             .searchable(
                 text: $searchText,
                 prompt: "What did you eat today?"
             )
             .searchDictationBehavior(.automatic)
             .searchPresentationToolbarBehavior(.avoidHidingContent)
+            .onTapGesture {
+                focusManager.activeRowID = nil
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 15)
+                    .onChanged { value in
+                        let isVerticalScroll =
+                            abs(value.translation.height)
+                            > abs(value.translation.width)
+
+                        if isVerticalScroll && focusManager.activeRowID != nil {
+                            focusManager.activeRowID = nil
+                        }
+                    }
+            )
             .sheet(item: $selectedFood) { foodToLog in
                 LogFoodSheetView(food: foodToLog)
             }

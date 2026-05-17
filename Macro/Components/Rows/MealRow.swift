@@ -200,12 +200,13 @@ struct MealRow: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
+        .contentShape(Rectangle())
 
         if let action = action {
-            Button(action: action) {
-                rowContent
-            }
-            .buttonStyle(.plain)
+            rowContent
+                .onTapGesture {
+                    action()
+                }
         } else {
             rowContent
         }
