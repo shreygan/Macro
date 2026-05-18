@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct MealRow: View {
+struct MealRow<Content: View>: View {
     var name: String
     var subtitle: String
 
@@ -18,6 +18,8 @@ struct MealRow: View {
     var fiber: String?
 
     var action: (() -> Void)?
+
+    let content: Content
 
     init(
         name: String,
@@ -34,7 +36,8 @@ struct MealRow: View {
         carbs: String? = nil,
         fat: String? = nil,
         fiber: String? = nil,
-        action: (() -> Void)? = nil
+        action: (() -> Void)? = nil,
+        @ViewBuilder content: () -> Content
     ) {
         self.name = name
         self.calorie = calorie
@@ -43,6 +46,7 @@ struct MealRow: View {
         self.fat = fat
         self.fiber = fiber
         self.action = action
+        self.content = content()
 
         let activeSize =
             isCustomDefaultServing ? customServingSize : servingSize
@@ -66,7 +70,8 @@ struct MealRow: View {
 
     init(
         item: FoodItem,
-        action: (() -> Void)? = nil
+        action: (() -> Void)? = nil,
+        @ViewBuilder content: () -> Content
     ) {
         self.name = item.name.isEmpty ? "New Food" : item.name
         self.calorie = String(item.calories)
@@ -75,6 +80,7 @@ struct MealRow: View {
         self.fat = String(item.fat)
         self.fiber = String(item.fiber)
         self.action = action
+        self.content = content()
 
         let activeSizeNum =
             item.isCustomDefaultServing
@@ -192,11 +198,14 @@ struct MealRow: View {
 
             Spacer(minLength: 16)
 
+            content
+
             if action != nil {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.tertiary)
             }
+
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -225,6 +234,56 @@ struct MealRow: View {
                 .foregroundColor(.primary)
                 .padding(.trailing, 5)
         }
+    }
+}
+
+extension MealRow where Content == EmptyView {
+    init(
+        name: String,
+        source: String,
+        isCustomDefaultServing: Bool,
+        customServingSize: String,
+        servingSize: String,
+        servingSizeUnit: String,
+        servingWeight: String,
+        servingWeightUnit: String,
+        servingUnits: [ServingSizeUnit],
+        calorie: String,
+        protein: String? = nil,
+        carbs: String? = nil,
+        fat: String? = nil,
+        fiber: String? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.init(
+            name: name,
+            source: source,
+            isCustomDefaultServing: isCustomDefaultServing,
+            customServingSize: customServingSize,
+            servingSize: servingSize,
+            servingSizeUnit: servingSizeUnit,
+            servingWeight: servingWeight,
+            servingWeightUnit: servingWeightUnit,
+            servingUnits: servingUnits,
+            calorie: calorie,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            fiber: fiber,
+            action: action,
+            content: { EmptyView() }
+        )
+    }
+
+    init(
+        item: FoodItem,
+        action: (() -> Void)? = nil
+    ) {
+        self.init(
+            item: item,
+            action: action,
+            content: { EmptyView() }
+        )
     }
 }
 
@@ -273,6 +332,36 @@ struct MealRow: View {
                 fat: "2"
             ) {
                 print("Navigating to meal details...")
+            }
+
+            Divider().padding(.leading, 16)
+
+            MealRow(
+                name: "Chips Chips Chips ",
+                source: "Lays",
+                isCustomDefaultServing: false,
+                customServingSize: "",
+                servingSize: "11",
+                servingSizeUnit: "chip",
+                servingWeight: "50",
+                servingWeightUnit: "g",
+                servingUnits: mockUnits,
+                calorie: "240",
+                protein: "48",
+                carbs: "6",
+                fat: "2"
+            ) {
+                HStack(spacing: 8) {
+                    InputPill(
+                        text: .constant("4"),
+                        keyboardType: .decimalPad
+                    )
+                    DropdownPill(
+                        options: ["serving", "g"],
+                        displayCustomOption: false,
+                        selection: .constant("serving")
+                    )
+                }
             }
         }
         .padding()

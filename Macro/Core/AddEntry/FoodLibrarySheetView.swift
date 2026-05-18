@@ -22,6 +22,8 @@ struct FoodLibrarySheetView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
 
+    var onSelect: ((FoodItem) -> Void)? = nil
+
     @Query(sort: \FoodItem.dateAdded, order: .reverse) var savedMeals:
         [FoodItem]
 
@@ -220,7 +222,12 @@ struct FoodLibrarySheetView: View {
                                                     by: multiplier
                                                 )
                                             ) {
-                                                selectedFood = food
+                                                if let onSelect = onSelect {
+                                                    onSelect(food)
+                                                    dismiss()
+                                                } else {
+                                                    selectedFood = food
+                                                }
                                             }
                                         } onDelete: {
                                             foodToDelete = food

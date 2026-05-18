@@ -256,10 +256,53 @@ struct AddRecipeSheetView: View {
                         }
                         .padding([.top, .leading, .trailing])
 
+                        // THE INGREDIENTS SECTION
                         Card("Ingredients") {
                             RowGroup(.divider) {
                                 ForEach($draftIngredients) { $draft in
-                                    DraftIngredientRow(draft: $draft)
+                                    let item = draft.item
+
+                                    let baseUnit =
+                                        item.servingUnit?.unit ?? "serving"
+                                    let hasWeight = item.servingWeight != nil
+
+                                    MealRow(
+                                        name: item.name,
+                                        source: item.source?.source ?? "",
+                                        isCustomDefaultServing: item
+                                            .isCustomDefaultServing,
+                                        customServingSize: EntryHelper.format(
+                                            item.customServingSize
+                                        ),
+                                        servingSize: EntryHelper.format(
+                                            item.servingSize
+                                        ),
+                                        servingSizeUnit: item.servingUnit?.unit
+                                            ?? "serving",
+                                        servingWeight: EntryHelper.format(
+                                            item.servingWeight
+                                        ),
+                                        servingWeightUnit: item
+                                            .servingWeightUnit,
+                                        servingUnits: servingUnits,
+                                        calorie: EntryHelper.format(
+                                            draft.activeCalories
+                                        ),
+                                        protein: EntryHelper.format(
+                                            draft.activeProtein
+                                        ),
+                                        carbs: EntryHelper.format(
+                                            draft.activeCarbs
+                                        ),
+                                        fat: EntryHelper.format(
+                                            draft.activeFat
+                                        ),
+                                        fiber: EntryHelper.format(
+                                            draft.activeFiber
+                                        ),
+                                    ) {
+                                        Text("Test")
+                                    }
                                 }
 
                                 ButtonRow(
@@ -268,7 +311,6 @@ struct AddRecipeSheetView: View {
                                 ) {
                                     showIngredientSelectionSheet = true
                                 }
-                                .foregroundColor(.blue)
                             }
                         }
                         .padding([.top, .leading, .trailing])
@@ -302,6 +344,14 @@ struct AddRecipeSheetView: View {
                 .scrollDismissesKeyboard(.immediately)
                 .navigationTitle("Add New Recipe")
                 .navigationBarTitleDisplayMode(.inline)
+                .sheet(isPresented: $showIngredientSelectionSheet) {
+                    IngredientSelectionSheetView { selectedItem in
+                        draftIngredients.append(
+                            DraftRecipeIngredient(item: selectedItem)
+                        )
+                        showIngredientSelectionSheet = false
+                    }
+                }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
@@ -351,25 +401,18 @@ struct AddRecipeSheetView: View {
                             servingWeight: servingWeight,
                             servingWeightUnit: servingWeightUnit,
                             servingUnits: servingUnits,
-                            calorie: EntryHelper.scale(
-                                "0",
-                                by: activeMultiplier
+                            calorie: EntryHelper.format(
+                                totalCalories / recipeDivisor
                             ),
-                            protein: EntryHelper.scale(
-                                "0",
-                                by: activeMultiplier
+                            protein: EntryHelper.format(
+                                totalProtein / recipeDivisor
                             ),
-                            carbs: EntryHelper.scale(
-                                "0",
-                                by: activeMultiplier
+                            carbs: EntryHelper.format(
+                                totalCarbs / recipeDivisor
                             ),
-                            fat: EntryHelper.scale(
-                                "0",
-                                by: activeMultiplier
-                            ),
-                            fiber: EntryHelper.scale(
-                                "0",
-                                by: activeMultiplier
+                            fat: EntryHelper.format(totalFat / recipeDivisor),
+                            fiber: EntryHelper.format(
+                                totalFiber / recipeDivisor
                             )
                         )
                     }

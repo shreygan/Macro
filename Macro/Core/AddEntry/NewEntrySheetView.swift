@@ -13,6 +13,7 @@ struct NewEntrySheetView: View {
     @State private var searchText = ""
 
     @State private var showAddFoodSheet = false
+    @State private var showAddRecipeSheet = false
     @State private var foodToLog: FoodItem? = nil
 
     var body: some View {
@@ -51,23 +52,15 @@ struct NewEntrySheetView: View {
                                 showAddFoodSheet = true
                             }
                             ButtonRow(
+                                icon: .system("list.clipboard"),
+                                title: "Add New Recipe",
+                                bottomPadding: 2
+                            ) {
+                                showAddRecipeSheet = true
+                            }
+                            ButtonRow(
                                 icon: .system("cup.and.saucer"),
                                 title: "Add New Drink",
-                                bottomPadding: 2
-                            ) {}
-                            ButtonRow(
-                                icon: .system("barcode.viewfinder"),
-                                title: "Scan Barcode",
-                                bottomPadding: 2
-                            ) {}
-                            ButtonRow(
-                                icon: .system("wand.and.sparkles"),
-                                title: "AI Estimate",
-                                bottomPadding: 2
-                            ) {}
-                            ButtonRow(
-                                icon: .system("message"),
-                                title: "Quick Log",
                             ) {}
                         }
                         .padding([.top, .leading, .trailing])
@@ -80,6 +73,16 @@ struct NewEntrySheetView: View {
                                     NavigationRow(
                                         icon: .system("fork.knife"),
                                         title: "Foods"
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                NavigationLink(
+                                    destination: FoodLibrarySheetView()
+                                ) {
+                                    NavigationRow(
+                                        icon: .system("list.clipboard"),
+                                        title: "Recipes"
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -125,6 +128,9 @@ struct NewEntrySheetView: View {
                     }
                 }
             )
+        }
+        .sheet(isPresented: $showAddRecipeSheet) {
+            AddRecipeSheetView()
         }
         .sheet(item: $foodToLog) { food in
             LogFoodSheetView(food: food)
