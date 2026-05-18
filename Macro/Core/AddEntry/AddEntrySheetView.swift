@@ -502,5 +502,5 @@ struct AddEntrySheetView: View {
 }
 
 #Preview {
-    AddEntrySheetView(entryType: .ingredient)
+    AddEntrySheetView(entryType: .food)
 }
