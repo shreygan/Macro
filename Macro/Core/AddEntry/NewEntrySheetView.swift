@@ -68,7 +68,7 @@ struct NewEntrySheetView: View {
                         Card("Library") {
                             RowGroup(.divider) {
                                 NavigationLink(
-                                    destination: FoodLibrarySheetView(
+                                    destination: LibrarySheetView(
                                         defaultType: .all
                                     )
                                 ) {
@@ -80,7 +80,7 @@ struct NewEntrySheetView: View {
                                 .buttonStyle(.plain)
 
                                 NavigationLink(
-                                    destination: FoodLibrarySheetView(
+                                    destination: LibrarySheetView(
                                         defaultType: .specific(.food)
                                     )
                                 ) {
@@ -92,7 +92,7 @@ struct NewEntrySheetView: View {
                                 .buttonStyle(.plain)
 
                                 NavigationLink(
-                                    destination: FoodLibrarySheetView(
+                                    destination: LibrarySheetView(
                                         defaultType: .specific(.recipe)
                                     )
                                 ) {
@@ -104,7 +104,7 @@ struct NewEntrySheetView: View {
                                 .buttonStyle(.plain)
 
                                 NavigationLink(
-                                    destination: FoodLibrarySheetView(
+                                    destination: LibrarySheetView(
                                         defaultType: .specific(.drink)
                                     )
                                 ) {

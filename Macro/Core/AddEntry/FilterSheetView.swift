@@ -8,20 +8,36 @@
 import SwiftData
 import SwiftUI
 
-struct FoodFilterSheetView: View {
+struct FilterSheetView: View {
     @Environment(\.dismiss) var dismiss
 
     @Query(sort: \EntrySource.displayOrder) var availableSources: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var availableCategories:
         [CategorySource]
 
+    @Binding var selectedTypes: Set<String>
     @Binding var selectedSources: Set<String>
     @Binding var selectedCategories: Set<String>
+
+    let defaultType: LibraryFilterType
+
+    private var defaultTypesSet: Set<String> {
+        defaultType == .all ? [] : [defaultType.displayName]
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    FilterRowView(
+                        title: "Type",
+                        items: EntryType.allCases.map {
+                            $0.rawValue.capitalized
+                        },
+                        defaultSelection: defaultTypesSet,
+                        selection: $selectedTypes
+                    )
+
                     FilterRowView(
                         title: "Source",
                         items: availableSources.map { $0.source },
@@ -38,16 +54,19 @@ struct FoodFilterSheetView: View {
             }
             .navigationTitle("Filter")
             .navigationBarTitleDisplayMode(.inline)
+            .scrollBounceBehavior(.basedOnSize)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Clear All") {
                         withAnimation {
                             selectedSources.removeAll()
                             selectedCategories.removeAll()
+                            selectedTypes = defaultTypesSet
                         }
                     }
                     .disabled(
                         selectedSources.isEmpty && selectedCategories.isEmpty
+                            && selectedTypes == defaultTypesSet
                     )
                 }
 
@@ -62,6 +81,8 @@ struct FoodFilterSheetView: View {
 struct FilterRowView: View {
     let title: String
     let items: [String]
+
+    var defaultSelection: Set<String>? = nil
     @Binding var selection: Set<String>
 
     var body: some View {
@@ -76,16 +97,25 @@ struct FilterRowView: View {
                 let allSelected =
                     selection.count == items.count && !items.isEmpty
 
-                Button(allSelected ? "Deselect All" : "Select All") {
+                Button(
+                    allSelected
+                        ? (defaultSelection != nil ? "Reset" : "Deselect All")
+                        : "Select All"
+                ) {
                     withAnimation {
                         if allSelected {
-                            selection.removeAll()
+                            if let defaultSelection = defaultSelection {
+                                selection = defaultSelection
+                            } else {
+                                selection.removeAll()
+                            }
                         } else {
                             selection = Set(items)
                         }
                     }
                 }
                 .font(.subheadline)
+
             }
             .padding(.horizontal)
 
@@ -117,6 +147,8 @@ struct FilterRowView: View {
                                     isSelected ? Color.white : Color.primary
                                 )
                                 .clipShape(Capsule())
+                                .buttonStyle(.plain)
+                                .contentShape(Capsule())
                         }
                     }
                 }
@@ -127,14 +159,17 @@ struct FilterRowView: View {
 }
 
 #Preview("Filter Sheet") {
+    @Previewable @State var selectedTypes: Set<String> = []
     @Previewable @State var selectedSources: Set<String> = [
         "USDA", "Scanned Barcode",
     ]
     @Previewable @State var selectedCategories: Set<String> = []
 
-    FoodFilterSheetView(
+    FilterSheetView(
+        selectedTypes: $selectedTypes,
         selectedSources: $selectedSources,
-        selectedCategories: $selectedCategories
+        selectedCategories: $selectedCategories,
+        defaultType: .all
     )
 
     .modelContainer(

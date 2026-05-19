@@ -67,7 +67,7 @@ struct IngredientSelectionSheetView: View {
                     Card("Library") {
                         RowGroup(.divider) {
                             NavigationLink(
-                                destination: FoodLibrarySheetView(onSelect: {
+                                destination: LibrarySheetView(onSelect: {
                                     selectedFood in
                                     onSelect(selectedFood)
                                     dismiss()
@@ -81,7 +81,7 @@ struct IngredientSelectionSheetView: View {
                             .buttonStyle(.plain)
 
                             NavigationLink(
-                                destination: FoodLibrarySheetView(onSelect: {
+                                destination: LibrarySheetView(onSelect: {
                                     selectedRecipe in
                                     onSelect(selectedRecipe)
                                     dismiss()
