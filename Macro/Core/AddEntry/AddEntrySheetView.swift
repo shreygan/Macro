@@ -251,8 +251,8 @@ struct AddEntrySheetView: View {
                     VStack {
                         Text(
                             entryType == .ingredient
-                                ? "Ingredients are the raw building blocks (like flour or eggs) used to build out your recipes."
-                                : "Foods are standalone items or branded products (like a protein bar or a restaurant meal)."
+                                ? "ingredient_description"
+                                : "food_description"
                         )
                         .font(.footnote)
                         .foregroundColor(.secondary)

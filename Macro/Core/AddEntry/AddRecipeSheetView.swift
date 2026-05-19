@@ -160,7 +160,7 @@ struct AddRecipeSheetView: View {
                 ScrollView {
                     VStack {
                         Text(
-                            "Recipes ..."
+                            "recipe_description"
                         )
                         .font(.footnote)
                         .foregroundColor(.secondary)
