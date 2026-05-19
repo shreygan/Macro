@@ -130,6 +130,7 @@ struct MacroApp: App {
         WindowGroup {
             //            WelcomeView()
             MainView()
+                .textInputAutocapitalization(.never)
         }
         .modelContainer(sharedModelContainer)
     }
