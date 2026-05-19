@@ -306,7 +306,7 @@ struct AddRecipeSheetView: View {
                                 }
 
                                 ButtonRow(
-                                    icon: .system("plus.circle.fill"),
+                                    icon: .customSymbol("plus.circle.fill"),
                                     title: "Add Ingredient"
                                 ) {
                                     showIngredientSelectionSheet = true

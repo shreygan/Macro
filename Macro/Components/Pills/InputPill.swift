@@ -55,14 +55,14 @@ struct InputPill: View {
                 Card {
                     RowGroup(.divider) {
                         PillRow(
-                            icon: .system("scalemass"),
+                            icon: .customSymbol("scalemass"),
                             title: "Current Weight",
                             text: $weight,
                             unit: "lbs"
                         )
 
                         PillRow(
-                            icon: .system("percent"),
+                            icon: .customSymbol("percent"),
                             title: "Category",
                             text: $bodyFat
                         )

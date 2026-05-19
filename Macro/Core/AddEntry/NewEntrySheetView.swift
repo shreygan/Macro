@@ -45,21 +45,21 @@ struct NewEntrySheetView: View {
 
                         Card("New Entry") {
                             ButtonRow(
-                                icon: .system("fork.knife"),
+                                icon: .appSymbol(.food),
                                 title: "Add New Food",
                                 bottomPadding: 2
                             ) {
                                 showAddFoodSheet = true
                             }
                             ButtonRow(
-                                icon: .system("list.clipboard"),
+                                icon: .appSymbol(.recipe),
                                 title: "Add New Recipe",
                                 bottomPadding: 2
                             ) {
                                 showAddRecipeSheet = true
                             }
                             ButtonRow(
-                                icon: .system("cup.and.saucer"),
+                                icon: .appSymbol(.drink),
                                 title: "Add New Drink",
                             ) {}
                         }
@@ -68,29 +68,52 @@ struct NewEntrySheetView: View {
                         Card("Library") {
                             RowGroup(.divider) {
                                 NavigationLink(
-                                    destination: FoodLibrarySheetView()
+                                    destination: FoodLibrarySheetView(
+                                        defaultType: .all
+                                    )
                                 ) {
                                     NavigationRow(
-                                        icon: .system("fork.knife"),
+                                        icon: .appSymbol(.all),
+                                        title: "All Entries"
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                NavigationLink(
+                                    destination: FoodLibrarySheetView(
+                                        defaultType: .specific(.food)
+                                    )
+                                ) {
+                                    NavigationRow(
+                                        icon: .appSymbol(.food),
                                         title: "Foods"
                                     )
                                 }
                                 .buttonStyle(.plain)
 
                                 NavigationLink(
-                                    destination: FoodLibrarySheetView()
+                                    destination: FoodLibrarySheetView(
+                                        defaultType: .specific(.recipe)
+                                    )
                                 ) {
                                     NavigationRow(
-                                        icon: .system("list.clipboard"),
+                                        icon: .appSymbol(.recipe),
                                         title: "Recipes"
                                     )
                                 }
                                 .buttonStyle(.plain)
 
-                                NavigationRow(
-                                    icon: .system("cup.and.saucer"),
-                                    title: "Drinks"
-                                )
+                                NavigationLink(
+                                    destination: FoodLibrarySheetView(
+                                        defaultType: .specific(.drink)
+                                    )
+                                ) {
+                                    NavigationRow(
+                                        icon: .appSymbol(.drink),
+                                        title: "Drinks"
+                                    )
+                                }
+                                .buttonStyle(.plain)
                             }
 
                         }

@@ -8,11 +8,11 @@
 import Foundation
 import SwiftData
 
-enum EntryType: String, Codable {
+enum EntryType: String, Codable, CaseIterable {
     case food
-    case drink
-    case ingredient
     case recipe
+    case ingredient
+    case drink
 }
 
 @Model

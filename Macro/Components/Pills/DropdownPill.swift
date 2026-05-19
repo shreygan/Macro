@@ -119,7 +119,7 @@ struct DropdownPill: View {
 
                 Card("PORTION") {
                     BaseRowLayout(
-                        icon: .system("cup.and.saucer.fill", tint: .blue),
+                        icon: .customSymbol("cup.and.saucer.fill", tint: .blue),
                         title: "Serving Size"
                     ) {
                         DropdownPill(

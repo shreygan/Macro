@@ -79,13 +79,13 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
 //                    )
 
                     ToggleRow(
-                        icon: .system("flame.fill", tint: .orange),
+                        icon: .customSymbol("flame.fill", tint: .orange),
                         title: "Include Active Calories",
                         isOn: .constant(true)
                     )
 
                     NavigationRow(
-                        icon: .system("chart.pie.fill", tint: .blue),
+                        icon: .customSymbol("chart.pie.fill", tint: .blue),
                         title: "Macro Breakdown"
                     )
 //                    {
@@ -110,13 +110,13 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
 //                    )
 
                     ToggleRow(
-                        icon: .system("flame.fill", tint: .orange),
+                        icon: .customSymbol("flame.fill", tint: .orange),
                         title: "Include Active Calories",
                         isOn: .constant(true)
                     )
 
                     NavigationRow(
-                        icon: .system("chart.pie.fill", tint: .blue),
+                        icon: .customSymbol("chart.pie.fill", tint: .blue),
                         title: "Macro Breakdown"
                     )
 //                    {

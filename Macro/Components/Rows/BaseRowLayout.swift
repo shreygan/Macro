@@ -8,8 +8,10 @@
 import SwiftUI
 
 enum RowIcon {
+    /// For Macro symbols defined in AppSymbols.
+    case appSymbol(AppSymbols, tint: Color = .primary)
     /// For SF Symbols. Passes the string name.
-    case system(String, tint: Color = .primary)
+    case customSymbol(String, tint: Color = .primary)
     /// For custom asset catalog images. Passes the Image itself.
     case custom(Image)
 }
@@ -28,7 +30,13 @@ struct BaseRowLayout<RightContent: View>: View {
         HStack(spacing: 8) {
             if let icon = icon {
                 switch icon {
-                case .system(let systemName, let tint):
+                case .appSymbol(let symbol, let tint):
+                    Image(systemName: symbol.rawValue)
+                        .font(.system(size: 14))
+                        .foregroundStyle(tint)
+                        .frame(width: 15)
+
+                case .customSymbol(let systemName, let tint):
                     Image(systemName: systemName)
                         .font(.system(size: 14))
                         .foregroundStyle(tint)
@@ -96,7 +104,7 @@ struct BaseRowLayout<RightContent: View>: View {
         Divider().padding(.horizontal, 14)
 
         BaseRowLayout(
-            icon: .system("scanner"),
+            icon: .customSymbol("scanner"),
             title: "Calories",
             titleExtension: "(kcal)"
         ) {
@@ -117,7 +125,7 @@ struct BaseRowLayout<RightContent: View>: View {
         Divider().padding(.horizontal, 14)
 
         BaseRowLayout(
-            icon: .system("switch.2", tint: .green),
+            icon: .customSymbol("switch.2", tint: .green),
             title: "Simple Row"
         ) {
             Toggle("", isOn: .constant(true)).labelsHidden()

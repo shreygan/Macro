@@ -47,7 +47,7 @@ struct IngredientSelectionSheetView: View {
                     Card("New Entry") {
                         RowGroup(.divider) {
                             ButtonRow(
-                                icon: .system("carrot"),
+                                icon: .appSymbol(.ingredient),
                                 title: "Add New Ingredient",
                                 bottomPadding: 2
                             ) {
@@ -55,7 +55,7 @@ struct IngredientSelectionSheetView: View {
                             }
 
                             ButtonRow(
-                                icon: .system("fork.knife"),
+                                icon: .appSymbol(.food),
                                 title: "Add New Food"
                             ) {
                                 activeSheet = .newFood
@@ -74,7 +74,7 @@ struct IngredientSelectionSheetView: View {
                                 })
                             ) {
                                 NavigationRow(
-                                    icon: .system("fork.knife"),
+                                    icon: .appSymbol(.food),
                                     title: "Foods"
                                 )
                             }
@@ -88,7 +88,7 @@ struct IngredientSelectionSheetView: View {
                                 })
                             ) {
                                 NavigationRow(
-                                    icon: .system("list.clipboard"),
+                                    icon: .appSymbol(.recipe),
                                     title: "Recipes"
                                 )
                             }
