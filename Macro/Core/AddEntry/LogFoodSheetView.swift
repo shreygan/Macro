@@ -7,6 +7,7 @@
 
 import SwiftData
 import SwiftUI
+internal import CoreLocation
 
 struct LogFoodSheetView: View {
     @Environment(\.dismiss) var dismiss
@@ -30,7 +31,10 @@ struct LogFoodSheetView: View {
 
     @State private var date = Date()
     @State private var time = Date()
-    @State private var location = "TODO"
+    
+    @State private var locationManager = LocationManager()
+    @State private var selectedLocation: SelectedLocation? = nil
+    @State private var isShowingLocationPicker = false
 
     @State private var portionQuantity: String
     @State private var portionUnitSelection: String
@@ -171,9 +175,7 @@ struct LogFoodSheetView: View {
                                 )
                                 DropdownPillRow(
                                     title: "Category",
-                                    options: categoryOptions.map {
-                                        $0.category
-                                    },
+                                    options: categoryOptions.map { $0.category },
                                     selection: $categorySelection
                                 )
                                 DateTimePillRow(
@@ -181,7 +183,19 @@ struct LogFoodSheetView: View {
                                     dateSelection: $date,
                                     timeSelection: $time
                                 )
-                                PillRow(title: "Location", text: $location)
+                                LocationPillRow(
+                                    locationManager: locationManager,
+                                    selectedLocation: $selectedLocation
+                                ) {
+                                    if locationManager.authorizationStatus == .notDetermined {
+                                        locationManager.requestPermission()
+                                    } else {
+                                        isShowingLocationPicker = true
+                                    }
+                                }
+                                .sheet(isPresented: $isShowingLocationPicker) {
+                                    LocationPickerSheet(locationManager: locationManager, selectedLocation: $selectedLocation)
+                                }
                             }
                         }
                         .padding([.top, .leading, .trailing])
