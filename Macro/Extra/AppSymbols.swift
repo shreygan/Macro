@@ -29,3 +29,14 @@ enum AppSymbols: String {
         }
     }
 }
+
+extension EntryType {
+    var appSymbol: AppSymbols {
+        switch self {
+        case .food: return .food
+        case .recipe: return .recipe
+        case .ingredient: return .ingredient
+        case .drink: return .drink
+        }
+    }
+}

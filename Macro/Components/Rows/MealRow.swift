@@ -11,6 +11,8 @@ struct MealRow<Content: View>: View {
     var name: String
     var subtitle: String
 
+    var icon: AppSymbols?
+
     var calorie: String
     var protein: String?
     var carbs: String?
@@ -36,6 +38,7 @@ struct MealRow<Content: View>: View {
         carbs: String? = nil,
         fat: String? = nil,
         fiber: String? = nil,
+        icon: AppSymbols? = nil,
         action: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
@@ -45,6 +48,7 @@ struct MealRow<Content: View>: View {
         self.carbs = carbs
         self.fat = fat
         self.fiber = fiber
+        self.icon = icon
         self.action = action
         self.content = content()
 
@@ -70,6 +74,7 @@ struct MealRow<Content: View>: View {
 
     init(
         item: FoodItem,
+        icon: AppSymbols? = nil,
         action: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
@@ -79,6 +84,7 @@ struct MealRow<Content: View>: View {
         self.carbs = String(item.carbs)
         self.fat = String(item.fat)
         self.fiber = String(item.fiber)
+        self.icon = icon
         self.action = action
         self.content = content()
 
@@ -140,16 +146,24 @@ struct MealRow<Content: View>: View {
             VStack(alignment: .leading, spacing: 2) {
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(name)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.primary)
+                    HStack(spacing: 5) {
+                        Text(name)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.primary)
 
+                        if let icon = icon {
+                            icon.image
+                                .font(.system(size: 13))
+                                .foregroundColor(.tertiary)
+                        }
+                    }
                     Text(subtitle)
                         .font(.system(size: 12))
                         .foregroundColor(.tertiary)
                 }
 
                 HStack(spacing: 4) {
+
                     let formattedCalorie =
                         Double(calorie).map {
                             $0.formatted(
@@ -253,6 +267,7 @@ extension MealRow where Content == EmptyView {
         carbs: String? = nil,
         fat: String? = nil,
         fiber: String? = nil,
+        icon: AppSymbols? = nil,
         action: (() -> Void)? = nil
     ) {
         self.init(
@@ -270,6 +285,7 @@ extension MealRow where Content == EmptyView {
             carbs: carbs,
             fat: fat,
             fiber: fiber,
+            icon: icon,
             action: action,
             content: { EmptyView() }
         )
@@ -311,7 +327,8 @@ extension MealRow where Content == EmptyView {
                 protein: "42",
                 carbs: "12",
                 fat: "18",
-                fiber: "6"
+                fiber: "6",
+                icon: AppSymbols.food
             )
 
             Divider().padding(.leading, 16)
@@ -329,7 +346,8 @@ extension MealRow where Content == EmptyView {
                 calorie: "240",
                 protein: "48",
                 carbs: "6",
-                fat: "2"
+                fat: "2",
+                icon: AppSymbols.ingredient
             ) {
                 print("Navigating to meal details...")
             }

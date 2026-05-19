@@ -319,7 +319,9 @@ struct LibrarySheetView: View {
                                             fiber: EntryHelper.scale(
                                                 baseFiberStr,
                                                 by: multiplier
-                                            )
+                                            ),
+                                            icon: selectedTypes.count == 0
+                                                ? food.type.appSymbol : nil
                                         ) {
                                             if let onSelect = onSelect {
                                                 onSelect(food)
@@ -562,7 +564,7 @@ struct LibrarySheetView: View {
         }
 
         return NavigationStack {
-            LibrarySheetView(defaultType: .specific(.food))
+            LibrarySheetView(defaultType: .all)
         }
         .modelContainer(container)
 
