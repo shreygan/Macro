@@ -80,31 +80,4 @@ struct ButtonRow: View {
     ) {
         print("Scanner opened!")
     }
-    //        ZStack {
-    //            Color.gray.opacity(0.15).ignoresSafeArea()
-    //
-    //            Card(title: "New Entry") {
-    //
-    //                ButtonRow(title: "Save Changes", bottomPadding: 8) {
-    //                    print("Saved!")
-    //                }
-    //
-    //                ButtonRow(
-    //                    icon: .system("trash"),
-    //                    title: "Delete Meal",
-    //                    tint: .red,
-    //                    textColor: .white,
-    //                    bottomPadding: 8
-    //                ) {
-    //                    print("Deleted!")
-    //                }
-    //
-    //                ButtonRow(
-    //                    icon: .custom(Image("Calorie")),
-    //                    title: "Scan Barcode"
-    //                ) {
-    //                    print("Scanner opened!")
-    //                }
-    //            }
-    //        }
 }

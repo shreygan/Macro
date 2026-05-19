@@ -21,8 +21,6 @@ struct IngredientSelectionSheetView: View {
         var id: Int { hashValue }
     }
 
-    // Querying items. You can refine this predicate if your SwiftData setup allows,
-    // but filtering in memory handles the search text easily.
     @Query(sort: \FoodItem.dateAdded, order: .reverse) var allItems: [FoodItem]
 
     var filteredIngredients: [FoodItem] {
@@ -199,16 +197,12 @@ struct IngredientSelectionSheetView: View {
 
 #Preview {
     do {
-        // 1. Create a temporary, in-memory database just for the preview
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        // Note: Add any other models to this array if SwiftData complains,
-        // e.g., EntrySource.self, CategorySource.self
         let container = try ModelContainer(
             for: FoodItem.self,
             configurations: config
         )
 
-        // 2. Create Mock Ingredients
         let mockApple = FoodItem(
             name: "Honeycrisp Apple",
             type: .ingredient,
@@ -239,10 +233,9 @@ struct IngredientSelectionSheetView: View {
             isCustomDefaultServing: false
         )
 
-        // 3. Create a Mock Food (To prove your filter works and hides it!)
         let mockProteinBar = FoodItem(
             name: "Quest Bar",
-            type: .food,  // This is a food, so it shouldn't show up in the bottom list!
+            type: .food,
             servingSize: 1,
             servingWeight: 60,
             servingWeightUnit: "g",
@@ -255,16 +248,14 @@ struct IngredientSelectionSheetView: View {
             isCustomDefaultServing: false
         )
 
-        // 4. Insert them into the preview context
         container.mainContext.insert(mockApple)
         container.mainContext.insert(mockChicken)
         container.mainContext.insert(mockProteinBar)
 
-        // 5. Render the view with a simple print statement for the closure
         return IngredientSelectionSheetView { selectedItem in
             print("Preview User Selected: \(selectedItem.name)")
         }
-        .modelContainer(container)  // Inject the mock database into the view
+        .modelContainer(container)
 
     } catch {
         return Text(
