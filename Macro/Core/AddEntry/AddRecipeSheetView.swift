@@ -18,6 +18,11 @@ struct DraftRecipeIngredient: Identifiable {
     init(item: FoodItem) {
         self.item = item
         self.unit = item.servingUnit?.unit ?? "serving"
+
+        let defaultQty =
+            item.isCustomDefaultServing
+            ? item.customServingSize : item.servingSize
+        self.quantity = EntryHelper.format(defaultQty)
     }
 
     var activeMultiplier: Double {
@@ -75,6 +80,8 @@ struct AddRecipeSheetView: View {
     @State private var draftIngredients: [DraftRecipeIngredient] = []
     @State private var showIngredientSelectionSheet = false
 
+    @State private var focusManager = SwipeFocusManager()
+
     var totalCalories: Double {
         draftIngredients.reduce(0) { $0 + $1.activeCalories }
     }
@@ -89,9 +96,26 @@ struct AddRecipeSheetView: View {
         draftIngredients.reduce(0) { $0 + $1.activeFiber }
     }
 
-    var recipeDivisor: Double {
-        let size = Double(servingSize) ?? 1.0
-        return size > 0 ? size : 1.0
+    var displayCalories: Double { totalCalories * recipeMacroMultiplier }
+    var displayProtein: Double { totalProtein * recipeMacroMultiplier }
+    var displayCarbs: Double { totalCarbs * recipeMacroMultiplier }
+    var displayFat: Double { totalFat * recipeMacroMultiplier }
+    var displayFiber: Double { totalFiber * recipeMacroMultiplier }
+
+    var displayWeight: Double {
+        return totalRecipeWeight * recipeMacroMultiplier
+    }
+
+    var defaultPortionSize: Double {
+        guard isCustomDefaultServing,
+            let custom = Double(customServingSize),
+            custom > 0
+        else { return 1.0 }
+        return custom
+    }
+
+    var recipeMacroMultiplier: Double {
+        return defaultPortionSize / (Double(servingSize) ?? 1.0)
     }
 
     var allIngredientsHaveWeight: Bool {
@@ -99,57 +123,29 @@ struct AddRecipeSheetView: View {
             && draftIngredients.allSatisfy { $0.activeWeight != nil }
     }
 
+    var availableWeightUnits: [String] {
+        let units = Set(
+            draftIngredients.compactMap {
+                $0.item.servingWeightUnit.isEmpty
+                    ? nil : $0.item.servingWeightUnit
+            }
+        )
+        return units.isEmpty ? ["g", "ml"] : units.sorted()
+    }
+
+    var totalRecipeWeight: Double {
+        if let manualWeight = Double(servingWeight) {
+            return manualWeight
+        }
+        return calculatedTotalWeight
+    }
+
     var calculatedTotalWeight: Double {
         draftIngredients.compactMap { $0.activeWeight }.reduce(0, +)
     }
 
-    var formattedSubtitle: String {
-        let activeSize =
-            isCustomDefaultServing ? customServingSize : servingSize
-
-        let matchedUnitObject = servingUnits.first(where: {
-            $0.unit == servingSizeUnit
-        })
-        let displayUnit =
-            matchedUnitObject?.displayString(for: activeSize) ?? servingSizeUnit
-
-        var text =
-            source.isEmpty
-            ? "\(activeSize) \(displayUnit)"
-            : "\(source), \(activeSize) \(displayUnit)"
-
-        if !servingWeight.isEmpty {
-            var activeWeightText = servingWeight
-
-            if isCustomDefaultServing,
-                let originalSizeNum = Double(servingSize),
-                let customSizeNum = Double(customServingSize),
-                let originalWeightNum = Double(servingWeight),
-                originalSizeNum > 0
-            {
-                let multiplier = customSizeNum / originalSizeNum
-                let scaledWeight = originalWeightNum * multiplier
-
-                activeWeightText = String(format: "%g", scaledWeight)
-            }
-
-            text += " (\(activeWeightText) \(servingWeightUnit))"
-        }
-
-        return text
-    }
-
-    private var activeMultiplier: Double {
-        guard isCustomDefaultServing,
-            let target = Double(customServingSize),
-            let base = Double(servingSize)
-        else {
-            return 1.0
-        }
-        return EntryHelper.calculateMultiplier(
-            targetPortion: target,
-            basePortion: base
-        )
+    var shouldShowIngredientIcons: Bool {
+        draftIngredients.contains { $0.item.type != .ingredient }
     }
 
     var body: some View {
@@ -206,48 +202,19 @@ struct AddRecipeSheetView: View {
                                 }
 
                                 BaseRowLayout(title: "Total Weight") {
-                                    // Auto-fill logic based on your requirements
-                                    if allIngredientsHaveWeight {
-                                        // UNEDITABLE: All ingredients have weights
-                                        Text(
-                                            String(
-                                                format: "%.1f",
+                                    InputPill(
+                                        text: $servingWeight,
+                                        keyboardType: .decimalPad,
+                                        placeholder: calculatedTotalWeight > 0
+                                            && allIngredientsHaveWeight
+                                            ? String(
+                                                format: "%g",
                                                 calculatedTotalWeight
                                             )
-                                        )
-                                        .foregroundColor(.secondary)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(
-                                            Color.secondary.opacity(0.1)
-                                        )
-                                        .cornerRadius(8)
-                                    } else {
-                                        // EDITABLE: Sum what we can, but let user change it
-                                        InputPill(
-                                            text: Binding(
-                                                get: {
-                                                    servingWeight.isEmpty
-                                                        && calculatedTotalWeight
-                                                            > 0
-                                                        ? String(
-                                                            format: "%.1f",
-                                                            calculatedTotalWeight
-                                                        ) : servingWeight
-                                                },
-                                                set: { servingWeight = $0 }
-                                            ),
-                                            keyboardType: .decimalPad,
-                                            placeholder: calculatedTotalWeight
-                                                > 0
-                                                ? String(
-                                                    format: "%.1f",
-                                                    calculatedTotalWeight
-                                                ) : "-"
-                                        )
-                                    }
+                                            : "-"
+                                    )
                                     DropdownPill(
-                                        options: ["g", "ml"],
+                                        options: availableWeightUnits,
                                         displayCustomOption: false,
                                         selection: $servingWeightUnit
                                     )
@@ -256,7 +223,6 @@ struct AddRecipeSheetView: View {
                         }
                         .padding([.top, .leading, .trailing])
 
-                        // THE INGREDIENTS SECTION
                         Card("Ingredients") {
                             RowGroup(.divider) {
                                 ForEach($draftIngredients) { $draft in
@@ -266,45 +232,123 @@ struct AddRecipeSheetView: View {
                                         item.servingUnit?.unit ?? "serving"
                                     let hasWeight = item.servingWeight != nil
 
-                                    MealRow(
-                                        name: item.name,
-                                        source: item.source?.source ?? "",
-                                        isCustomDefaultServing: item
-                                            .isCustomDefaultServing,
-                                        customServingSize: EntryHelper.format(
-                                            item.customServingSize
-                                        ),
-                                        servingSize: EntryHelper.format(
-                                            item.servingSize
-                                        ),
-                                        servingSizeUnit: item.servingUnit?.unit
-                                            ?? "serving",
-                                        servingWeight: EntryHelper.format(
-                                            item.servingWeight
-                                        ),
-                                        servingWeightUnit: item
-                                            .servingWeightUnit,
-                                        servingUnits: servingUnits,
-                                        calorie: EntryHelper.format(
-                                            draft.activeCalories
-                                        ),
-                                        protein: EntryHelper.format(
-                                            draft.activeProtein
-                                        ),
-                                        carbs: EntryHelper.format(
-                                            draft.activeCarbs
-                                        ),
-                                        fat: EntryHelper.format(
-                                            draft.activeFat
-                                        ),
-                                        fiber: EntryHelper.format(
-                                            draft.activeFiber
-                                        ),
-                                    ) {
-                                        Text("Test")
-                                    }
-                                }
+                                    let unitConversionBinding = Binding<String>(
+                                        get: { draft.unit },
+                                        set: { newUnit in
+                                            let oldUnit = draft.unit
+                                            guard oldUnit != newUnit else {
+                                                return
+                                            }
 
+                                            let currentMultiplier = draft
+                                                .activeMultiplier
+
+                                            if newUnit
+                                                == item.servingWeightUnit,
+                                                let baseWeight = item
+                                                    .servingWeight
+                                            {
+                                                let convertedQuantity =
+                                                    currentMultiplier
+                                                    * baseWeight
+                                                draft.quantity =
+                                                    EntryHelper.format(
+                                                        convertedQuantity
+                                                    )
+                                            } else {
+                                                let convertedQuantity =
+                                                    currentMultiplier
+                                                    * item.servingSize
+                                                draft.quantity =
+                                                    EntryHelper.format(
+                                                        convertedQuantity
+                                                    )
+                                            }
+
+                                            draft.unit = newUnit
+                                        }
+                                    )
+
+                                    CustomSwipeRow {
+                                        MealRow(
+                                            name: item.name,
+                                            source: item.source?.source ?? "",
+                                            isCustomDefaultServing: item
+                                                .isCustomDefaultServing,
+                                            customServingSize:
+                                                EntryHelper.format(
+                                                    draft.activeMultiplier
+                                                        * item.servingSize
+                                                ),
+                                            servingSize: EntryHelper.format(
+                                                draft.activeMultiplier
+                                                    * item.servingSize
+                                            ),
+                                            servingSizeUnit: item.servingUnit?
+                                                .unit
+                                                ?? "serving",
+                                            servingWeight: EntryHelper.format(
+                                                draft.activeWeight
+                                            ),
+                                            servingWeightUnit: item
+                                                .servingWeightUnit,
+                                            servingUnits: servingUnits,
+                                            calorie: EntryHelper.format(
+                                                draft.activeCalories
+                                            ),
+                                            protein: EntryHelper.format(
+                                                draft.activeProtein
+                                            ),
+                                            carbs: EntryHelper.format(
+                                                draft.activeCarbs
+                                            ),
+                                            fat: EntryHelper.format(
+                                                draft.activeFat
+                                            ),
+                                            fiber: EntryHelper.format(
+                                                draft.activeFiber
+                                            ),
+                                            icon: shouldShowIngredientIcons
+                                                ? item.type.appSymbol : nil
+                                        ) {
+                                            HStack(spacing: 8) {
+                                                InputPill(
+                                                    text: $draft.quantity,
+                                                    keyboardType: .decimalPad
+                                                )
+
+                                                DropdownPill(
+                                                    options: hasWeight
+                                                        ? [
+                                                            baseUnit,
+                                                            item
+                                                                .servingWeightUnit,
+                                                        ] : [baseUnit],
+                                                    displayCustomOption: false,
+                                                    selection:
+                                                        unitConversionBinding
+                                                )
+                                            }
+                                        }
+                                    } onDelete: {
+                                        if let index =
+                                            draftIngredients.firstIndex(where: {
+                                                $0.id == draft.id
+                                            })
+                                        {
+                                            draftIngredients.remove(at: index)
+                                        }
+                                    }
+                                    .transition(
+                                        .asymmetric(
+                                            insertion: .identity,
+                                            removal: .opacity.combined(
+                                                with: .scale(scale: 0.9)
+                                            )
+                                        )
+                                    )
+                                }
+                            } bottomContent: {
                                 ButtonRow(
                                     icon: .customSymbol("plus.circle.fill"),
                                     title: "Add Ingredient"
@@ -396,24 +440,21 @@ struct AddRecipeSheetView: View {
                             source: source,
                             isCustomDefaultServing: isCustomDefaultServing,
                             customServingSize: customServingSize,
-                            servingSize: servingSize,
+                            servingSize: "1",
                             servingSizeUnit: servingSizeUnit,
-                            servingWeight: servingWeight,
+                            servingWeight: allIngredientsHaveWeight
+                                ? String(
+                                    format: "%g",
+                                    totalRecipeWeight
+                                        / (Double(servingSize) ?? 1.0)
+                                ) : "",
                             servingWeightUnit: servingWeightUnit,
                             servingUnits: servingUnits,
-                            calorie: EntryHelper.format(
-                                totalCalories / recipeDivisor
-                            ),
-                            protein: EntryHelper.format(
-                                totalProtein / recipeDivisor
-                            ),
-                            carbs: EntryHelper.format(
-                                totalCarbs / recipeDivisor
-                            ),
-                            fat: EntryHelper.format(totalFat / recipeDivisor),
-                            fiber: EntryHelper.format(
-                                totalFiber / recipeDivisor
-                            )
+                            calorie: EntryHelper.format(displayCalories),
+                            protein: EntryHelper.format(displayProtein),
+                            carbs: EntryHelper.format(displayCarbs),
+                            fat: EntryHelper.format(displayFat),
+                            fiber: EntryHelper.format(displayFiber)
                         )
                     }
                     .padding([.leading, .trailing])
@@ -422,6 +463,7 @@ struct AddRecipeSheetView: View {
                 }
 
             }
+            .environment(focusManager)
         }
         .alert(
             "\(name) Saved!",

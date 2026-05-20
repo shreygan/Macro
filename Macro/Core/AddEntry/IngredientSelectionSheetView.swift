@@ -41,9 +41,8 @@ struct IngredientSelectionSheetView: View {
                 Color.background.ignoresSafeArea()
 
                 ScrollView {
-
                     Card("New Entry") {
-                        RowGroup(.divider) {
+                        RowGroup(.none) {
                             ButtonRow(
                                 icon: .appSymbol(.ingredient),
                                 title: "Add New Ingredient",
@@ -61,15 +60,46 @@ struct IngredientSelectionSheetView: View {
                         }
                     }
                     .padding([.top, .leading, .trailing])
+                    .navigationDestination(item: $activeSheet) { sheet in
+                        switch sheet {
+                        case .newIngredient:
+                            AddEntrySheetView(
+                                entryType: .ingredient,
+                                isPushedView: true,
+                                onSelectInstantly: { newIngredient in
+                                    onSelect(newIngredient)
+                                }
+                            )
+                        case .newFood:
+                            AddEntrySheetView(
+                                entryType: .food,
+                                isPushedView: true,
+                                onSelectInstantly: { newFood in
+                                    onSelect(newFood)
+                                }
+                            )
+                        case .newRecipe:
+                            AddEntrySheetView(
+                                entryType: .recipe,
+                                isPushedView: true,
+                                onSelectInstantly: { newRecipe in
+                                    onSelect(newRecipe)
+                                }
+                            )
+                        }
+                    }
 
                     Card("Library") {
                         RowGroup(.divider) {
                             NavigationLink(
-                                destination: LibrarySheetView(onSelect: {
-                                    selectedFood in
-                                    onSelect(selectedFood)
-                                    dismiss()
-                                })
+                                destination: LibrarySheetView(
+                                    defaultType: .specific(.food),
+                                    onSelect: {
+                                        selectedFood in
+                                        onSelect(selectedFood)
+                                        dismiss()
+                                    }
+                                )
                             ) {
                                 NavigationRow(
                                     icon: .appSymbol(.food),
@@ -79,11 +109,14 @@ struct IngredientSelectionSheetView: View {
                             .buttonStyle(.plain)
 
                             NavigationLink(
-                                destination: LibrarySheetView(onSelect: {
-                                    selectedRecipe in
-                                    onSelect(selectedRecipe)
-                                    dismiss()
-                                })
+                                destination: LibrarySheetView(
+                                    defaultType: .specific(.recipe),
+                                    onSelect: {
+                                        selectedRecipe in
+                                        onSelect(selectedRecipe)
+                                        dismiss()
+                                    }
+                                )
                             ) {
                                 NavigationRow(
                                     icon: .appSymbol(.recipe),
@@ -168,26 +201,6 @@ struct IngredientSelectionSheetView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark").foregroundStyle(.primary)
-                    }
-                }
-            }
-            .sheet(item: $activeSheet) { sheet in
-                switch sheet {
-                case .newIngredient:
-                    AddEntrySheetView(entryType: .ingredient) {
-                        newIngredient in
-                        onSelect(newIngredient)
-                        dismiss()
-                    }
-                case .newFood:
-                    AddEntrySheetView(entryType: .food) { newFood in
-                        onSelect(newFood)
-                        dismiss()
-                    }
-                case .newRecipe:
-                    AddRecipeSheetView { newRecipe in
-                        onSelect(newRecipe)
-                        dismiss()
                     }
                 }
             }

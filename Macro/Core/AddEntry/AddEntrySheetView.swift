@@ -13,6 +13,9 @@ struct AddEntrySheetView: View {
     @Environment(\.modelContext) private var modelContext
 
     let entryType: EntryType
+    var isPushedView: Bool = false
+
+    var onSelectInstantly: ((FoodItem) -> Void)?
 
     var onLogInstantly: ((FoodItem) -> Void)?
     @State private var showSuccessAlert: Bool = false
@@ -235,6 +238,8 @@ struct AddEntrySheetView: View {
             newlySavedEntry = newEntry
             if onLogInstantly != nil {
                 showSuccessAlert = true
+            } else if onSelectInstantly != nil {
+                onSelectInstantly?(newlySavedEntry!)
             } else {
                 dismiss()
             }
@@ -242,168 +247,168 @@ struct AddEntrySheetView: View {
         }
     }
 
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.background.ignoresSafeArea()
+    var content: some View {
+        ZStack {
+            Color.background.ignoresSafeArea()
 
-                ScrollView {
-                    VStack {
-                        Text(
-                            entryType == .ingredient
-                                ? "ingredient_description"
-                                : "food_description"
-                        )
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-                        .padding(.bottom, 4)
-                        .multilineTextAlignment(.center)
+            ScrollView {
+                VStack {
+                    Text(
+                        entryType == .ingredient
+                            ? "ingredient_description"
+                            : "food_description"
+                    )
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
+                    .multilineTextAlignment(.center)
 
-                        Card {
-                            RowGroup(.divider) {
-                                FullWidthInputRow(
-                                    placeholder: "Name",
-                                    text: $name
-                                )
+                    Card {
+                        RowGroup(.divider) {
+                            FullWidthInputRow(
+                                placeholder: "Name",
+                                text: $name
+                            )
+                            FullWidthDropdownRow(
+                                placeholder: "Source",
+                                options: savedSources.map { $0.source },
+                                selection: $source
+                            )
+
+                            if entryType == .food {
                                 FullWidthDropdownRow(
-                                    placeholder: "Source",
-                                    options: savedSources.map { $0.source },
-                                    selection: $source
+                                    placeholder: "Category",
+                                    options: savedCategories.map {
+                                        $0.category
+                                    },
+                                    selection: $category
                                 )
+                            } else {
+                                FullWidthDropdownRow(
+                                    placeholder: "Food Group",
+                                    options: savedFoodGroups.map {
+                                        $0.foodGroup
+                                    },
+                                    selection: $foodGroup
+                                )
+                            }
 
-                                if entryType == .food {
-                                    FullWidthDropdownRow(
-                                        placeholder: "Category",
-                                        options: savedCategories.map {
-                                            $0.category
-                                        },
-                                        selection: $category
-                                    )
-                                } else {
-                                    FullWidthDropdownRow(
-                                        placeholder: "Food Group",
-                                        options: savedFoodGroups.map {
-                                            $0.foodGroup
-                                        },
-                                        selection: $foodGroup
-                                    )
-                                }
+                        }
+                    }
+                    .padding([.leading, .trailing])
 
+                    Card {
+                        RowGroup(.divider) {
+                            BaseRowLayout(title: "Serving Size") {
+                                InputPill(
+                                    text: $servingSize,
+                                    keyboardType: .decimalPad
+                                )
+                                DropdownPill(
+                                    options: servingUnits.map { $0.unit },
+                                    selection: $servingSizeUnit
+                                )
+                            }
+
+                            BaseRowLayout(title: "Serving Weight") {
+                                InputPill(
+                                    text: $servingWeight,
+                                    keyboardType: .decimalPad,
+                                    placeholder: "-"
+                                )
+                                DropdownPill(
+                                    options: ["g", "ml"],
+                                    displayCustomOption: false,
+                                    selection: $servingWeightUnit
+                                )
                             }
                         }
-                        .padding([.leading, .trailing])
+                    }
+                    .padding([.top, .leading, .trailing])
 
-                        Card {
-                            RowGroup(.divider) {
-                                BaseRowLayout(title: "Serving Size") {
+                    Card {
+                        RowGroup(.divider) {
+                            TextInputRow(
+                                icon: .custom(Image("Calorie")),
+                                title: "Calories",
+                                titleExtension: "(kcal)",
+                                placeholder: "-",
+                                text: $calorieValue,
+                                keyboardType: .decimalPad
+                            )
+                            TextInputRow(
+                                icon: .custom(Image("Protein")),
+                                title: "Protein",
+                                titleExtension: "(g)",
+                                placeholder: "-",
+                                text: $proteinValue,
+                                keyboardType: .decimalPad
+                            )
+                            TextInputRow(
+                                icon: .custom(Image("Carbs")),
+                                title: "Carbohydrates",
+                                titleExtension: "(g)",
+                                placeholder: "-",
+                                text: $carbsValue,
+                                keyboardType: .decimalPad
+                            )
+                            TextInputRow(
+                                icon: .custom(Image("Fat")),
+                                title: "Fat",
+                                titleExtension: "(g)",
+                                placeholder: "-",
+                                text: $fatValue,
+                                keyboardType: .decimalPad
+                            )
+                            TextInputRow(
+                                icon: .custom(Image("Fiber")),
+                                title: "Fiber",
+                                titleExtension: "(g)",
+                                placeholder: "-",
+                                text: $fiberValue,
+                                keyboardType: .decimalPad
+                            )
+
+                            ToggleRow(
+                                title: "AI Estimated Macros",
+                                isOn: $isAIEstimated
+                            )
+                        }
+                    }
+                    .padding([.top, .leading, .trailing])
+
+                    Card {
+                        RowGroup(.divider) {
+                            ToggleRow(
+                                title: "Set Custom Default Serving",
+                                isOn: $isCustomDefaultServing
+                            )
+
+                            if isCustomDefaultServing {
+                                BaseRowLayout(
+                                    title: "Serving Size",
+                                    titleExtension: "(\(servingSizeUnit))"
+                                ) {
                                     InputPill(
-                                        text: $servingSize,
+                                        text: $customServingSize,
                                         keyboardType: .decimalPad
                                     )
-                                    DropdownPill(
-                                        options: servingUnits.map { $0.unit },
-                                        selection: $servingSizeUnit
-                                    )
-                                }
-
-                                BaseRowLayout(title: "Serving Weight") {
-                                    InputPill(
-                                        text: $servingWeight,
-                                        keyboardType: .decimalPad,
-                                        placeholder: "-"
-                                    )
-                                    DropdownPill(
-                                        options: ["g", "ml"],
-                                        displayCustomOption: false,
-                                        selection: $servingWeightUnit
-                                    )
                                 }
                             }
                         }
-                        .padding([.top, .leading, .trailing])
-
-                        Card {
-                            RowGroup(.divider) {
-                                TextInputRow(
-                                    icon: .custom(Image("Calorie")),
-                                    title: "Calories",
-                                    titleExtension: "(kcal)",
-                                    placeholder: "-",
-                                    text: $calorieValue,
-                                    keyboardType: .decimalPad
-                                )
-                                TextInputRow(
-                                    icon: .custom(Image("Protein")),
-                                    title: "Protein",
-                                    titleExtension: "(g)",
-                                    placeholder: "-",
-                                    text: $proteinValue,
-                                    keyboardType: .decimalPad
-                                )
-                                TextInputRow(
-                                    icon: .custom(Image("Carbs")),
-                                    title: "Carbohydrates",
-                                    titleExtension: "(g)",
-                                    placeholder: "-",
-                                    text: $carbsValue,
-                                    keyboardType: .decimalPad
-                                )
-                                TextInputRow(
-                                    icon: .custom(Image("Fat")),
-                                    title: "Fat",
-                                    titleExtension: "(g)",
-                                    placeholder: "-",
-                                    text: $fatValue,
-                                    keyboardType: .decimalPad
-                                )
-                                TextInputRow(
-                                    icon: .custom(Image("Fiber")),
-                                    title: "Fiber",
-                                    titleExtension: "(g)",
-                                    placeholder: "-",
-                                    text: $fiberValue,
-                                    keyboardType: .decimalPad
-                                )
-
-                                ToggleRow(
-                                    title: "AI Estimated Macros",
-                                    isOn: $isAIEstimated
-                                )
-                            }
-                        }
-                        .padding([.top, .leading, .trailing])
-
-                        Card {
-                            RowGroup(.divider) {
-                                ToggleRow(
-                                    title: "Set Custom Default Serving",
-                                    isOn: $isCustomDefaultServing
-                                )
-
-                                if isCustomDefaultServing {
-                                    BaseRowLayout(
-                                        title: "Serving Size",
-                                        titleExtension: "(\(servingSizeUnit))"
-                                    ) {
-                                        InputPill(
-                                            text: $customServingSize,
-                                            keyboardType: .decimalPad
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        .padding([.top, .leading, .trailing])
-
-                        Spacer()
                     }
+                    .padding([.top, .leading, .trailing])
+
+                    Spacer()
                 }
-                .withCustomKeyboardToolbar()
-                .scrollDismissesKeyboard(.immediately)
-                .navigationTitle("Add New \(entryType.rawValue.capitalized)")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
+            }
+            .withCustomKeyboardToolbar()
+            .scrollDismissesKeyboard(.immediately)
+            .navigationTitle("Add New \(entryType.rawValue.capitalized)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if !isPushedView {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
                             dismiss()
@@ -412,75 +417,75 @@ struct AddEntrySheetView: View {
                                 .foregroundStyle(.primary)
                         }
                     }
+                }
 
-                    ToolbarItem(placement: .confirmationAction) {
-                        if name.trimmingCharacters(in: .whitespacesAndNewlines)
-                            .isEmpty
-                        {
-                            Button {
-                            } label: {
-                                Image(systemName: "plus")
-                                    .foregroundStyle(.primary)
-                            }
-                            .disabled(true)
-                            .tint(Color.tertiary)
-                            .buttonStyle(.borderless)
-
-                        } else {
-                            Button {
-                                addEntry()
-                            } label: {
-                                Image(systemName: "plus")
-                                    .foregroundStyle(.primary)
-                            }
-                            .tint(Color.blue)
-                            .buttonStyle(.glassProminent)
-
+                ToolbarItem(placement: .confirmationAction) {
+                    if name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        .isEmpty
+                    {
+                        Button {
+                        } label: {
+                            Image(systemName: "plus")
+                                .foregroundStyle(.primary)
                         }
-                    }
-                }
-                .safeAreaInset(edge: .top) {
-                    Card {
-                        MealRow(
-                            name: name.isEmpty
-                                ? "New \(entryType.rawValue.capitalized)"
-                                : name,
-                            source: source,
-                            isCustomDefaultServing: isCustomDefaultServing,
-                            customServingSize: customServingSize,
-                            servingSize: servingSize,
-                            servingSizeUnit: servingSizeUnit,
-                            servingWeight: servingWeight,
-                            servingWeightUnit: servingWeightUnit,
-                            servingUnits: servingUnits,
-                            calorie: EntryHelper.scale(
-                                calorieValue,
-                                by: activeMultiplier
-                            ),
-                            protein: EntryHelper.scale(
-                                proteinValue,
-                                by: activeMultiplier
-                            ),
-                            carbs: EntryHelper.scale(
-                                carbsValue,
-                                by: activeMultiplier
-                            ),
-                            fat: EntryHelper.scale(
-                                fatValue,
-                                by: activeMultiplier
-                            ),
-                            fiber: EntryHelper.scale(
-                                fiberValue,
-                                by: activeMultiplier
-                            )
-                        )
-                    }
-                    .padding([.leading, .trailing])
-                    .padding(.bottom, 16)
-                    .background(.ultraThinMaterial)
-                }
+                        .disabled(true)
+                        .tint(Color.tertiary)
+                        .buttonStyle(.borderless)
 
+                    } else {
+                        Button {
+                            addEntry()
+                        } label: {
+                            Image(systemName: "plus")
+                                .foregroundStyle(.primary)
+                        }
+                        .tint(Color.blue)
+                        .buttonStyle(.glassProminent)
+
+                    }
+                }
             }
+            .safeAreaInset(edge: .top) {
+                Card {
+                    MealRow(
+                        name: name.isEmpty
+                            ? "New \(entryType.rawValue.capitalized)"
+                            : name,
+                        source: source,
+                        isCustomDefaultServing: isCustomDefaultServing,
+                        customServingSize: customServingSize,
+                        servingSize: servingSize,
+                        servingSizeUnit: servingSizeUnit,
+                        servingWeight: servingWeight,
+                        servingWeightUnit: servingWeightUnit,
+                        servingUnits: servingUnits,
+                        calorie: EntryHelper.scale(
+                            calorieValue,
+                            by: activeMultiplier
+                        ),
+                        protein: EntryHelper.scale(
+                            proteinValue,
+                            by: activeMultiplier
+                        ),
+                        carbs: EntryHelper.scale(
+                            carbsValue,
+                            by: activeMultiplier
+                        ),
+                        fat: EntryHelper.scale(
+                            fatValue,
+                            by: activeMultiplier
+                        ),
+                        fiber: EntryHelper.scale(
+                            fiberValue,
+                            by: activeMultiplier
+                        )
+                    )
+                }
+                .padding([.leading, .trailing])
+                .padding(.bottom, 16)
+                .background(.ultraThinMaterial)
+            }
+
         }
         .alert(
             "\(name) Saved!",
@@ -499,8 +504,18 @@ struct AddEntrySheetView: View {
 
         }
     }
+
+    var body: some View {
+        if isPushedView {
+            content
+        } else {
+            NavigationStack {
+                content
+            }
+        }
+    }
 }
 
 #Preview {
-    AddEntrySheetView(entryType: .food)
+    AddEntrySheetView(entryType: .ingredient)
 }
