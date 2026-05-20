@@ -39,7 +39,7 @@ struct PillRow: View {
                 
                 Card("BODY METRICS") {
                     PillRow(
-                        icon: .system("scalemass"),
+                        icon: .customSymbol("scalemass"),
                         title: "Current Weight",
                         text: $weight,
                         unit: "lbs"
@@ -48,7 +48,7 @@ struct PillRow: View {
                     Divider().padding(.leading, 16)
                     
                     PillRow(
-                        icon: .system("percent"),
+                        icon: .customSymbol("percent"),
                         title: "Body Fat",
                         text: $bodyFat,
                         unit: "%"

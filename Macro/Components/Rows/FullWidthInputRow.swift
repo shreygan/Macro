@@ -48,7 +48,7 @@ struct FullWidthInputRow: View {
             Divider().padding(.leading, 16)
 
             ToggleRow(
-                icon: .system("star.fill", tint: .yellow),
+                icon: .customSymbol("star.fill", tint: .yellow),
                 title: "Save to Favorites",
                 isOn: .constant(false)
             )

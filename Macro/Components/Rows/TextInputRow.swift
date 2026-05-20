@@ -56,7 +56,7 @@ struct TextInputRow: View {
             Card {
                 RowGroup(.divider) {
                     TextInputRow(
-                        icon: .system("flame.fill", tint: .orange),
+                        icon: .customSymbol("flame.fill", tint: .orange),
                         title: "Calories",
                         titleExtension: "(kcal)",
                         text: $activeText,
@@ -64,7 +64,7 @@ struct TextInputRow: View {
                     )
 
                     TextInputRow(
-                        icon: .system("bolt.fill", tint: .blue),
+                        icon: .customSymbol("bolt.fill", tint: .blue),
                         title: "Protein",
                         titleExtension: "(g)",
                         text: $disabledText,

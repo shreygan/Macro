@@ -16,8 +16,8 @@ struct CustomSwipeRow<Content: View>: View {
     let id = UUID().uuidString
     @ViewBuilder var content: Content
     var onDelete: () -> Void
-    var onEdit: () -> Void
-    var onFavorite: () -> Void
+    var onEdit: (() -> Void)? = nil
+    var onFavorite: (() -> Void)? = nil
 
     @Environment(SwipeFocusManager.self) private var focusManager
 
@@ -33,7 +33,13 @@ struct CustomSwipeRow<Content: View>: View {
     private let trailingPadding: CGFloat = 16
 
     private var totalRevealWidth: CGFloat {
-        (buttonSize * 3) + (buttonSpacing * 2) + trailingPadding
+        let buttonCount =
+            1 + (onEdit != nil ? 1 : 0) + (onFavorite != nil ? 1 : 0)
+
+        let spacesCount = max(0, buttonCount - 1)
+
+        return (buttonSize * CGFloat(buttonCount))
+            + (buttonSpacing * CGFloat(spacesCount)) + trailingPadding
             + leadingPadding
     }
 
@@ -41,47 +47,52 @@ struct CustomSwipeRow<Content: View>: View {
         ZStack(alignment: .trailing) {
 
             HStack(spacing: buttonSpacing) {
-                let favScale = computeButtonScale(forIndex: 2)
-                Button(action: {
-                    closeRow()
-                    onFavorite()
-                }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: buttonSize, height: buttonSize)
-                            .background(Color.yellow)
-                            .clipShape(Circle())
 
-                        Text("Favorite")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.secondary)
+                if let onFavAction = onFavorite {
+                    let favScale = computeButtonScale(forIndex: 2)
+                    Button(action: {
+                        closeRow()
+                        onFavAction()
+                    }) {
+                        VStack(spacing: 4) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: buttonSize, height: buttonSize)
+                                .background(Color.yellow)
+                                .clipShape(Circle())
+
+                            Text("Favorite")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
                     }
+                    .scaleEffect(favScale)
+                    .opacity(favScale > 0.01 ? 1 : 0)
                 }
-                .scaleEffect(favScale)
-                .opacity(favScale > 0.01 ? 1 : 0)
 
-                let editScale = computeButtonScale(forIndex: 1)
-                Button(action: {
-                    closeRow()
-                    onEdit()
-                }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: buttonSize, height: buttonSize)
-                            .background(Color.gray)
-                            .clipShape(Circle())
+                if let onEditAction = onEdit {
+                    let editScale = computeButtonScale(forIndex: 1)
+                    Button(action: {
+                        closeRow()
+                        onEditAction()
+                    }) {
+                        VStack(spacing: 4) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: buttonSize, height: buttonSize)
+                                .background(Color.gray)
+                                .clipShape(Circle())
 
-                        Text("Edit")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.secondary)
+                            Text("Edit")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
                     }
+                    .scaleEffect(editScale)
+                    .opacity(editScale > 0.01 ? 1 : 0)
                 }
-                .scaleEffect(editScale)
-                .opacity(editScale > 0.01 ? 1 : 0)
 
                 let deleteScale = computeButtonScale(forIndex: 0)
                 Button(action: {

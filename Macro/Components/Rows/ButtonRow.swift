@@ -30,7 +30,15 @@ struct ButtonRow: View {
                 HStack {
                     if let icon = icon {
                         switch icon {
-                        case .system(let systemName, let iconTint):
+                        case .appSymbol(let symbol, let iconTint):
+                            Image(systemName: symbol.rawValue)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(
+                                    iconTint == .primary ? textColor : iconTint
+                                )
+                                .frame(width: 15)
+
+                        case .customSymbol(let systemName, let iconTint):
                             Image(systemName: systemName)
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(
@@ -72,31 +80,4 @@ struct ButtonRow: View {
     ) {
         print("Scanner opened!")
     }
-//        ZStack {
-//            Color.gray.opacity(0.15).ignoresSafeArea()
-//    
-//            Card(title: "New Entry") {
-//    
-//                ButtonRow(title: "Save Changes", bottomPadding: 8) {
-//                    print("Saved!")
-//                }
-//    
-//                ButtonRow(
-//                    icon: .system("trash"),
-//                    title: "Delete Meal",
-//                    tint: .red,
-//                    textColor: .white,
-//                    bottomPadding: 8
-//                ) {
-//                    print("Deleted!")
-//                }
-//    
-//                ButtonRow(
-//                    icon: .custom(Image("Calorie")),
-//                    title: "Scan Barcode"
-//                ) {
-//                    print("Scanner opened!")
-//                }
-//            }
-//        }
 }

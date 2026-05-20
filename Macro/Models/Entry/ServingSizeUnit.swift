@@ -1,8 +1,8 @@
 //
-//  CategorySource.swift
+//  ServingSizeUnit.swift
 //  Macro
 //
-//  Created by Shrey Gangwar on 5/10/26.
+//  Created by Shrey Gangwar on 5/12/26.
 //
 
 import Foundation
@@ -11,7 +11,7 @@ import SwiftData
 @Model
 class ServingSizeUnit {
     @Attribute(.unique) var unit: String
-    
+
     var pluralVariant: String?
     var isDefault: Bool
     var displayOrder: Int
@@ -29,16 +29,18 @@ class ServingSizeUnit {
     }
 
     func displayString(for quantity: String) -> String {
-            let trimmedQuantity = quantity.trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            if let numericValue = Double(trimmedQuantity), numericValue == 1.0 {
-                return unit
-            }
-            
-            if let plural = pluralVariant, !plural.isEmpty {
-                return plural
-            } else {
-                return unit
-            }
+        let trimmedQuantity = quantity.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+
+        if let numericValue = Double(trimmedQuantity), numericValue == 1.0 {
+            return unit
         }
+
+        if let plural = pluralVariant, !plural.isEmpty {
+            return plural
+        } else {
+            return unit
+        }
+    }
 }
