@@ -30,16 +30,19 @@ enum LibraryFilterType: Equatable {
     }
 }
 
-struct LibrarySheetView: View {
+struct LibrarySheetView<Header: View>: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
 
+    var title: String
+    var searchPrompt: String
+    var allowSwipeActions: Bool
     var onSelect: ((FoodItem) -> Void)? = nil
     var defaultType: LibraryFilterType
+    let headerContent: Header
 
     @Query(sort: \FoodItem.dateAdded, order: .reverse) var savedMeals:
         [FoodItem]
-
     @Query(sort: \ServingSizeUnit.displayOrder) var portionUnitOptions:
         [ServingSizeUnit]
 
@@ -122,19 +125,23 @@ struct LibrarySheetView: View {
     }
 
     init(
+        title: String = "Library",
+        searchPrompt: String = "What did you eat today?",
         defaultType: LibraryFilterType = .all,
-        onSelect: ((FoodItem) -> Void)? = nil
+        allowSwipeActions: Bool = true,
+        onSelect: ((FoodItem) -> Void)? = nil,
+        @ViewBuilder headerContent: () -> Header = { EmptyView() }
     ) {
+        self.title = title
+        self.searchPrompt = searchPrompt
         self.defaultType = defaultType
+        self.allowSwipeActions = allowSwipeActions
         self.onSelect = onSelect
+        self.headerContent = headerContent()
 
         let initialTypes: Set<String> =
             defaultType == .all ? [] : [defaultType.displayName]
         self._selectedTypes = State(initialValue: initialTypes)
-    }
-
-    private func deleteFood(_ food: FoodItem) {
-        modelContext.delete(food)
     }
 
     var body: some View {
@@ -142,99 +149,14 @@ struct LibrarySheetView: View {
             Color.background.ignoresSafeArea()
 
             if filteredFoods.isEmpty {
-                VStack(spacing: 12) {
-                    let singleType =
-                        selectedTypes.count == 1 ? selectedTypes.first : nil
+                VStack(spacing: 0) {
+                    headerContent
 
-                    Group {
-                        if let type = singleType,
-                            let symbol = AppSymbols.from(type)
-                        {
-                            Image(systemName: symbol.rawValue)
-                        } else {
-                            Image(systemName: "magnifyingglass")
-                        }
-                    }
-                    .font(.largeTitle)
-                    .foregroundColor(.gray)
+                    Spacer()
 
-                    if searchText.isEmpty {
-                        if let type = singleType {
-                            let descriptionKey =
-                                "\(type.lowercased())_description"
+                    emptyStateView
 
-                            Text("No \(type)s")
-                                .font(.title3.bold())
-                                .foregroundColor(.primary)
-
-                            Text(LocalizedStringKey(descriptionKey))
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 32)
-
-                            Button {
-                                // TODO: Implement
-                            } label: {
-                                Text("Add \(type)")
-                                    .font(.subheadline)
-                                    .foregroundColor(.accentColor)
-                            }
-                            .padding(.top, 8)
-
-                        } else {
-                            Text("Library is Empty")
-                                .font(.title3.bold())
-                                .foregroundColor(.primary)
-
-                            Text(
-                                "Add some foods to your library to get started."
-                            )
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-
-                            Button {
-                                // TODO: Implement
-                            } label: {
-                                Text("Add Food")
-                                    .font(.subheadline)
-                                    .foregroundColor(.accentColor)
-                            }
-                            .padding(.top, 8)
-                        }
-                    } else {
-                        if let type = singleType {
-                            Text("No \(type)s match \"\(searchText)\"")
-                                .font(.title3.bold())
-                                .foregroundColor(.primary)
-                        } else {
-                            Text("No Results for \"\(searchText)\"")
-                                .font(.title3.bold())
-                                .foregroundColor(.primary)
-                        }
-
-                        let itemName = singleType?.lowercased() ?? "entry"
-
-                        Text(
-                            "Try a new search or [create a new \(itemName)](action:create)"
-                        )
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                        .tint(.blue)
-                        .environment(
-                            \.openURL,
-                            OpenURLAction { url in
-                                if url.absoluteString == "action:create" {
-                                    // TODO: IMPLEMENT
-
-                                    return .handled
-                                }
-                                return .discarded
-                            }
-                        )
-                    }
+                    Spacer()
                 }
                 .transition(.opacity)
                 .zIndex(1)
@@ -242,139 +164,17 @@ struct LibrarySheetView: View {
             } else {
                 ScrollView {
                     VStack {
+                        headerContent
+                            .padding([.horizontal, .bottom])
+
                         Card {
                             RowGroup(.divider) {
                                 ForEach(filteredFoods) { food in
-
-                                    let displayPortion =
-                                        (food.isCustomDefaultServing
-                                            && food.customServingSize != nil)
-                                        ? food.customServingSize!
-                                        : food.servingSize
-
-                                    let multiplier =
-                                        EntryHelper.calculateMultiplier(
-                                            targetPortion: displayPortion,
-                                            basePortion: food.servingSize
-                                        )
-
-                                    let baseCalStr = EntryHelper.format(
-                                        food.calories
-                                    )
-                                    let baseProStr = EntryHelper.format(
-                                        food.protein
-                                    )
-                                    let baseCarbsStr = EntryHelper.format(
-                                        food.carbs
-                                    )
-                                    let baseFatStr = EntryHelper.format(
-                                        food.fat
-                                    )
-                                    let baseFiberStr = EntryHelper.format(
-                                        food.fiber
-                                    )
-
-                                    CustomSwipeRow {
-                                        MealRow(
-                                            name: food.name,
-                                            source: food.source?.source
-                                                ?? "None",
-                                            isCustomDefaultServing: food
-                                                .isCustomDefaultServing,
-                                            customServingSize:
-                                                EntryHelper.format(
-                                                    food.customServingSize
-                                                ),
-                                            servingSize: EntryHelper.format(
-                                                displayPortion
-                                            ),
-                                            servingSizeUnit: food
-                                                .servingUnit?.unit
-                                                ?? "serving",
-                                            servingWeight:
-                                                EntryHelper.format(
-                                                    food.servingWeight
-                                                ),
-                                            servingWeightUnit: food
-                                                .servingWeightUnit,
-                                            servingUnits:
-                                                portionUnitOptions,
-
-                                            calorie: EntryHelper.scale(
-                                                baseCalStr,
-                                                by: multiplier
-                                            ),
-                                            protein: EntryHelper.scale(
-                                                baseProStr,
-                                                by: multiplier
-                                            ),
-                                            carbs: EntryHelper.scale(
-                                                baseCarbsStr,
-                                                by: multiplier
-                                            ),
-                                            fat: EntryHelper.scale(
-                                                baseFatStr,
-                                                by: multiplier
-                                            ),
-                                            fiber: EntryHelper.scale(
-                                                baseFiberStr,
-                                                by: multiplier
-                                            ),
-                                            icon: selectedTypes.count == 0
-                                                ? food.type.appSymbol : nil
-                                        ) {
-                                            if let onSelect = onSelect {
-                                                onSelect(food)
-                                                dismiss()
-                                            } else {
-                                                selectedFood = food
-                                            }
-                                        }
-                                    } onDelete: {
-                                        foodToDelete = food
-                                        showDeleteAlert = true
-                                    } onEdit: {
-                                        print("Edited \(food.name)")
-                                    } onFavorite: {
-                                        print("Favorited \(food.name)")
-                                    }
-                                    .transition(
-                                        .asymmetric(
-                                            insertion: .identity,
-                                            removal: .opacity.combined(
-                                                with: .scale(scale: 0.9)
-                                            )
-                                        )
-                                    )
+                                    foodRow(for: food)
                                 }
                             }
                         }
-                        .padding()
-                        .alert(
-                            "Delete Food",
-                            isPresented: $showDeleteAlert,
-                            presenting: foodToDelete
-                        ) { food in
-
-                            Button("Cancel", role: .cancel) {
-                                foodToDelete = nil
-                            }
-
-                            Button("Delete", role: .destructive) {
-                                let item = food
-                                foodToDelete = nil
-
-                                DispatchQueue.main.async {
-                                    modelContext.delete(item)
-                                    try? modelContext.save()
-                                }
-                            }
-
-                        } message: { food in
-                            Text(
-                                "Are you sure you want to delete \(food.name)?"
-                            )
-                        }
+                        .padding([.horizontal, .bottom])
                     }
                     .animation(
                         .spring(response: 0.4, dampingFraction: 0.8),
@@ -385,14 +185,13 @@ struct LibrarySheetView: View {
                 .zIndex(2)
             }
         }
-        .navigationTitle("Library")
+        .animation(.easeInOut(duration: 0.25), value: filteredFoods.isEmpty)
+
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.immediately)
         .environment(focusManager)
-        .searchable(
-            text: $searchText,
-            prompt: "What did you eat today?"
-        )
+        .searchable(text: $searchText, prompt: searchPrompt)
         .searchDictationBehavior(.automatic)
         .searchPresentationToolbarBehavior(.avoidHidingContent)
         .onTapGesture {
@@ -404,10 +203,7 @@ struct LibrarySheetView: View {
                     let isVerticalScroll =
                         abs(value.translation.height)
                         > abs(value.translation.width)
-
-                    if isVerticalScroll
-                        && focusManager.activeRowID != nil
-                    {
+                    if isVerticalScroll && focusManager.activeRowID != nil {
                         focusManager.activeRowID = nil
                     }
                 }
@@ -427,56 +223,213 @@ struct LibrarySheetView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-
-                Button {
-                    showFilterSheet = true
-                } label: {
-                    let defaultTypesSet: Set<String> =
-                        defaultType == .all
-                        ? [] : [defaultType.displayName]
-
-                    let hasFilters =
-                        selectedTypes != defaultTypesSet
-                        || !selectedSources.isEmpty
-                        || !selectedCategories.isEmpty
-                    Image(
-                        systemName: hasFilters
-                            ? "line.3.horizontal.decrease.circle.fill"
-                            : "line.3.horizontal.decrease.circle"
-                    )
-                    .tint(.primary)
-                }
-
-                Menu {
-                    Picker("Sort By", selection: $sortOption) {
-                        Text("Name").tag(FoodSortOption.name)
-                        Text("Date Added").tag(FoodSortOption.dateAdded)
-                        Text("Calories").tag(FoodSortOption.calories)
-                        Text("Protein").tag(FoodSortOption.protein)
-                        Text("Carbohydrates").tag(FoodSortOption.carbs)
-                        Text("Fat").tag(FoodSortOption.fat)
-                        Text("Fiber").tag(FoodSortOption.fiber)
-                    }
-
-                    if sortOption != .name {
-                        Divider()
-
-                        Picker("Order", selection: $sortDescending) {
-                            if sortOption == .dateAdded {
-                                Text("Newest First").tag(true)
-                                Text("Oldest First").tag(false)
-                            } else {
-                                Text("Highest First").tag(true)
-                                Text("Lowest First").tag(false)
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: "arrow.up.arrow.down")
-                }
+                filterButton
+                sortMenu
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: filteredFoods.isEmpty)
+        .alert(
+            "Delete Food",
+            isPresented: $showDeleteAlert,
+            presenting: foodToDelete
+        ) { food in
+            Button("Cancel", role: .cancel) { foodToDelete = nil }
+            Button("Delete", role: .destructive) {
+                let item = food
+                foodToDelete = nil
+                DispatchQueue.main.async {
+                    modelContext.delete(item)
+                    try? modelContext.save()
+                }
+            }
+        } message: { food in
+            Text("Are you sure you want to delete \(food.name)?")
+        }
+    }
+
+    @ViewBuilder
+    private func foodRow(for food: FoodItem) -> some View {
+        let displayPortion =
+            (food.isCustomDefaultServing && food.customServingSize != nil)
+            ? food.customServingSize! : food.servingSize
+        let multiplier = EntryHelper.calculateMultiplier(
+            targetPortion: displayPortion,
+            basePortion: food.servingSize
+        )
+
+        let mealRowView = MealRow(
+            name: food.name,
+            source: food.source?.source ?? "None",
+            isCustomDefaultServing: food.isCustomDefaultServing,
+            customServingSize: EntryHelper.format(food.customServingSize),
+            servingSize: EntryHelper.format(displayPortion),
+            servingSizeUnit: food.servingUnit?.unit ?? "serving",
+            servingWeight: EntryHelper.format(food.servingWeight),
+            servingWeightUnit: food.servingWeightUnit,
+            servingUnits: portionUnitOptions,
+            calorie: EntryHelper.scale(
+                EntryHelper.format(food.calories),
+                by: multiplier
+            ),
+            protein: EntryHelper.scale(
+                EntryHelper.format(food.protein),
+                by: multiplier
+            ),
+            carbs: EntryHelper.scale(
+                EntryHelper.format(food.carbs),
+                by: multiplier
+            ),
+            fat: EntryHelper.scale(
+                EntryHelper.format(food.fat),
+                by: multiplier
+            ),
+            fiber: EntryHelper.scale(
+                EntryHelper.format(food.fiber),
+                by: multiplier
+            ),
+            icon: selectedTypes.count != 1 ? food.type.appSymbol : nil
+        ) {
+            handleSelect(food)
+        }
+
+        if allowSwipeActions {
+            CustomSwipeRow {
+                mealRowView
+            } onDelete: {
+                foodToDelete = food
+                showDeleteAlert = true
+            } onEdit: {
+                print("Edited \(food.name)")
+            } onFavorite: {
+                print("Favorited \(food.name)")
+            }
+            .transition(
+                .asymmetric(
+                    insertion: .identity,
+                    removal: .opacity.combined(with: .scale(scale: 0.9))
+                )
+            )
+        } else {
+            mealRowView
+        }
+    }
+
+    private func handleSelect(_ food: FoodItem) {
+        if let onSelect = onSelect {
+            onSelect(food)
+        } else {
+            selectedFood = food
+        }
+    }
+
+    @ViewBuilder
+    private var emptyStateView: some View {
+        VStack(spacing: 12) {
+            let singleType =
+                selectedTypes.count == 1 ? selectedTypes.first : nil
+            let itemName = singleType?.lowercased() ?? "item"
+
+            if let type = singleType, let symbol = AppSymbols.from(type) {
+                Image(systemName: symbol.rawValue).font(.largeTitle)
+                    .foregroundColor(.gray)
+            } else {
+                Image(systemName: "magnifyingglass").font(.largeTitle)
+                    .foregroundColor(.gray)
+            }
+
+            if searchText.isEmpty {
+                if let type = singleType {
+                    Text("No \(type)s").font(.title3.bold())
+                    Text(LocalizedStringKey("\(type.lowercased())_description"))
+                        .font(.subheadline).foregroundColor(.secondary)
+                        .multilineTextAlignment(.center).padding(
+                            .horizontal,
+                            32
+                        )
+                    Button("Add \(type)") { /* TODO: Implement */  }
+                        .font(.subheadline).foregroundColor(.accentColor)
+                        .padding(.top, 8)
+                } else {
+                    Text("Library is Empty").font(.title3.bold())
+                    Text("Add some items to your library to get started.")
+                        .font(.subheadline).foregroundColor(.secondary)
+                    Button("Add Item") { /* TODO: Implement */  }
+                        .font(.subheadline).foregroundColor(.accentColor)
+                        .padding(.top, 8)
+                }
+            } else {
+                if let type = singleType {
+                    Text("No \(type)s match \"\(searchText)\"").font(
+                        .title3.bold()
+                    )
+                } else {
+                    Text("No Results for \"\(searchText)\"").font(
+                        .title3.bold()
+                    )
+                }
+                Text(
+                    "Try a new search or [create a new \(itemName)](action:create)"
+                )
+                .font(.subheadline).foregroundColor(.secondary)
+                .multilineTextAlignment(.center).padding(.horizontal, 32).tint(
+                    .blue
+                )
+                .environment(
+                    \.openURL,
+                    OpenURLAction { url in
+                        if url.absoluteString == "action:create" {
+                            return .handled
+                        }
+                        return .discarded
+                    }
+                )
+            }
+        }
+    }
+
+    private var filterButton: some View {
+        Button {
+            showFilterSheet = true
+        } label: {
+            let defaultTypesSet: Set<String> =
+                defaultType == .all ? [] : [defaultType.displayName]
+            let hasFilters =
+                selectedTypes != defaultTypesSet || !selectedSources.isEmpty
+                || !selectedCategories.isEmpty
+            Image(
+                systemName: hasFilters
+                    ? "line.3.horizontal.decrease.circle.fill"
+                    : "line.3.horizontal.decrease.circle"
+            )
+            .tint(.primary)
+        }
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort By", selection: $sortOption) {
+                Text("Name").tag(FoodSortOption.name)
+                Text("Date Added").tag(FoodSortOption.dateAdded)
+                Text("Calories").tag(FoodSortOption.calories)
+                Text("Protein").tag(FoodSortOption.protein)
+                Text("Carbohydrates").tag(FoodSortOption.carbs)
+                Text("Fat").tag(FoodSortOption.fat)
+                Text("Fiber").tag(FoodSortOption.fiber)
+            }
+            if sortOption != .name {
+                Divider()
+                Picker("Order", selection: $sortDescending) {
+                    if sortOption == .dateAdded {
+                        Text("Newest First").tag(true)
+                        Text("Oldest First").tag(false)
+                    } else {
+                        Text("Highest First").tag(true)
+                        Text("Lowest First").tag(false)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+        }
     }
 }
 

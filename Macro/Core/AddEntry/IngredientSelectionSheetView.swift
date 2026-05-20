@@ -13,188 +13,109 @@ struct IngredientSelectionSheetView: View {
 
     var onSelect: (FoodItem) -> Void
 
-    @State private var searchText = ""
-
     @State private var activeSheet: ActiveSheet?
     enum ActiveSheet: Identifiable {
         case newIngredient, newFood, newRecipe
         var id: Int { hashValue }
     }
 
-    @Query(sort: \FoodItem.dateAdded, order: .reverse) var allItems: [FoodItem]
-
-    var filteredIngredients: [FoodItem] {
-        allItems.filter { item in
-            guard item.type == .ingredient else { return false }
-
-            if searchText.isEmpty {
-                return true
-            } else {
-                return item.name.localizedStandardContains(searchText)
-            }
-        }
-    }
-
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.background.ignoresSafeArea()
+            LibrarySheetView(
+                title: "Add Ingredient",
+                searchPrompt: "Search ingredients...",
+                defaultType: .specific(.ingredient),
+                allowSwipeActions: false,
+                onSelect: { ingredient in
+                    onSelect(ingredient)
+                    dismiss()
+                }
+            ) {
+                SearchStateReader { isSearching in
+                    if !isSearching {
+                        VStack {
+                            Card("New Entry") {
+                                RowGroup(.none) {
+                                    ButtonRow(
+                                        icon: .appSymbol(.ingredient),
+                                        title: "Add New Ingredient",
+                                        bottomPadding: 2
+                                    ) { activeSheet = .newIngredient }
 
-                ScrollView {
-                    Card("New Entry") {
-                        RowGroup(.none) {
-                            ButtonRow(
-                                icon: .appSymbol(.ingredient),
-                                title: "Add New Ingredient",
-                                bottomPadding: 2
-                            ) {
-                                activeSheet = .newIngredient
-                            }
-
-                            ButtonRow(
-                                icon: .appSymbol(.food),
-                                title: "Add New Food"
-                            ) {
-                                activeSheet = .newFood
-                            }
-                        }
-                    }
-                    .padding([.top, .leading, .trailing])
-                    .navigationDestination(item: $activeSheet) { sheet in
-                        switch sheet {
-                        case .newIngredient:
-                            AddEntrySheetView(
-                                entryType: .ingredient,
-                                isPushedView: true,
-                                onSelectInstantly: { newIngredient in
-                                    onSelect(newIngredient)
+                                    ButtonRow(
+                                        icon: .appSymbol(.food),
+                                        title: "Add New Food"
+                                    ) { activeSheet = .newFood }
                                 }
-                            )
-                        case .newFood:
-                            AddEntrySheetView(
-                                entryType: .food,
-                                isPushedView: true,
-                                onSelectInstantly: { newFood in
-                                    onSelect(newFood)
-                                }
-                            )
-                        case .newRecipe:
-                            AddEntrySheetView(
-                                entryType: .recipe,
-                                isPushedView: true,
-                                onSelectInstantly: { newRecipe in
-                                    onSelect(newRecipe)
-                                }
-                            )
-                        }
-                    }
-
-                    Card("Library") {
-                        RowGroup(.divider) {
-                            NavigationLink(
-                                destination: LibrarySheetView(
-                                    defaultType: .specific(.food),
-                                    onSelect: {
-                                        selectedFood in
-                                        onSelect(selectedFood)
-                                        dismiss()
-                                    }
-                                )
-                            ) {
-                                NavigationRow(
-                                    icon: .appSymbol(.food),
-                                    title: "Foods"
-                                )
                             }
-                            .buttonStyle(.plain)
+                            .padding(.bottom)
 
-                            NavigationLink(
-                                destination: LibrarySheetView(
-                                    defaultType: .specific(.recipe),
-                                    onSelect: {
-                                        selectedRecipe in
-                                        onSelect(selectedRecipe)
-                                        dismiss()
-                                    }
-                                )
-                            ) {
-                                NavigationRow(
-                                    icon: .appSymbol(.recipe),
-                                    title: "Recipes"
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding([.top, .leading, .trailing])
-
-                    if !filteredIngredients.isEmpty {
-                        Card("Ingredients") {
-                            RowGroup(.divider) {
-                                ForEach(filteredIngredients) { ingredient in
-                                    Button {
-                                        onSelect(ingredient)
-                                        dismiss()
-                                    } label: {
-                                        MealRow(
-                                            name: ingredient.name,
-                                            source: ingredient.source?
-                                                .source ?? "None",
-                                            isCustomDefaultServing:
-                                                ingredient
-                                                .isCustomDefaultServing,
-                                            customServingSize:
-                                                EntryHelper.format(
-                                                    ingredient
-                                                        .customServingSize
-                                                ),
-                                            servingSize: EntryHelper.format(
-                                                ingredient.servingSize
-                                            ),
-                                            servingSizeUnit: ingredient
-                                                .servingUnit?.unit
-                                                ?? "serving",
-                                            servingWeight:
-                                                EntryHelper.format(
-                                                    ingredient.servingWeight
-                                                ),
-                                            servingWeightUnit: ingredient
-                                                .servingWeightUnit,
-                                            servingUnits: [],
-                                            calorie: EntryHelper.format(
-                                                ingredient.calories
-                                            ),
-                                            protein: EntryHelper.format(
-                                                ingredient.protein
-                                            ),
-                                            carbs: EntryHelper.format(
-                                                ingredient.carbs
-                                            ),
-                                            fat: EntryHelper.format(
-                                                ingredient.fat
-                                            ),
-                                            fiber: EntryHelper.format(
-                                                ingredient.fiber
-                                            )
+                            Card("Library") {
+                                RowGroup(.divider) {
+                                    NavigationLink(
+                                        destination: LibrarySheetView(
+                                            defaultType: .specific(.food),
+                                            allowSwipeActions: false,
+                                            onSelect: { food in
+                                                onSelect(food)
+                                                dismiss()
+                                            }
                                         )
-                                    }
-                                    .buttonStyle(.plain)
+                                    ) {
+                                        NavigationRow(
+                                            icon: .appSymbol(.food),
+                                            title: "Foods"
+                                        )
+                                    }.buttonStyle(.plain)
+
+                                    NavigationLink(
+                                        destination: LibrarySheetView(
+                                            defaultType: .specific(.recipe),
+                                            allowSwipeActions: false,
+                                            onSelect: { recipe in
+                                                onSelect(recipe)
+                                                dismiss()
+                                            }
+                                        )
+                                    ) {
+                                        NavigationRow(
+                                            icon: .appSymbol(.recipe),
+                                            title: "Recipes"
+                                        )
+                                    }.buttonStyle(.plain)
                                 }
                             }
                         }
-                        .padding([.top, .leading, .trailing, .bottom])
-                    } else if !searchText.isEmpty {
-                        Text("No ingredients found for '\(searchText)'")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .padding(.top, 20)
+                        .transition(
+                            .opacity.combined(
+                                with: .scale(scale: 0.95, anchor: .top)
+                            )
+                        )
                     }
                 }
             }
-            .navigationTitle("Add Ingredient")
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search ingredients...")
-            .scrollDismissesKeyboard(.immediately)
+            .navigationDestination(item: $activeSheet) { sheet in
+                switch sheet {
+                case .newIngredient:
+                    AddEntrySheetView(
+                        entryType: .ingredient,
+                        isPushedView: true,
+                        onSelectInstantly: { onSelect($0) }
+                    )
+                case .newFood:
+                    AddEntrySheetView(
+                        entryType: .food,
+                        isPushedView: true,
+                        onSelectInstantly: { onSelect($0) }
+                    )
+                case .newRecipe:
+                    AddEntrySheetView(
+                        entryType: .recipe,
+                        isPushedView: true,
+                        onSelectInstantly: { onSelect($0) }
+                    )
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -205,6 +126,26 @@ struct IngredientSelectionSheetView: View {
                 }
             }
         }
+    }
+}
+
+struct SearchStateReader<Content: View>: View {
+    @Environment(\.isSearching) private var isSearching
+
+    @State private var smoothIsSearching = false
+
+    @ViewBuilder let content: (Bool) -> Content
+
+    var body: some View {
+        content(smoothIsSearching)
+            .onChange(of: isSearching) { oldValue, newValue in
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    smoothIsSearching = newValue
+                }
+            }
+            .onAppear {
+                smoothIsSearching = isSearching
+            }
     }
 }
 
