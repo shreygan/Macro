@@ -148,6 +148,163 @@ struct AddRecipeSheetView: View {
         draftIngredients.contains { $0.item.type != .ingredient }
     }
 
+    private func addRecipe() {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            print("Validation Error: Name is required.")
+            return
+        }
+
+        guard !draftIngredients.isEmpty else {
+            print("Validation Error: At least one ingredient is required.")
+            return
+        }
+
+        // SOURCE
+        var resolvedSource: EntrySource? = nil
+        let trimmedSource = source.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !trimmedSource.isEmpty {
+            if let existing = savedSources.first(where: {
+                $0.source == trimmedSource
+            }) {
+                resolvedSource = existing
+            } else {
+                let nextOrder =
+                    (savedSources.map { $0.displayOrder }.max() ?? 0) + 1
+                let newSource = EntrySource(
+                    source: trimmedSource,
+                    displayOrder: nextOrder
+                )
+                modelContext.insert(newSource)
+                resolvedSource = newSource
+            }
+        }
+
+        // CATEGORY
+        var resolvedCategory: CategorySource? = nil
+        let trimmedCategory = category.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !trimmedCategory.isEmpty {
+            if let existing = savedCategories.first(where: {
+                $0.category == trimmedCategory
+            }) {
+                resolvedCategory = existing
+            } else {
+                let nextOrder =
+                    (savedCategories.map { $0.displayOrder }.max() ?? 0) + 1
+                let newCategory = CategorySource(
+                    category: trimmedCategory,
+                    displayOrder: nextOrder
+                )
+                modelContext.insert(newCategory)
+                resolvedCategory = newCategory
+            }
+        }
+
+        // SERVING UNIT
+        var resolvedUnit: ServingSizeUnit? = nil
+        let trimmedUnit = servingSizeUnit.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !trimmedUnit.isEmpty {
+            if let existing = servingUnits.first(where: {
+                $0.unit == trimmedUnit
+            }) {
+                resolvedUnit = existing
+            } else {
+                let nextOrder =
+                    (servingUnits.map { $0.displayOrder }.max() ?? 0) + 1
+                let newUnit = ServingSizeUnit(
+                    unit: trimmedUnit,
+                    displayOrder: nextOrder
+                )
+                modelContext.insert(newUnit)
+                resolvedUnit = newUnit
+            }
+        }
+
+        func parseDouble(_ string: String) -> Double {
+            let normalized = string.replacingOccurrences(of: ",", with: ".")
+            return Double(normalized) ?? 0.0
+        }
+
+        func parseOptionalDouble(_ string: String) -> Double? {
+            let normalized = string.replacingOccurrences(of: ",", with: ".")
+            return string.isEmpty ? nil : Double(normalized)
+        }
+
+        let finalWeight =
+            parseOptionalDouble(servingWeight)
+            ?? (calculatedTotalWeight > 0 ? calculatedTotalWeight : nil)
+
+        let newRecipe = FoodItem(
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            type: .recipe,
+            source: resolvedSource,
+            category: resolvedCategory,
+            foodGroup: nil,
+            servingSize: parseDouble(servingSize),
+            servingUnit: resolvedUnit,
+            servingWeight: finalWeight,
+            servingWeightUnit: servingWeightUnit,
+            isAIEstimated: false,
+            calories: totalCalories,
+            protein: totalProtein,
+            carbs: totalCarbs,
+            fat: totalFat,
+            fiber: totalFiber,
+            isCustomDefaultServing: isCustomDefaultServing,
+            customServingSize: parseOptionalDouble(customServingSize)
+        )
+
+        modelContext.insert(newRecipe)
+
+        for (index, draft) in draftIngredients.enumerated() {
+            let ingredientQty = parseDouble(draft.quantity)
+            let originalItem = draft.item
+
+            let newIngredient = RecipeIngredient(
+                quantity: ingredientQty,
+                unit: draft.unit,
+                displayOrder: index,
+
+                name: originalItem.name,
+                baseServingSize: originalItem.servingSize,
+                baseServingUnitName: originalItem.servingUnit?.unit,
+                baseServingWeight: originalItem.servingWeight,
+                baseServingWeightUnit: originalItem.servingWeightUnit,
+                baseCalories: originalItem.calories,
+                baseProtein: originalItem.protein,
+                baseCarbs: originalItem.carbs,
+                baseFat: originalItem.fat,
+                baseFiber: originalItem.fiber
+            )
+
+            newIngredient.ingredientItem = originalItem
+            newIngredient.parentRecipe = newRecipe
+
+            modelContext.insert(newIngredient)
+
+            newRecipe.recipeIngredients?.append(newIngredient)
+        }
+
+        do {
+            try modelContext.save()
+
+            newlySavedEntry = newRecipe
+            if onLogInstantly != nil {
+                showSuccessAlert = true
+            } else {
+                dismiss()
+            }
+        } catch {
+            print("Failed to save recipe: \(error.localizedDescription)")
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -421,6 +578,7 @@ struct AddRecipeSheetView: View {
 
                         } else {
                             Button {
+                                addRecipe()
                             } label: {
                                 Image(systemName: "plus")
                                     .foregroundStyle(.primary)
