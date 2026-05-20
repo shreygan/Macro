@@ -13,6 +13,7 @@ struct NewEntrySheetView: View {
     @State private var searchText = ""
 
     @State private var showAddFoodSheet = false
+    @State private var showAddRecipeSheet = false
     @State private var foodToLog: FoodItem? = nil
 
     var body: some View {
@@ -27,15 +28,6 @@ struct NewEntrySheetView: View {
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.primary)
                                 .padding()
-                            //                            MealRow(
-                            //                                title: "Grilled Chicken Salad",
-                            //                                subtitle: "Sweetgreen, 1 bowl",
-                            //                                calorie: "450",
-                            //                                protein: "42",
-                            //                                carbs: "12",
-                            //                                fat: "18",
-                            //                                fiber: "6"
-                            //                            )
                         } menuItems: {
                             Button {
 
@@ -53,30 +45,22 @@ struct NewEntrySheetView: View {
 
                         Card("New Entry") {
                             ButtonRow(
-                                icon: .system("fork.knife"),
+                                icon: .appSymbol(.food),
                                 title: "Add New Food",
                                 bottomPadding: 2
                             ) {
                                 showAddFoodSheet = true
                             }
                             ButtonRow(
-                                icon: .system("cup.and.saucer"),
+                                icon: .appSymbol(.recipe),
+                                title: "Add New Recipe",
+                                bottomPadding: 2
+                            ) {
+                                showAddRecipeSheet = true
+                            }
+                            ButtonRow(
+                                icon: .appSymbol(.drink),
                                 title: "Add New Drink",
-                                bottomPadding: 2
-                            ) {}
-                            ButtonRow(
-                                icon: .system("barcode.viewfinder"),
-                                title: "Scan Barcode",
-                                bottomPadding: 2
-                            ) {}
-                            ButtonRow(
-                                icon: .system("wand.and.sparkles"),
-                                title: "AI Estimate",
-                                bottomPadding: 2
-                            ) {}
-                            ButtonRow(
-                                icon: .system("message"),
-                                title: "Quick Log",
                             ) {}
                         }
                         .padding([.top, .leading, .trailing])
@@ -84,19 +68,52 @@ struct NewEntrySheetView: View {
                         Card("Library") {
                             RowGroup(.divider) {
                                 NavigationLink(
-                                    destination: FoodLibrarySheetView()
+                                    destination: LibrarySheetView(
+                                        defaultType: .all
+                                    )
                                 ) {
                                     NavigationRow(
-                                        icon: .system("fork.knife"),
+                                        icon: .appSymbol(.all),
+                                        title: "All Entries"
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                NavigationLink(
+                                    destination: LibrarySheetView(
+                                        defaultType: .specific(.food)
+                                    )
+                                ) {
+                                    NavigationRow(
+                                        icon: .appSymbol(.food),
                                         title: "Foods"
                                     )
                                 }
                                 .buttonStyle(.plain)
-                                
-                                NavigationRow(
-                                    icon: .system("cup.and.saucer"),
-                                    title: "Drinks"
-                                )
+
+                                NavigationLink(
+                                    destination: LibrarySheetView(
+                                        defaultType: .specific(.recipe)
+                                    )
+                                ) {
+                                    NavigationRow(
+                                        icon: .appSymbol(.recipe),
+                                        title: "Recipes"
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                NavigationLink(
+                                    destination: LibrarySheetView(
+                                        defaultType: .specific(.drink)
+                                    )
+                                ) {
+                                    NavigationRow(
+                                        icon: .appSymbol(.drink),
+                                        title: "Drinks"
+                                    )
+                                }
+                                .buttonStyle(.plain)
                             }
 
                         }
@@ -126,11 +143,17 @@ struct NewEntrySheetView: View {
             }
         }
         .sheet(isPresented: $showAddFoodSheet) {
-            AddFoodSheetView(onLogInstantly: { savedFood in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    self.foodToLog = savedFood
+            AddEntrySheetView(
+                entryType: .food,
+                onLogInstantly: { savedFood in
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        self.foodToLog = savedFood
+                    }
                 }
-            })
+            )
+        }
+        .sheet(isPresented: $showAddRecipeSheet) {
+            AddRecipeSheetView()
         }
         .sheet(item: $foodToLog) { food in
             LogFoodSheetView(food: food)

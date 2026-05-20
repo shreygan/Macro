@@ -258,7 +258,7 @@ struct LogFoodSheetView: View {
                             }
                         }
                         .padding([.top, .leading, .trailing])
-                        
+
                         MealPhotoGalleryCard()
                             .padding([.top, .leading, .trailing])
 
@@ -392,7 +392,6 @@ struct LogFoodSheetView: View {
             servingUnit: defaultUnit,
             servingWeight: 40,
             servingWeightUnit: "g",
-            isIngredientBased: false,
             isAIEstimated: false,
             calories: 150,
             protein: 5,

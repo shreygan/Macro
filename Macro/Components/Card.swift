@@ -164,7 +164,7 @@ extension Card {
                 Divider().padding(.leading, 16)
 
                 NavigationRow(
-                    icon: .system("chart.bar"),
+                    icon: .customSymbol("chart.bar"),
                     title: "Macro History",
                 )
 //                {

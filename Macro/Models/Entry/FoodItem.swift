@@ -8,20 +8,29 @@
 import Foundation
 import SwiftData
 
+enum EntryType: String, Codable, CaseIterable {
+    case food
+    case recipe
+    case ingredient
+    case drink
+}
+
 @Model
 class FoodItem {
     @Attribute(.unique) var id: UUID
     var name: String
-    
+
+    var type: EntryType
+
     var source: EntrySource?
     var category: CategorySource?
-    var servingUnit: ServingSizeUnit?
+    var foodGroup: FoodGroupSource?
 
+    var servingUnit: ServingSizeUnit?
     var servingSize: Double
     var servingWeight: Double?
     var servingWeightUnit: String
 
-    var isIngredientBased: Bool
     var isAIEstimated: Bool
 
     var calories: Double
@@ -32,19 +41,23 @@ class FoodItem {
 
     var isCustomDefaultServing: Bool
     var customServingSize: Double?
-    
+
     var dateAdded: Date
+
+    @Relationship(deleteRule: .cascade, inverse: \RecipeIngredient.parentRecipe)
+    var recipeIngredients: [RecipeIngredient]? = []
 
     init(
         id: UUID = UUID(),
         name: String,
+        type: EntryType = .food,
         source: EntrySource? = nil,
         category: CategorySource? = nil,
+        foodGroup: FoodGroupSource? = nil,
         servingSize: Double,
         servingUnit: ServingSizeUnit? = nil,
         servingWeight: Double? = nil,
         servingWeightUnit: String,
-        isIngredientBased: Bool,
         isAIEstimated: Bool,
         calories: Double,
         protein: Double,
@@ -57,13 +70,14 @@ class FoodItem {
     ) {
         self.id = id
         self.name = name
+        self.type = type
         self.source = source
         self.category = category
+        self.foodGroup = foodGroup
         self.servingSize = servingSize
         self.servingUnit = servingUnit
         self.servingWeight = servingWeight
         self.servingWeightUnit = servingWeightUnit
-        self.isIngredientBased = isIngredientBased
         self.isAIEstimated = isAIEstimated
         self.calories = calories
         self.protein = protein

@@ -13,22 +13,38 @@ enum SeparatorStyle {
     case none
 }
 
-struct RowGroup<Content: View>: View {
+struct RowGroup<Content: View, BottomContent: View>: View {
     var separator: SeparatorStyle = .divider
     @ViewBuilder var content: Content
+    @ViewBuilder var bottomContent: BottomContent
 
     init(
         _ separator: SeparatorStyle = .divider,
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder bottomContent: () -> BottomContent
     ) {
         self.separator = separator
         self.content = content()
+        self.bottomContent = bottomContent()
     }
 
     var body: some View {
         _VariadicView.Tree(RowGroupLayout(separator: separator)) {
             content
         }
+
+        bottomContent
+    }
+}
+
+extension RowGroup where BottomContent == EmptyView {
+    init(
+        _ separator: SeparatorStyle = .divider,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.separator = separator
+        self.content = content()
+        self.bottomContent = EmptyView()
     }
 }
 
@@ -67,30 +83,16 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
             Card {
 
                 RowGroup(.divider) {
-
-//                    MealRow(
-//                        title: "Breakfast",
-//                        subtitle: "Oatmeal & Eggs",
-//                        calorie: "320",
-//                        protein: "20g",
-//                        carbs: "45g",
-//                        fat: "8g",
-//                        fiber: "5g"
-//                    )
-
                     ToggleRow(
-                        icon: .system("flame.fill", tint: .orange),
+                        icon: .customSymbol("flame.fill", tint: .orange),
                         title: "Include Active Calories",
                         isOn: .constant(true)
                     )
 
                     NavigationRow(
-                        icon: .system("chart.pie.fill", tint: .blue),
+                        icon: .customSymbol("chart.pie.fill", tint: .blue),
                         title: "Macro Breakdown"
                     )
-//                    {
-//                        print("Navigating...")
-//                    }
                 }
             }
 
@@ -98,30 +100,16 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
 
             Card {
                 RowGroup(.spacing(8)) {
-
-//                    MealRow(
-//                        title: "Breakfast",
-//                        subtitle: "Oatmeal & Eggs",
-//                        calorie: "320",
-//                        protein: "20g",
-//                        carbs: "45g",
-//                        fat: "8g",
-//                        fiber: "5g"
-//                    )
-
                     ToggleRow(
-                        icon: .system("flame.fill", tint: .orange),
+                        icon: .customSymbol("flame.fill", tint: .orange),
                         title: "Include Active Calories",
                         isOn: .constant(true)
                     )
 
                     NavigationRow(
-                        icon: .system("chart.pie.fill", tint: .blue),
+                        icon: .customSymbol("chart.pie.fill", tint: .blue),
                         title: "Macro Breakdown"
                     )
-//                    {
-//                        print("Navigating...")
-//                    }
                 }
             }
 

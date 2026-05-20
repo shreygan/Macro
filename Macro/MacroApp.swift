@@ -20,14 +20,19 @@ struct MacroApp: App {
     static let defaultServingSizePlural = [
         "servings", "cups", "pieces", "slices", nil, "containers", "bars",
     ]
+    static let defaultFoodGroupSources = [
+        "Vegetables", "Proteins", "Grains", "Dairy", "Oils", "Condiments",
+        "Fruits", "Others",
+    ]
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             User.self,
+            FoodItem.self,
             EntrySource.self,
             CategorySource.self,
+            FoodGroupSource.self,
             ServingSizeUnit.self,
-            FoodItem.self,
         ])
         let modelConfiguration = ModelConfiguration(
             schema: schema,
@@ -76,6 +81,24 @@ struct MacroApp: App {
                 print("Successfully seeded default CategorySources.")
             }
 
+            // --- SEED FOOD GROUP SOURCES ---
+            let foodGroupDescriptor = FetchDescriptor<FoodGroupSource>()
+            let existingFoodGroupCount = try context.fetchCount(
+                foodGroupDescriptor
+            )
+
+            if existingFoodGroupCount == 0 {
+                for (index, foodGroup) in defaultFoodGroupSources.enumerated() {
+                    let newFoodGroup = FoodGroupSource(
+                        foodGroup: foodGroup,
+                        isDefault: true,
+                        displayOrder: index
+                    )
+                    context.insert(newFoodGroup)
+                }
+                print("Successfully seeded default FoodGroupSources.")
+            }
+
             // --- SERVING SIZE UNIT SOURCES ---
             let unitDescriptor = FetchDescriptor<ServingSizeUnit>()
             let existingUnitCount = try context.fetchCount(
@@ -107,6 +130,7 @@ struct MacroApp: App {
         WindowGroup {
             //            WelcomeView()
             MainView()
+                .textInputAutocapitalization(.never)
         }
         .modelContainer(sharedModelContainer)
     }
