@@ -209,7 +209,11 @@ struct LibrarySheetView<Header: View>: View {
                 }
         )
         .sheet(item: $selectedFood) { foodToLog in
-            LogFoodSheetView(food: foodToLog)
+            if foodToLog.type == .recipe {
+                LogRecipeSheetView(recipe: foodToLog)
+            } else {
+                LogFoodSheetView(food: foodToLog)
+            }
         }
         .sheet(isPresented: $showFilterSheet) {
             FilterSheetView(
