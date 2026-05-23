@@ -62,6 +62,13 @@ struct LibrarySheetView<Header: View>: View {
     @State private var showDeleteAlert = false
     @State private var foodToDelete: FoodItem?
 
+    private var dynamicTitle: String {
+        if selectedTypes.count == 1, let singleType = selectedTypes.first {
+            return "\(singleType)s"
+        }
+        return title
+    }
+
     var filteredFoods: [FoodItem] {
         // 1. Search text filter
         var result =
@@ -187,8 +194,7 @@ struct LibrarySheetView<Header: View>: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: filteredFoods.isEmpty)
-
-        .navigationTitle(title)
+        .navigationTitle(dynamicTitle)
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.immediately)
         .environment(focusManager)
@@ -344,12 +350,16 @@ struct LibrarySheetView<Header: View>: View {
             if searchText.isEmpty {
                 if let type = singleType {
                     Text("No \(type)s").font(.title3.bold())
-                    Text(LocalizedStringKey(type.lowercased() + "_description"))
-                        .font(.subheadline).foregroundColor(.secondary)
-                        .multilineTextAlignment(.center).padding(
-                            .horizontal,
-                            32
+                    Text(
+                        LocalizedStringKey(
+                            "\(type.lowercased())" + "_description"
                         )
+                    )
+                    .font(.subheadline).foregroundColor(.secondary)
+                    .multilineTextAlignment(.center).padding(
+                        .horizontal,
+                        32
+                    )
                     Button("Add \(type)") { /* TODO: Implement */  }
                         .font(.subheadline).foregroundColor(.accentColor)
                         .padding(.top, 8)
