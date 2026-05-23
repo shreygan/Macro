@@ -58,7 +58,7 @@ struct GoalSetupView: View {
 
             GoalSlider(
                 "Calories",
-                titleIcon: Image("Calorie"),
+                titleIcon: .calorie,
                 unit: "kcal",
                 fillColor: Color.calorie,
                 value: $calorieValue,
@@ -73,7 +73,7 @@ struct GoalSetupView: View {
 
             GoalSlider(
                 "Protein",
-                titleIcon: Image("Protein"),
+                titleIcon: .protein,
                 unit: "g",
                 fillColor: Color.protein,
                 value: $proteinValue,
@@ -88,7 +88,7 @@ struct GoalSetupView: View {
 
             GoalSlider(
                 "Carbonhydrates",
-                titleIcon: Image("Carbs"),
+                titleIcon: .carbs,
                 unit: "g",
                 fillColor: Color.carbs,
                 value: $carbsValue,
@@ -103,7 +103,7 @@ struct GoalSetupView: View {
 
             GoalSlider(
                 "Fat",
-                titleIcon: Image("Fat"),
+                titleIcon: .fat,
                 unit: "g",
                 fillColor: Color.fat,
                 value: $fatValue,
@@ -118,7 +118,7 @@ struct GoalSetupView: View {
 
             GoalSlider(
                 "Fiber",
-                titleIcon: Image("Fiber"),
+                titleIcon: .fiber,
                 unit: "g",
                 fillColor: Color.fiber,
                 value: $fiberValue,

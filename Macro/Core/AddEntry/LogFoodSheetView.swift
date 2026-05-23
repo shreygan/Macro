@@ -207,7 +207,7 @@ struct LogFoodSheetView: View {
                         Card {
                             RowGroup(.divider) {
                                 TextInputRow(
-                                    icon: .custom(Image("Calorie")),
+                                    icon: .calorie,
                                     title: "Calories",
                                     titleExtension: "(Kcal)",
                                     text: $calorie,
@@ -216,7 +216,7 @@ struct LogFoodSheetView: View {
                                 )
 
                                 TextInputRow(
-                                    icon: .custom(Image("Protein")),
+                                    icon: .protein,
                                     title: "Protein",
                                     titleExtension: "(g)",
                                     text: $protein,
@@ -225,7 +225,7 @@ struct LogFoodSheetView: View {
                                 )
 
                                 TextInputRow(
-                                    icon: .custom(Image("Carbs")),
+                                    icon: .carbs,
                                     title: "Carbohydrates",
                                     titleExtension: "(g)",
                                     text: $carbs,
@@ -234,7 +234,7 @@ struct LogFoodSheetView: View {
                                 )
 
                                 TextInputRow(
-                                    icon: .custom(Image("Fat")),
+                                    icon: .fat,
                                     title: "Fat",
                                     titleExtension: "(g)",
                                     text: $fat,
@@ -243,7 +243,7 @@ struct LogFoodSheetView: View {
                                 )
 
                                 TextInputRow(
-                                    icon: .custom(Image("Fiber")),
+                                    icon: .fiber,
                                     title: "Fiber",
                                     titleExtension: "(g)",
                                     text: $fiber,

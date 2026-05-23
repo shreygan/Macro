@@ -38,7 +38,7 @@ private func formatNumber(_ value: Double) -> String {
 /// # Parameters
 ///
 /// - `title`: An optional title string for the slider.
-/// - `titleIcon`: An optional Image displayed in the title.
+/// - `titleIcon`: An optional Icon displayed in the title.
 /// - `titleFontSize`: Font size for the title. Defaults to 20.
 /// - `unit`: The slider values unit. Defaults to 'kcal'.
 /// - `trackWidth`: The width of the slider track. Defaults to 235.
@@ -65,7 +65,7 @@ public struct GoalSlider: View {
     @Binding private var value: Double
 
     private let title: String?
-    private let titleIcon: Image?
+    private let titleIcon: RowIcon?
     private let titleFontSize: CGFloat
     private let unit: String
     private let trackWidth: CGFloat
@@ -80,9 +80,9 @@ public struct GoalSlider: View {
 
     private let textFontSize: CGFloat = 12
 
-    public init(
+    init(
         _ title: String? = nil,
-        titleIcon: Image? = nil,
+        titleIcon: RowIcon? = nil,
         titleFontSize: CGFloat = 20,
         unit: String = "kcal",
         trackWidth: CGFloat = 325,
@@ -126,14 +126,29 @@ public struct GoalSlider: View {
             if let title {
                 HStack(alignment: .center, spacing: 4) {
                     if let icon = titleIcon {
-                        icon
-                            .resizable()
-                            .scaledToFit()
-                            .frame(height: titleFontSize * 1.4)
-                            .alignmentGuide(.lastTextBaseline) { dimensions in
-                                dimensions.height * 0.75
-                            }
+                        switch icon {
+                        case .custom(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .frame(height: titleFontSize * 1.4)
+                                .alignmentGuide(.lastTextBaseline) {
+                                    dimensions in
+                                    dimensions.height * 0.75
+                                }
+
+                        case .appSymbol(let symbol, let tint):
+                            Image(systemName: symbol.rawValue)
+                                .font(.system(size: titleFontSize * 0.7))
+                                .foregroundColor(tint)
+
+                        case .customSymbol(let name, let tint):
+                            Image(systemName: name)
+                                .font(.system(size: titleFontSize * 0.7))
+                                .foregroundColor(tint)
+                        }
                     }
+
                     Text(title)
                         .fontWeight(.bold)
                         .font(.system(size: titleFontSize))
@@ -397,14 +412,27 @@ private struct SliderView: View {
 }
 
 #Preview {
-    GoalSlider(
-        "Calories",
-        titleIcon: Image("Calorie"),
-        titleFontSize: 20,
-        unit: "kcal",
-        fillColor: Color.red,
-        value: .constant(2000),
-        limitMode: .constant(.ceiling),
-        in: 0...4000
-    )
+    VStack(spacing: 20) {
+        GoalSlider(
+            "Calories",
+            titleIcon: .custom(Image("Calorie")),
+            titleFontSize: 20,
+            unit: "kcal",
+            fillColor: Color.red,
+            value: .constant(2000),
+            limitMode: .constant(.ceiling),
+            in: 0...4000
+        )
+
+        GoalSlider(
+            "Calories",
+            titleIcon: .calorie,
+            titleFontSize: 20,
+            unit: "kcal",
+            fillColor: Color.red,
+            value: .constant(2000),
+            limitMode: .constant(.ceiling),
+            in: 0...4000
+        )
+    }
 }
