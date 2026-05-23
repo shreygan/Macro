@@ -151,6 +151,7 @@ struct LibrarySheetView<Header: View>: View {
             if filteredFoods.isEmpty {
                 VStack(spacing: 0) {
                     headerContent
+                        .padding([.horizontal, .bottom])
 
                     Spacer()
 
@@ -343,7 +344,7 @@ struct LibrarySheetView<Header: View>: View {
             if searchText.isEmpty {
                 if let type = singleType {
                     Text("No \(type)s").font(.title3.bold())
-                    Text(LocalizedStringKey("\(type.lowercased())_description"))
+                    Text(LocalizedStringKey(type.lowercased() + "_description"))
                         .font(.subheadline).foregroundColor(.secondary)
                         .multilineTextAlignment(.center).padding(
                             .horizontal,

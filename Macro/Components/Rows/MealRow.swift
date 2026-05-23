@@ -141,15 +141,22 @@ struct MealRow<Content: View>: View {
     }
 
     var body: some View {
+        let parts = subtitle.components(separatedBy: ", ")
+        let topText =
+            parts.count > 1 ? parts.dropLast().joined(separator: ", ") : ""
+        let bottomText = parts.last ?? subtitle
+
         let rowContent = HStack(alignment: .center, spacing: 12) {
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 0) {
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 5) {
                         Text(name)
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.primary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         if let icon = icon {
                             icon.image
@@ -157,62 +164,41 @@ struct MealRow<Content: View>: View {
                                 .foregroundColor(.tertiary)
                         }
                     }
-                    Text(subtitle)
-                        .font(.system(size: 12))
-                        .foregroundColor(.tertiary)
-                }
 
-                HStack(spacing: 4) {
+                    ViewThatFits(in: .horizontal) {
+                        Text(subtitle)
+                            .font(.system(size: 13))
+                            .foregroundColor(.tertiary)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
 
-                    let formattedCalorie =
-                        Double(calorie).map {
-                            $0.formatted(
-                                .number.precision(.fractionLength(0...1))
-                            )
-                        } ?? calorie
-                    macroStat(imageName: "Calorie", text: formattedCalorie)
-
-                    if let protein, let val = Double(protein), val > 0 {
-                        macroStat(
-                            imageName: "Protein",
-                            text: val.formatted(
-                                .number.precision(.fractionLength(0...1))
-                            )
-                        )
-                    }
-
-                    if let carbs, let val = Double(carbs), val > 0 {
-                        macroStat(
-                            imageName: "Carbs",
-                            text: val.formatted(
-                                .number.precision(.fractionLength(0...1))
-                            )
-                        )
-                    }
-
-                    if let fat, let val = Double(fat), val > 0 {
-                        macroStat(
-                            imageName: "Fat",
-                            text: val.formatted(
-                                .number.precision(.fractionLength(0...1))
-                            )
-                        )
-                    }
-
-                    if let fiber, let val = Double(fiber), val > 0 {
-                        macroStat(
-                            imageName: "Fiber",
-                            text: val.formatted(
-                                .number.precision(.fractionLength(0...1))
-                            )
-                        )
+                        VStack(alignment: .leading, spacing: 1) {
+                            if !topText.isEmpty {
+                                Text(topText)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.tertiary)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                            Text(bottomText)
+                                .font(.system(size: 13))
+                                .foregroundColor(.tertiary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
                     }
                 }
+
+                buildAllMacrosText()
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer(minLength: 16)
+            Spacer(minLength: 0)
 
             content
+                .layoutPriority(1)
+                .padding(.leading, -10)
 
             if action != nil {
                 Image(systemName: "chevron.right")
@@ -235,19 +221,76 @@ struct MealRow<Content: View>: View {
         }
     }
 
-    private func macroStat(imageName: String, text: String) -> some View {
-        HStack(spacing: 3) {
-            Image(imageName)
-                .resizable()
-                .scaledToFit()
-                .scaleEffect(1.5)
-                .frame(width: 8, height: 14)
+    private func buildMacroText(
+        _ icon: RowIcon,
+        text: String,
+        isFirst: Bool = false
+    ) -> Text {
+        let prefix = isFirst ? Text("") : Text("  ")
 
-            Text(text)
-                .font(.system(size: 10, design: .rounded))
+        if case .appSymbol(let symbol, let tint) = icon {
+            let imageText = Text(Image(systemName: symbol.rawValue))
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(tint)
+
+            let valueText = Text("\u{00A0}\(text)")
+                .font(.system(size: 12, design: .rounded))
                 .foregroundColor(.primary)
-                .padding(.trailing, 5)
+
+            let strut = Text("\u{200B}")
+                .font(.system(size: 16))
+
+            return Text("\(prefix)\(imageText)\(valueText)\(strut)")
         }
+
+        return Text("")
+    }
+
+    private func buildAllMacrosText() -> Text {
+        let formattedCalorie =
+            Double(calorie).map {
+                $0.formatted(.number.precision(.fractionLength(0...1)))
+            } ?? calorie
+
+        var resultText = buildMacroText(
+            .calorie,
+            text: formattedCalorie,
+            isFirst: true
+        )
+
+        if let protein, let val = Double(protein), val > 0 {
+            let pText = buildMacroText(
+                .protein,
+                text: val.formatted(.number.precision(.fractionLength(0...1)))
+            )
+            resultText = Text("\(resultText)\(pText)")
+        }
+
+        if let carbs, let val = Double(carbs), val > 0 {
+            let cText = buildMacroText(
+                .carbs,
+                text: val.formatted(.number.precision(.fractionLength(0...1)))
+            )
+            resultText = Text("\(resultText)\(cText)")
+        }
+
+        if let fat, let val = Double(fat), val > 0 {
+            let fText = buildMacroText(
+                .fat,
+                text: val.formatted(.number.precision(.fractionLength(0...1)))
+            )
+            resultText = Text("\(resultText)\(fText)")
+        }
+
+        if let fiber, let val = Double(fiber), val > 0 {
+            let fibText = buildMacroText(
+                .fiber,
+                text: val.formatted(.number.precision(.fractionLength(0...1)))
+            )
+            resultText = Text("\(resultText)\(fibText)")
+        }
+
+        return resultText
     }
 }
 
@@ -349,14 +392,25 @@ extension MealRow where Content == EmptyView {
                 fat: "2",
                 icon: AppSymbols.ingredient
             ) {
-                print("Navigating to meal details...")
+                HStack(spacing: 8) {
+                    InputPill(
+                        text: .constant("4"),
+                        keyboardType: .decimalPad
+                    )
+                    DropdownPill(
+                        options: ["serving", "g"],
+                        displayCustomOption: false,
+                        selection: .constant("serving")
+                    )
+                }
             }
 
             Divider().padding(.leading, 16)
 
             MealRow(
-                name: "Chips Chips Chips ",
-                source: "Lays",
+                name:
+                    "Chips Chips Chips Chips Chips Chips Chips Chips Chips Chips",
+                source: "Lays Lays Lays Lays ",
                 isCustomDefaultServing: false,
                 customServingSize: "",
                 servingSize: "11",
@@ -364,10 +418,12 @@ extension MealRow where Content == EmptyView {
                 servingWeight: "50",
                 servingWeightUnit: "g",
                 servingUnits: mockUnits,
-                calorie: "240",
-                protein: "48",
-                carbs: "6",
-                fat: "2"
+                calorie: "2400000",
+                protein: "48000000",
+                carbs: "60000000000000000000",
+                fat: "200000",
+                fiber: "100",
+                icon: .ingredient
             ) {
                 HStack(spacing: 8) {
                     InputPill(

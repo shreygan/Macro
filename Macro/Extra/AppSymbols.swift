@@ -13,6 +13,10 @@ enum AppSymbols: String {
     case ingredient = "carrot"
     case drink = "cup.and.saucer"
     case all = "square.grid.2x2"
+    case calorie = "flame.fill"
+    case protein = "p.circle.fill"
+    case carbs = "c.circle.fill"
+    case fatfiber = "f.circle.fill"
 
     var image: Image {
         Image(systemName: self.rawValue)
@@ -39,4 +43,12 @@ extension EntryType {
         case .drink: return .drink
         }
     }
+}
+
+extension RowIcon {
+    static let calorie = RowIcon.appSymbol(.calorie, tint: .calorie)
+    static let protein = RowIcon.appSymbol(.protein, tint: .protein)
+    static let carbs = RowIcon.appSymbol(.carbs, tint: .carbs)
+    static let fat = RowIcon.appSymbol(.fatfiber, tint: .fat)
+    static let fiber = RowIcon.appSymbol(.fatfiber, tint: .fiber)
 }
