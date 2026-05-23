@@ -330,7 +330,7 @@ struct AddEntrySheetView: View {
                     Card {
                         RowGroup(.divider) {
                             TextInputRow(
-                                icon: .custom(Image("Calorie")),
+                                icon: .calorie,
                                 title: "Calories",
                                 titleExtension: "(kcal)",
                                 placeholder: "-",
@@ -338,7 +338,7 @@ struct AddEntrySheetView: View {
                                 keyboardType: .decimalPad
                             )
                             TextInputRow(
-                                icon: .custom(Image("Protein")),
+                                icon: .protein,
                                 title: "Protein",
                                 titleExtension: "(g)",
                                 placeholder: "-",
@@ -346,7 +346,7 @@ struct AddEntrySheetView: View {
                                 keyboardType: .decimalPad
                             )
                             TextInputRow(
-                                icon: .custom(Image("Carbs")),
+                                icon: .carbs,
                                 title: "Carbohydrates",
                                 titleExtension: "(g)",
                                 placeholder: "-",
@@ -354,7 +354,7 @@ struct AddEntrySheetView: View {
                                 keyboardType: .decimalPad
                             )
                             TextInputRow(
-                                icon: .custom(Image("Fat")),
+                                icon: .fat,
                                 title: "Fat",
                                 titleExtension: "(g)",
                                 placeholder: "-",
@@ -362,7 +362,7 @@ struct AddEntrySheetView: View {
                                 keyboardType: .decimalPad
                             )
                             TextInputRow(
-                                icon: .custom(Image("Fiber")),
+                                icon: .fiber,
                                 title: "Fiber",
                                 titleExtension: "(g)",
                                 placeholder: "-",

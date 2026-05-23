@@ -158,6 +158,7 @@ struct LibrarySheetView<Header: View>: View {
             if filteredFoods.isEmpty {
                 VStack(spacing: 0) {
                     headerContent
+                        .padding([.horizontal, .bottom])
 
                     Spacer()
 
