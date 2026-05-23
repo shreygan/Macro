@@ -267,7 +267,7 @@ struct LogFoodSheetView: View {
                 }
                 .withCustomKeyboardToolbar()
                 .scrollDismissesKeyboard(.immediately)
-                .navigationTitle("Log Food")
+                .navigationTitle(food.type == .food ? "Log Food" : "Log Ingredient")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {

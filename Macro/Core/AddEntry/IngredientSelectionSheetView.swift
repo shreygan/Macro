@@ -38,13 +38,13 @@ struct IngredientSelectionSheetView: View {
                                 RowGroup(.none) {
                                     ButtonRow(
                                         icon: .appSymbol(.ingredient),
-                                        title: "Add New Ingredient",
+                                        title: "Add Ingredient",
                                         bottomPadding: 2
                                     ) { activeSheet = .newIngredient }
 
                                     ButtonRow(
                                         icon: .appSymbol(.food),
-                                        title: "Add New Food"
+                                        title: "Add Food"
                                     ) { activeSheet = .newFood }
                                 }
                             }
