@@ -1,5 +1,5 @@
 //
-//  AddFoodSheetView.swift
+//  AddEntryView.swift
 //  Macro
 //
 //  Created by Shrey Gangwar on 5/10/26.
@@ -8,7 +8,7 @@
 import SwiftData
 import SwiftUI
 
-struct AddEntrySheetView: View {
+struct AddEntryView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
 
@@ -517,5 +517,5 @@ struct AddEntrySheetView: View {
 }
 
 #Preview {
-    AddEntrySheetView(entryType: .ingredient)
+    AddEntryView(entryType: .ingredient)
 }

@@ -41,7 +41,7 @@ extension Color {
     static var tertiary: Color {
         Color.primary.opacity(0.3)
     }
-    
+
     static var background: Color {
         Color.gray.opacity(0.15)
     }

@@ -13,13 +13,13 @@ struct TextInputRow: View {
     var titleExtension: String? = nil
     var subtitle: String? = nil
     var placeholder: String = "-"
-    
+
     @Binding var text: String
-    
+
     var keyboardType: UIKeyboardType = .default
 
     var isEnabled: Bool = true
-    
+
     @FocusState private var isFocused: Bool
 
     var body: some View {

@@ -19,7 +19,8 @@ struct WelcomeView: View {
     @State private var isFiberActive = false
 
     private var isSliderActive: Bool {
-        isCalorieActive || isProteinActive || isCarbsActive || isFatActive || isFiberActive
+        isCalorieActive || isProteinActive || isCarbsActive || isFatActive
+            || isFiberActive
     }
 
     var anim: Animation {

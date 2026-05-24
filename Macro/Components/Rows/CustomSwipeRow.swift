@@ -7,11 +7,6 @@
 
 import SwiftUI
 
-@Observable
-class SwipeFocusManager {
-    var activeRowID: String? = nil
-}
-
 struct CustomSwipeRow<Content: View>: View {
     let id = UUID().uuidString
     @ViewBuilder var content: Content

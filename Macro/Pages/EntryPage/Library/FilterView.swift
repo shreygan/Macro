@@ -1,5 +1,5 @@
 //
-//  FoodFilterSheetView.swift
+//  FilterView.swift
 //  Macro
 //
 //  Created by Shrey Gangwar on 5/13/26.
@@ -8,7 +8,7 @@
 import SwiftData
 import SwiftUI
 
-struct FilterSheetView: View {
+struct FilterView: View {
     @Environment(\.dismiss) var dismiss
 
     @Query(sort: \EntrySource.displayOrder) var availableSources: [EntrySource]
@@ -165,7 +165,7 @@ struct FilterRowView: View {
     ]
     @Previewable @State var selectedCategories: Set<String> = []
 
-    FilterSheetView(
+    FilterView(
         selectedTypes: $selectedTypes,
         selectedSources: $selectedSources,
         selectedCategories: $selectedCategories,

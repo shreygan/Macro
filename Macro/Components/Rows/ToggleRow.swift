@@ -5,7 +5,6 @@
 //  Created by Shrey Gangwar on 5/7/26.
 //
 
-
 import SwiftUI
 
 struct ToggleRow: View {
@@ -13,9 +12,9 @@ struct ToggleRow: View {
     var title: String
     var titleExtension: String? = nil
     var subtitle: String? = nil
-    
+
     @Binding var isOn: Bool
-    
+
     var body: some View {
         BaseRowLayout(
             icon: icon,

@@ -11,10 +11,10 @@ import UIKit
 struct InteractivePhotoView: View {
     let image: UIImage
     let onDelete: () -> Void
-    
+
     @State private var scale: CGFloat = 1.0
     @State private var offset: CGSize = .zero
-    
+
     var body: some View {
         GeometryReader { geometry in
             Color.clear
@@ -29,7 +29,11 @@ struct InteractivePhotoView: View {
                 .clipped()
                 .overlay(
                     TwoFingerGestureOverlay { scaleDelta, translationDelta in
-                        applyGestures(scaleDelta: scaleDelta, translationDelta: translationDelta, size: geometry.size)
+                        applyGestures(
+                            scaleDelta: scaleDelta,
+                            translationDelta: translationDelta,
+                            size: geometry.size
+                        )
                     }
                 )
                 .overlay(alignment: .topTrailing) {
@@ -44,39 +48,52 @@ struct InteractivePhotoView: View {
                             )
                             .overlay(
                                 Circle()
-                                    .strokeBorder(Color.white.opacity(0.4), lineWidth: 0.5)
+                                    .strokeBorder(
+                                        Color.white.opacity(0.4),
+                                        lineWidth: 0.5
+                                    )
                             )
-                            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                            .shadow(
+                                color: .black.opacity(0.15),
+                                radius: 4,
+                                x: 0,
+                                y: 2
+                            )
                     }
                     .padding(12)
                 }
         }
         .aspectRatio(1, contentMode: .fit)
     }
-    
-    private func applyGestures(scaleDelta: CGFloat, translationDelta: CGSize, size: CGSize) {
+
+    private func applyGestures(
+        scaleDelta: CGFloat,
+        translationDelta: CGSize,
+        size: CGSize
+    ) {
         scale *= scaleDelta
         scale = max(1.0, scale)
-        
+
         offset.width += translationDelta.width
         offset.height += translationDelta.height
-        
-        let imageRatio = image.size.height == 0 ? 1 : image.size.width / image.size.height
+
+        let imageRatio =
+            image.size.height == 0 ? 1 : image.size.width / image.size.height
         var baseWidth = size.width
         var baseHeight = size.height
-        
+
         if imageRatio > 1 {
             baseWidth = size.height * imageRatio
         } else {
             baseHeight = size.width / imageRatio
         }
-        
+
         let scaledWidth = baseWidth * scale
         let scaledHeight = baseHeight * scale
-        
+
         let maxX = max(0, (scaledWidth - size.width) / 2)
         let maxY = max(0, (scaledHeight - size.height) / 2)
-        
+
         offset.width = min(max(offset.width, -maxX), maxX)
         offset.height = min(max(offset.height, -maxY), maxY)
     }

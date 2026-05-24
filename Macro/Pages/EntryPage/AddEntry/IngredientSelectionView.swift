@@ -1,5 +1,5 @@
 //
-//  IngredientSelectionSheetView.swift
+//  IngredientSelectionView.swift
 //  Macro
 //
 //  Created by Shrey Gangwar on 5/17/26.
@@ -8,7 +8,7 @@
 import SwiftData
 import SwiftUI
 
-struct IngredientSelectionSheetView: View {
+struct IngredientSelectionView: View {
     @Environment(\.dismiss) var dismiss
 
     var onSelect: (FoodItem) -> Void
@@ -21,7 +21,7 @@ struct IngredientSelectionSheetView: View {
 
     var body: some View {
         NavigationStack {
-            LibrarySheetView(
+            LibraryView(
                 title: "Add Ingredient",
                 searchPrompt: "Search ingredients...",
                 defaultType: .specific(.ingredient),
@@ -53,7 +53,7 @@ struct IngredientSelectionSheetView: View {
                             Card("Library") {
                                 RowGroup(.divider) {
                                     NavigationLink(
-                                        destination: LibrarySheetView(
+                                        destination: LibraryView(
                                             defaultType: .specific(.food),
                                             allowSwipeActions: false,
                                             onSelect: { food in
@@ -69,7 +69,7 @@ struct IngredientSelectionSheetView: View {
                                     }.buttonStyle(.plain)
 
                                     NavigationLink(
-                                        destination: LibrarySheetView(
+                                        destination: LibraryView(
                                             defaultType: .specific(.recipe),
                                             allowSwipeActions: false,
                                             onSelect: { recipe in
@@ -97,19 +97,19 @@ struct IngredientSelectionSheetView: View {
             .navigationDestination(item: $activeSheet) { sheet in
                 switch sheet {
                 case .newIngredient:
-                    AddEntrySheetView(
+                    AddEntryView(
                         entryType: .ingredient,
                         isPushedView: true,
                         onSelectInstantly: { onSelect($0) }
                     )
                 case .newFood:
-                    AddEntrySheetView(
+                    AddEntryView(
                         entryType: .food,
                         isPushedView: true,
                         onSelectInstantly: { onSelect($0) }
                     )
                 case .newRecipe:
-                    AddEntrySheetView(
+                    AddEntryView(
                         entryType: .recipe,
                         isPushedView: true,
                         onSelectInstantly: { onSelect($0) }
@@ -206,7 +206,7 @@ struct SearchStateReader<Content: View>: View {
         container.mainContext.insert(mockChicken)
         container.mainContext.insert(mockProteinBar)
 
-        return IngredientSelectionSheetView { selectedItem in
+        return IngredientSelectionView { selectedItem in
             print("Preview User Selected: \(selectedItem.name)")
         }
         .modelContainer(container)

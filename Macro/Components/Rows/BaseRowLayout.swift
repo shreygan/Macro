@@ -7,15 +7,6 @@
 
 import SwiftUI
 
-enum RowIcon {
-    /// For Macro symbols defined in AppSymbols.
-    case appSymbol(AppSymbols, tint: Color = .primary)
-    /// For SF Symbols. Passes the string name.
-    case customSymbol(String, tint: Color = .primary)
-    /// For custom asset catalog images. Passes the Image itself.
-    case custom(Image)
-}
-
 struct BaseRowLayout<RightContent: View>: View {
     var icon: RowIcon? = nil
     var title: String

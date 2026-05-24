@@ -1,5 +1,5 @@
 //
-//  AddRecipeSheetView.swift
+//  AddRecipeView.swift
 //  Macro
 //
 //  Created by Shrey Gangwar on 5/17/26.
@@ -50,7 +50,7 @@ struct DraftRecipeIngredient: Identifiable {
     }
 }
 
-struct AddRecipeSheetView: View {
+struct AddRecipeView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
 
@@ -148,15 +148,19 @@ struct AddRecipeSheetView: View {
         draftIngredients.contains { $0.item.type != .ingredient }
     }
 
-    private func addRecipe() {
-        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
-            print("Validation Error: Name is required.")
-            return
-        }
+    var isRecipeValid: Bool {
+        let isNameValid = !name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+        let hasIngredients = !draftIngredients.isEmpty
 
-        guard !draftIngredients.isEmpty else {
-            print("Validation Error: At least one ingredient is required.")
+        return isNameValid && hasIngredients
+    }
+
+    private func addRecipe() {
+        guard isRecipeValid else {
+            print(
+                "Validation Error: Name and at least one ingredient are required."
+            )
             return
         }
 
@@ -546,7 +550,7 @@ struct AddRecipeSheetView: View {
                 .navigationTitle("Add New Recipe")
                 .navigationBarTitleDisplayMode(.inline)
                 .sheet(isPresented: $showIngredientSelectionSheet) {
-                    IngredientSelectionSheetView { selectedItem in
+                    IngredientSelectionView { selectedItem in
                         draftIngredients.append(
                             DraftRecipeIngredient(item: selectedItem)
                         )
@@ -564,9 +568,7 @@ struct AddRecipeSheetView: View {
                     }
 
                     ToolbarItem(placement: .confirmationAction) {
-                        if name.trimmingCharacters(in: .whitespacesAndNewlines)
-                            .isEmpty
-                        {
+                        if !isRecipeValid {
                             Button {
                             } label: {
                                 Image(systemName: "plus")
@@ -643,5 +645,5 @@ struct AddRecipeSheetView: View {
 }
 
 #Preview {
-    AddRecipeSheetView()
+    AddRecipeView()
 }

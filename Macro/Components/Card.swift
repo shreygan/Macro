@@ -30,7 +30,9 @@ struct Card<Content: View, MenuContent: View>: View {
             content
         }
         .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .clipShape(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        )
         .glassEffect(
             .regular.tint(tintColor.opacity(0.7)),
             in: .rect(cornerRadius: cornerRadius)
@@ -167,9 +169,9 @@ extension Card {
                     icon: .customSymbol("chart.bar"),
                     title: "Macro History",
                 )
-//                {
-//                    print("History row tapped!")
-//                }
+                //                {
+                //                    print("History row tapped!")
+                //                }
             }
             .padding()
         }
