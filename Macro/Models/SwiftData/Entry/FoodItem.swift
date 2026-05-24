@@ -8,13 +8,6 @@
 import Foundation
 import SwiftData
 
-enum EntryType: String, Codable, CaseIterable {
-    case food
-    case recipe
-    case ingredient
-    case drink
-}
-
 @Model
 class FoodItem {
     @Attribute(.unique) var id: UUID

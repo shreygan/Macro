@@ -12,7 +12,7 @@ struct FullWidthInputRow: View {
     @Binding var text: String
 
     var keyboardType: UIKeyboardType = .default
-    
+
     @FocusState private var isFocused: Bool
 
     var body: some View {

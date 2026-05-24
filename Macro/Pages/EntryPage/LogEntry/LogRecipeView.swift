@@ -1,5 +1,5 @@
 //
-//  LogRecipeSheetView.swift
+//  LogRecipeView.swift
 //  Macro
 //
 //  Created by Shrey Gangwar on 2026-05-20.
@@ -8,183 +8,6 @@
 import SwiftData
 import SwiftUI
 
-struct LogRecipeDraftIngredient: Identifiable, Equatable {
-    let id = UUID()
-    var name: String
-
-    var quantity: String
-    var unit: String
-
-    var baseServingSize: Double
-    var baseServingUnitName: String?
-    var baseServingWeight: Double?
-    var baseServingWeightUnit: String
-
-    var baseCalories: Double
-    var baseProtein: Double
-    var baseCarbs: Double
-    var baseFat: Double
-    var baseFiber: Double
-
-    var icon: String?
-
-    // Initialize from an existing recipe ingredient
-    init(recipeIngredient: RecipeIngredient) {
-        self.name = recipeIngredient.name
-        self.quantity = EntryHelper.format(recipeIngredient.quantity)
-        self.unit = recipeIngredient.unit
-
-        self.baseServingSize = recipeIngredient.baseServingSize
-        self.baseServingUnitName = recipeIngredient.baseServingUnitName
-        self.baseServingWeight = recipeIngredient.baseServingWeight
-        self.baseServingWeightUnit = recipeIngredient.baseServingWeightUnit
-
-        self.baseCalories = recipeIngredient.baseCalories
-        self.baseProtein = recipeIngredient.baseProtein
-        self.baseCarbs = recipeIngredient.baseCarbs
-        self.baseFat = recipeIngredient.baseFat
-        self.baseFiber = recipeIngredient.baseFiber
-
-        self.icon = recipeIngredient.ingredientItem?.type.appSymbol.rawValue
-    }
-
-    // Initialize from a newly added FoodItem
-    init(item: FoodItem) {
-        self.name = item.name
-        self.unit = item.servingUnit?.unit ?? "serving"
-
-        let defaultQty =
-            item.isCustomDefaultServing
-            ? (item.customServingSize ?? item.servingSize) : item.servingSize
-        self.quantity = EntryHelper.format(defaultQty)
-
-        self.baseServingSize = item.servingSize
-        self.baseServingUnitName = item.servingUnit?.unit
-        self.baseServingWeight = item.servingWeight
-        self.baseServingWeightUnit = item.servingWeightUnit
-
-        self.baseCalories = item.calories
-        self.baseProtein = item.protein
-        self.baseCarbs = item.carbs
-        self.baseFat = item.fat
-        self.baseFiber = item.fiber
-
-        self.icon = item.type.appSymbol.rawValue
-    }
-
-    var activeMultiplier: Double {
-        guard let qty = Double(quantity) else { return 0 }
-
-        if unit == baseServingWeightUnit, let baseWeight = baseServingWeight {
-            return qty / baseWeight
-        }
-        return qty / baseServingSize
-    }
-
-    var activeCalories: Double { baseCalories * activeMultiplier }
-    var activeProtein: Double { baseProtein * activeMultiplier }
-    var activeCarbs: Double { baseCarbs * activeMultiplier }
-    var activeFat: Double { baseFat * activeMultiplier }
-    var activeFiber: Double { baseFiber * activeMultiplier }
-
-    var activeWeight: Double? {
-        if unit == baseServingWeightUnit {
-            return Double(quantity)
-        } else if let baseWeight = baseServingWeight {
-            return baseWeight * activeMultiplier
-        }
-        return nil
-    }
-}
-
-struct LogRecipeIngredientRowView: View {
-    @Binding var draft: LogRecipeDraftIngredient
-    let portionUnitOptions: [ServingSizeUnit]
-    let shouldShowIngredientIcons: Bool
-    let onDelete: () -> Void
-
-    var body: some View {
-        let baseUnit = draft.baseServingUnitName ?? "serving"
-        let hasWeight = draft.baseServingWeight != nil
-
-        let unitConversionBinding = Binding<String>(
-            get: { draft.unit },
-            set: { newUnit in
-                let oldUnit = draft.unit
-                guard oldUnit != newUnit else { return }
-
-                let currentMultiplier = draft.activeMultiplier
-
-                if newUnit == draft.baseServingWeightUnit,
-                    let baseWeight = draft.baseServingWeight
-                {
-                    let convertedQuantity = currentMultiplier * baseWeight
-                    draft.quantity = EntryHelper.format(convertedQuantity)
-                } else {
-                    let convertedQuantity =
-                        currentMultiplier * draft.baseServingSize
-                    draft.quantity = EntryHelper.format(convertedQuantity)
-                }
-
-                draft.unit = newUnit
-            }
-        )
-
-        // Resolves the String? back to AppSymbols? for MealRow
-        let rowIcon: AppSymbols? = {
-            guard shouldShowIngredientIcons, let iconString = draft.icon else {
-                return nil
-            }
-            return AppSymbols(rawValue: iconString)
-        }()
-
-        CustomSwipeRow {
-            MealRow(
-                name: draft.name,
-                source: "",
-                isCustomDefaultServing: false,
-                customServingSize: "",
-                servingSize: EntryHelper.format(
-                    draft.activeMultiplier * draft.baseServingSize
-                ),
-                servingSizeUnit: baseUnit,
-                servingWeight: EntryHelper.format(draft.activeWeight),
-                servingWeightUnit: draft.baseServingWeightUnit,
-                servingUnits: portionUnitOptions,
-                calorie: EntryHelper.format(draft.activeCalories),
-                protein: EntryHelper.format(draft.activeProtein),
-                carbs: EntryHelper.format(draft.activeCarbs),
-                fat: EntryHelper.format(draft.activeFat),
-                fiber: EntryHelper.format(draft.activeFiber),
-                icon: rowIcon
-            ) {
-                HStack(spacing: 8) {
-                    InputPill(
-                        text: $draft.quantity,
-                        keyboardType: .decimalPad
-                    )
-
-                    DropdownPill(
-                        options: hasWeight
-                            ? [baseUnit, draft.baseServingWeightUnit]
-                            : [baseUnit],
-                        displayCustomOption: false,
-                        selection: unitConversionBinding
-                    )
-                }
-            }
-        } onDelete: {
-            onDelete()
-        }
-        .transition(
-            .asymmetric(
-                insertion: .identity,
-                removal: .opacity.combined(with: .scale(scale: 0.9))
-            )
-        )
-    }
-}
-
 enum LogRecipeSaveOption: String, CaseIterable, Identifiable {
     case logOnly = "Log Only"
     case updateOriginal = "Log & Update Original"
@@ -192,7 +15,7 @@ enum LogRecipeSaveOption: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
-struct LogRecipeSheetView: View {
+struct LogRecipeView: View {
     @Environment(\.dismiss) var dismiss
 
     @Query(sort: \EntrySource.displayOrder) var sourceOptions: [EntrySource]
@@ -203,6 +26,7 @@ struct LogRecipeSheetView: View {
 
     let recipe: FoodItem
     var name: String
+    var isPushedView: Bool = true
 
     private let isCustomDefaultServing: Bool
     private let customServingSize: String
@@ -219,14 +43,14 @@ struct LogRecipeSheetView: View {
     @State private var portionQuantity: String
     @State private var portionUnitSelection: String
 
-    @State private var draftIngredients: [LogRecipeDraftIngredient] = []
+    @State private var draftIngredients: [LogRecipeIngredient] = []
     @State private var showIngredientSelectionSheet = false
 
     private let initialSourceSelection: String
     private let initialCategorySelection: String
     private let initialPortionQuantity: String
     private let initialPortionUnitSelection: String
-    @State private var initialIngredients: [LogRecipeDraftIngredient] = []
+    @State private var initialIngredients: [LogRecipeIngredient] = []
     @State private var saveOption: LogRecipeSaveOption = .logOnly
 
     @State private var focusManager = SwipeFocusManager()
@@ -301,9 +125,10 @@ struct LogRecipeSheetView: View {
         )
     }
 
-    init(recipe: FoodItem) {
+    init(recipe: FoodItem, isPushedView: Bool = true) {
         self.recipe = recipe
         self.name = recipe.name
+        self.isPushedView = isPushedView
 
         let startSource = recipe.source?.source ?? "Home"
         let startCategory = recipe.category?.category ?? "Meal"
@@ -340,7 +165,7 @@ struct LogRecipeSheetView: View {
         let existingIngredients =
             recipe.recipeIngredients?
             .sorted(by: { $0.displayOrder < $1.displayOrder })
-            .map { LogRecipeDraftIngredient(recipeIngredient: $0) } ?? []
+            .map { LogRecipeIngredient(recipeIngredient: $0) } ?? []
 
         _initialIngredients = State(initialValue: existingIngredients)
         _draftIngredients = State(initialValue: existingIngredients)
@@ -394,7 +219,7 @@ struct LogRecipeSheetView: View {
                         Card("Ingredients") {
                             RowGroup(.divider) {
                                 ForEach($draftIngredients) { $draft in
-                                    LogRecipeIngredientRowView(
+                                    IngredientRowView(
                                         draft: $draft,
                                         portionUnitOptions: portionUnitOptions,
                                         shouldShowIngredientIcons:
@@ -434,24 +259,26 @@ struct LogRecipeSheetView: View {
                 .navigationTitle("Log Recipe")
                 .navigationBarTitleDisplayMode(.inline)
                 .sheet(isPresented: $showIngredientSelectionSheet) {
-                    IngredientSelectionSheetView { selectedItem in
+                    IngredientSelectionView { selectedItem in
                         draftIngredients.append(
-                            LogRecipeDraftIngredient(item: selectedItem)
+                            LogRecipeIngredient(item: selectedItem)
                         )
                         showIngredientSelectionSheet = false
                     }
                 }
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .foregroundStyle(.primary)
+                    ToolbarItemGroup(placement: .cancellationAction) {
+                        if !isPushedView {
+                            Button {
+                                dismiss()
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .foregroundStyle(.primary)
+                            }
                         }
                     }
 
-                    ToolbarItem(placement: .topBarLeading) {
+                    ToolbarItemGroup(placement: .automatic) {
                         Menu {
                             Picker("Save Options", selection: $saveOption) {
                                 ForEach(LogRecipeSaveOption.allCases) {
@@ -464,13 +291,15 @@ struct LogRecipeSheetView: View {
                                 Divider()
 
                                 Button(role: .destructive) {
-                                    // Reset action
                                     withAnimation {
-                                        draftIngredients = initialIngredients
-                                        sourceSelection = initialSourceSelection
+                                        draftIngredients =
+                                            initialIngredients
+                                        sourceSelection =
+                                            initialSourceSelection
                                         categorySelection =
                                             initialCategorySelection
-                                        portionQuantity = initialPortionQuantity
+                                        portionQuantity =
+                                            initialPortionQuantity
                                         portionUnitSelection =
                                             initialPortionUnitSelection
                                         saveOption = .logOnly
@@ -478,7 +307,8 @@ struct LogRecipeSheetView: View {
                                 } label: {
                                     Label(
                                         "Reset to Original",
-                                        systemImage: "arrow.counterclockwise"
+                                        systemImage:
+                                            "arrow.counterclockwise"
                                     )
                                 }
                             }
@@ -495,7 +325,6 @@ struct LogRecipeSheetView: View {
                             print(
                                 "Log Triggered. Save action: \(saveOption.rawValue)"
                             )
-                            dismiss()
 
                         } label: {
                             Image(systemName: "plus")
@@ -626,7 +455,7 @@ struct LogRecipeSheetView: View {
         container.mainContext.insert(dummyRecipe)
         container.mainContext.insert(dummyRecipeIngredient)
 
-        return LogRecipeSheetView(recipe: dummyRecipe)
+        return LogRecipeView(recipe: dummyRecipe, isPushedView: false)
             .modelContainer(container)
 
     } catch {

@@ -1,5 +1,5 @@
 //
-//  LibrarySheetView.swift
+//  LibraryView.swift
 //  Macro
 //
 //  Created by Shrey Gangwar on 5/12/26.
@@ -18,20 +18,7 @@ enum FoodSortOption {
     case fiber
 }
 
-enum LibraryFilterType: Equatable {
-    case all
-    case specific(EntryType)
-
-    var displayName: String {
-        switch self {
-        case .all: return "All"
-        case .specific(let type): return type.rawValue.capitalized
-        }
-    }
-}
-
-struct LibrarySheetView<Header: View>: View {
-    @Environment(\.dismiss) var dismiss
+struct LibraryView<Header: View>: View {
     @Environment(\.modelContext) private var modelContext
 
     var title: String
@@ -51,7 +38,7 @@ struct LibrarySheetView<Header: View>: View {
     @State private var selectedFood: FoodItem?
     @State private var searchText = ""
 
-    @State private var sortOption: FoodSortOption = .name
+    @State private var sortOption: FoodSortOption = .dateAdded
     @State private var sortDescending: Bool = true
 
     @State private var showFilterSheet = false
@@ -215,15 +202,15 @@ struct LibrarySheetView<Header: View>: View {
                     }
                 }
         )
-        .sheet(item: $selectedFood) { foodToLog in
+        .navigationDestination(item: $selectedFood) { foodToLog in
             if foodToLog.type == .recipe {
-                LogRecipeSheetView(recipe: foodToLog)
+                LogRecipeView(recipe: foodToLog)
             } else {
-                LogFoodSheetView(food: foodToLog)
+                LogEntryView(food: foodToLog)
             }
         }
         .sheet(isPresented: $showFilterSheet) {
-            FilterSheetView(
+            FilterView(
                 selectedTypes: $selectedTypes,
                 selectedSources: $selectedSources,
                 selectedCategories: $selectedCategories,
@@ -532,7 +519,7 @@ struct LibrarySheetView<Header: View>: View {
         }
 
         return NavigationStack {
-            LibrarySheetView(defaultType: .all)
+            LibraryView(defaultType: .all)
         }
         .modelContainer(container)
 

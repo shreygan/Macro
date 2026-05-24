@@ -1,5 +1,5 @@
 //
-//  LogFoodSheetView.swift
+//  LogEntryView.swift
 //  Macro
 //
 //  Created by Priyanka Sangha on 2026-05-10.
@@ -8,7 +8,7 @@
 import SwiftData
 import SwiftUI
 
-struct LogFoodSheetView: View {
+struct LogEntryView: View {
     @Environment(\.dismiss) var dismiss
 
     @Query(sort: \EntrySource.displayOrder) var sourceOptions: [EntrySource]
@@ -19,6 +19,7 @@ struct LogFoodSheetView: View {
 
     let food: FoodItem
     var name: String
+    var isPushedView: Bool = true
 
     private let isCustomDefaultServing: Bool
     private let customServingSize: String
@@ -76,10 +77,10 @@ struct LogFoodSheetView: View {
         )
     }
 
-    init(food: FoodItem) {
+    init(food: FoodItem, isPushedView: Bool = true) {
         self.food = food
-
         self.name = food.name
+        self.isPushedView = isPushedView
 
         _sourceSelection = State(initialValue: food.source?.source ?? "Home")
         _categorySelection = State(
@@ -138,31 +139,6 @@ struct LogFoodSheetView: View {
                 ScrollView {
                     VStack {
                         Card {
-                            MealRow(
-                                name: name.isEmpty ? "New Food" : name,
-                                source: sourceSelection,
-                                isCustomDefaultServing: food
-                                    .isCustomDefaultServing,
-                                customServingSize: EntryHelper.format(
-                                    food.customServingSize
-                                ),
-                                servingSize: portionQuantity,
-                                servingSizeUnit: portionUnitSelection,
-                                servingWeight: EntryHelper.format(
-                                    food.servingWeight
-                                ),
-                                servingWeightUnit: food.servingWeightUnit,
-                                servingUnits: portionUnitOptions,
-                                calorie: calorie,
-                                protein: protein,
-                                carbs: carbs,
-                                fat: fat,
-                                fiber: fiber
-                            )
-                        }
-                        .padding([.top, .leading, .trailing])
-
-                        Card {
                             RowGroup(.divider) {
                                 DropdownPillRow(
                                     title: "Source",
@@ -184,7 +160,7 @@ struct LogFoodSheetView: View {
                                 PillRow(title: "Location", text: $location)
                             }
                         }
-                        .padding([.top, .leading, .trailing])
+                        .padding([.leading, .trailing])
 
                         Card {
                             BaseRowLayout(title: "Portion") {
@@ -265,18 +241,66 @@ struct LogFoodSheetView: View {
                         Spacer()
                     }
                 }
+                .safeAreaInset(edge: .top) {
+                    Card {
+                        MealRow(
+                            name: name.isEmpty ? "New Food" : name,
+                            source: sourceSelection,
+                            isCustomDefaultServing: food
+                                .isCustomDefaultServing,
+                            customServingSize: EntryHelper.format(
+                                food.customServingSize
+                            ),
+                            servingSize: portionQuantity,
+                            servingSizeUnit: portionUnitSelection,
+                            servingWeight: EntryHelper.format(
+                                food.servingWeight
+                            ),
+                            servingWeightUnit: food.servingWeightUnit,
+                            servingUnits: portionUnitOptions,
+                            calorie: calorie,
+                            protein: protein,
+                            carbs: carbs,
+                            fat: fat,
+                            fiber: fiber
+                        )
+                    }
+                    .padding([.leading, .trailing])
+                    .padding(.bottom, 16)
+                    .background(.ultraThinMaterial)
+                }
                 .withCustomKeyboardToolbar()
                 .scrollDismissesKeyboard(.immediately)
-                .navigationTitle(food.type == .food ? "Log Food" : "Log Ingredient")
+                .navigationTitle(
+                    food.type == .food ? "Log Food" : "Log Ingredient"
+                )
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    if !isPushedView {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                dismiss()
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .foregroundStyle(.primary)
+                            }
+                        }
+                    }
+
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+
                         Button {
-                            dismiss()
+                            // TODO: Implement actual Logging & Saving logic later
+                            print(
+                                "Logging."
+                            )
+
                         } label: {
-                            Image(systemName: "xmark")
+                            Image(systemName: "plus")
                                 .foregroundStyle(.primary)
                         }
+                        .tint(Color.blue)
+                        .buttonStyle(.glassProminent)
                     }
                 }
                 .onChange(of: portionQuantity) { _, _ in
@@ -403,7 +427,7 @@ struct LogFoodSheetView: View {
 
         container.mainContext.insert(dummyFood)
 
-        return LogFoodSheetView(food: dummyFood)
+        return LogEntryView(food: dummyFood)
             .modelContainer(container)
 
     } catch {

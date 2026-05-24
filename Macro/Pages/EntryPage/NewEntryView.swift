@@ -1,5 +1,5 @@
 //
-//  LogEntrySheetView.swift
+//  NewEntryView.swift
 //  Macro
 //
 //  Created by Shrey Gangwar on 5/3/26.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct NewEntrySheetView: View {
+struct NewEntryView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var searchText = ""
@@ -16,6 +16,7 @@ struct NewEntrySheetView: View {
     @State private var showAddFoodSheet = false
     @State private var showAddRecipeSheet = false
     @State private var foodToLog: FoodItem? = nil
+    @State private var recipeToLog: FoodItem? = nil
 
     var body: some View {
         NavigationStack {
@@ -71,7 +72,7 @@ struct NewEntrySheetView: View {
                         Card("Library") {
                             RowGroup(.divider) {
                                 NavigationLink(
-                                    destination: LibrarySheetView(
+                                    destination: LibraryView(
                                         defaultType: .all
                                     )
                                 ) {
@@ -83,7 +84,7 @@ struct NewEntrySheetView: View {
                                 .buttonStyle(.plain)
 
                                 NavigationLink(
-                                    destination: LibrarySheetView(
+                                    destination: LibraryView(
                                         defaultType: .specific(.ingredient)
                                     )
                                 ) {
@@ -95,7 +96,7 @@ struct NewEntrySheetView: View {
                                 .buttonStyle(.plain)
 
                                 NavigationLink(
-                                    destination: LibrarySheetView(
+                                    destination: LibraryView(
                                         defaultType: .specific(.food)
                                     )
                                 ) {
@@ -107,7 +108,7 @@ struct NewEntrySheetView: View {
                                 .buttonStyle(.plain)
 
                                 NavigationLink(
-                                    destination: LibrarySheetView(
+                                    destination: LibraryView(
                                         defaultType: .specific(.recipe)
                                     )
                                 ) {
@@ -146,34 +147,36 @@ struct NewEntrySheetView: View {
             }
         }
         .sheet(isPresented: $showAddIngredientSheet) {
-            AddEntrySheetView(
+            AddEntryView(
                 entryType: .ingredient,
                 onLogInstantly: { savedFood in
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        self.foodToLog = savedFood
-                    }
+                    self.foodToLog = savedFood
                 }
             )
         }
         .sheet(isPresented: $showAddFoodSheet) {
-            AddEntrySheetView(
+            AddEntryView(
                 entryType: .food,
                 onLogInstantly: { savedFood in
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        self.foodToLog = savedFood
-                    }
+                    self.foodToLog = savedFood
                 }
             )
         }
         .sheet(isPresented: $showAddRecipeSheet) {
-            AddRecipeSheetView()
+            AddRecipeView(onLogInstantly: { savedRecipe in
+                self.recipeToLog = savedRecipe
+
+            })
         }
         .sheet(item: $foodToLog) { food in
-            LogFoodSheetView(food: food)
+            LogEntryView(food: food, isPushedView: false)
+        }
+        .sheet(item: $recipeToLog) { recipe in
+            LogRecipeView(recipe: recipe, isPushedView: false)
         }
     }
 }
 
 #Preview {
-    NewEntrySheetView()
+    NewEntryView()
 }

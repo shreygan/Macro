@@ -12,10 +12,10 @@ struct PillRow: View {
     var title: String
     var titleExtension: String? = nil
     var subtitle: String? = nil
-    
+
     @Binding var text: String
     var unit: String? = nil
-    
+
     var body: some View {
         BaseRowLayout(
             icon: icon,
@@ -32,11 +32,11 @@ struct PillRow: View {
     struct PillPreviewWrapper: View {
         @State private var weight = "175"
         @State private var bodyFat = "15"
-        
+
         var body: some View {
             ZStack {
                 Color.gray.opacity(0.15).ignoresSafeArea()
-                
+
                 Card("BODY METRICS") {
                     PillRow(
                         icon: .customSymbol("scalemass"),
@@ -44,9 +44,9 @@ struct PillRow: View {
                         text: $weight,
                         unit: "lbs"
                     )
-                    
+
                     Divider().padding(.leading, 16)
-                    
+
                     PillRow(
                         icon: .customSymbol("percent"),
                         title: "Body Fat",
