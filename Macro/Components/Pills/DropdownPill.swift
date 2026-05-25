@@ -70,7 +70,6 @@ struct DropdownPill: View {
                     .background(
                         Capsule().fill(Color(UIColor.tertiarySystemFill))
                     )
-
                 }
                 .onAppear {
                     if selection.isEmpty, let first = options.first {

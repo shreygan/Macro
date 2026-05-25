@@ -119,10 +119,41 @@ struct LogRecipeView: View {
 
     private var activeMultiplier: Double {
         let currentPortion = Double(portionQuantity) ?? 0
+
+        let isWeightSelected =
+            (portionUnitSelection == recipe.servingWeightUnit
+                && totalRecipeWeight > 0)
+        let basePortion =
+            isWeightSelected ? totalRecipeWeight : recipe.servingSize
+
         return EntryHelper.calculateMultiplier(
             targetPortion: currentPortion,
-            basePortion: recipe.servingSize
+            basePortion: basePortion
         )
+    }
+
+    var availableUnits: [String] {
+        var units: [String] = []
+        let baseUnit = recipe.servingUnit?.unit ?? "serving"
+
+        units.append(baseUnit)
+
+        if totalRecipeWeight > 0 && recipe.servingWeightUnit != baseUnit {
+            units.append(recipe.servingWeightUnit)
+        }
+
+        return units
+    }
+
+    private var displayServingSize: String {
+        let size = activeMultiplier * recipe.servingSize
+        return size.formatted(.number.precision(.fractionLength(0...2)))
+    }
+
+    private var displayServingWeight: String {
+        guard totalRecipeWeight > 0 else { return "" }
+        let scaledWeight = activeMultiplier * totalRecipeWeight
+        return scaledWeight.formatted(.number.precision(.fractionLength(0...2)))
     }
 
     init(recipe: FoodItem, isPushedView: Bool = true) {
@@ -208,7 +239,8 @@ struct LogRecipeView: View {
                                         keyboardType: .decimalPad
                                     )
                                     DropdownPill(
-                                        options: mappedUnitOptions,
+                                        options: availableUnits,
+                                        displayCustomOption: false,
                                         selection: $portionUnitSelection
                                     )
                                 }
@@ -339,13 +371,16 @@ struct LogRecipeView: View {
                         MealRow(
                             name: name.isEmpty ? "New Recipe" : name,
                             source: sourceSelection,
-                            isCustomDefaultServing: isCustomDefaultServing,
-                            customServingSize: customServingSize,
-                            servingSize: portionQuantity,
-                            servingSizeUnit: portionUnitSelection,
-                            servingWeight: EntryHelper.format(displayWeight),
-                            servingWeightUnit: servingWeightUnit,
-                            servingUnits: portionUnitOptions,
+                            isCustomDefaultServing: false,
+                            customServingSize: "",
+                            servingSize: displayServingSize,
+                            servingSizeUnit: recipe.servingUnit?.unit
+                                ?? "serving",
+                            servingWeight: displayServingWeight,
+                            servingWeightUnit: recipe.servingWeightUnit,
+                            servingUnits: portionUnitOptions.filter {
+                                availableUnits.contains($0.unit)
+                            },
                             calorie: EntryHelper.format(displayCalories),
                             protein: EntryHelper.format(displayProtein),
                             carbs: EntryHelper.format(displayCarbs),
@@ -359,6 +394,30 @@ struct LogRecipeView: View {
                 }
             }
             .environment(focusManager)
+            .onChange(of: portionUnitSelection) { oldUnit, newUnit in
+                guard oldUnit != newUnit, totalRecipeWeight > 0 else { return }
+                let currentQuantity = Double(portionQuantity) ?? 0
+                let baseUnit = recipe.servingUnit?.unit ?? "serving"
+
+                if oldUnit == baseUnit && newUnit == recipe.servingWeightUnit {
+                    let newQuantity =
+                        (currentQuantity / recipe.servingSize)
+                        * totalRecipeWeight
+                    portionQuantity = newQuantity.formatted(
+                        .number.precision(.fractionLength(0...2))
+                    )
+
+                } else if oldUnit == recipe.servingWeightUnit
+                    && newUnit == baseUnit
+                {
+                    let newQuantity =
+                        (currentQuantity / totalRecipeWeight)
+                        * recipe.servingSize
+                    portionQuantity = newQuantity.formatted(
+                        .number.precision(.fractionLength(0...2))
+                    )
+                }
+            }
         }
     }
 }
