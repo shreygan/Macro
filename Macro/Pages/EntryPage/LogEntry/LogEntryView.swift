@@ -69,12 +69,43 @@ struct LogEntryView: View {
         portionUnitOptions.map { $0.unit }
     }
 
+    var availableUnits: [String] {
+        var units: [String] = []
+        let baseUnit = food.servingUnit?.unit ?? "serving"
+
+        units.append(baseUnit)
+
+        if food.servingWeight != nil && food.servingWeightUnit != baseUnit {
+            units.append(food.servingWeightUnit)
+        }
+
+        return units
+    }
+
     private var activeMultiplier: Double {
         let currentPortion = Double(portionQuantity) ?? 0
+
+        let isWeightSelected =
+            (portionUnitSelection == food.servingWeightUnit
+                && food.servingWeight != nil)
+        let basePortion =
+            isWeightSelected ? food.servingWeight! : food.servingSize
+
         return EntryHelper.calculateMultiplier(
             targetPortion: currentPortion,
-            basePortion: food.servingSize
+            basePortion: basePortion
         )
+    }
+
+    private var displayServingSize: String {
+        let size = activeMultiplier * food.servingSize
+        return size.formatted(.number.precision(.fractionLength(0...2)))
+    }
+
+    private var displayServingWeight: String {
+        guard let weight = food.servingWeight else { return "" }
+        let scaledWeight = activeMultiplier * weight
+        return scaledWeight.formatted(.number.precision(.fractionLength(0...2)))
     }
 
     init(food: FoodItem, isPushedView: Bool = true) {
@@ -170,10 +201,9 @@ struct LogEntryView: View {
                                         keyboardType: .decimalPad
                                     )
                                     DropdownPill(
-                                        options: portionUnitOptions.map {
-                                            $0.unit
-                                        },
-                                        selection: $portionUnitSelection
+                                        options: availableUnits,
+                                        displayCustomOption: false,
+                                        selection: $portionUnitSelection,
                                     )
                                 }
                             }
@@ -246,16 +276,12 @@ struct LogEntryView: View {
                         MealRow(
                             name: name.isEmpty ? "New Food" : name,
                             source: sourceSelection,
-                            isCustomDefaultServing: food
-                                .isCustomDefaultServing,
-                            customServingSize: EntryHelper.format(
-                                food.customServingSize
-                            ),
-                            servingSize: portionQuantity,
-                            servingSizeUnit: portionUnitSelection,
-                            servingWeight: EntryHelper.format(
-                                food.servingWeight
-                            ),
+                            isCustomDefaultServing: false,
+                            customServingSize: "",
+                            servingSize: displayServingSize,
+                            servingSizeUnit: food.servingUnit?.unit
+                                ?? "serving",
+                            servingWeight: displayServingWeight,
                             servingWeightUnit: food.servingWeightUnit,
                             servingUnits: portionUnitOptions,
                             calorie: calorie,
@@ -301,6 +327,30 @@ struct LogEntryView: View {
                         }
                         .tint(Color.blue)
                         .buttonStyle(.glassProminent)
+                    }
+                }
+                .onChange(of: portionUnitSelection) { oldUnit, newUnit in
+                    guard oldUnit != newUnit, let weight = food.servingWeight
+                    else { return }
+                    let currentQuantity = Double(portionQuantity) ?? 0
+                    let baseUnit = food.servingUnit?.unit ?? "serving"
+
+                    if oldUnit == baseUnit && newUnit == food.servingWeightUnit
+                    {
+                        let newQuantity =
+                            (currentQuantity / food.servingSize) * weight
+                        portionQuantity = newQuantity.formatted(
+                            .number.precision(.fractionLength(0...2))
+                        )
+
+                    } else if oldUnit == food.servingWeightUnit
+                        && newUnit == baseUnit
+                    {
+                        let newQuantity =
+                            (currentQuantity / weight) * food.servingSize
+                        portionQuantity = newQuantity.formatted(
+                            .number.precision(.fractionLength(0...2))
+                        )
                     }
                 }
                 .onChange(of: portionQuantity) { _, _ in
