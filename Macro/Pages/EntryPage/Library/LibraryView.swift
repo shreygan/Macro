@@ -33,8 +33,6 @@ struct LibraryView<Header: View>: View {
     @Query(sort: \ServingSizeUnit.displayOrder) var portionUnitOptions:
         [ServingSizeUnit]
 
-    @State private var focusManager = SwipeFocusManager()
-
     @State private var selectedFood: FoodItem?
     @State private var searchText = ""
 
@@ -161,47 +159,39 @@ struct LibraryView<Header: View>: View {
                     VStack {
                         headerContent
                             .padding([.horizontal, .bottom])
-
-                        Card {
-                            RowGroup(.divider) {
-                                ForEach(filteredFoods) { food in
-                                    foodRow(for: food)
-                                }
+                        
+                        EntryList(
+                            items: filteredFoods,
+                            allowSwipeActions: allowSwipeActions,
+                            rowContent: { food in
+                                foodRow(for: food)
+                            },
+                            onDelete: { food in
+                                foodToDelete = food
+                                showDeleteAlert = true
+                            },
+                            onEdit: { food in
+                                print("Edited \(food.name)")
+                            },
+                            onFavorite: { food in
+                                print("Favorited \(food.name)")
                             }
-                        }
+                        )
                         .padding([.horizontal, .bottom])
                     }
-                    .animation(
-                        .spring(response: 0.4, dampingFraction: 0.8),
-                        value: filteredFoods
-                    )
                 }
                 .transition(.opacity)
                 .zIndex(2)
             }
         }
+        .withGlobalSwipeDismissal()
         .animation(.easeInOut(duration: 0.25), value: filteredFoods.isEmpty)
         .navigationTitle(dynamicTitle)
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.immediately)
-        .environment(focusManager)
         .searchable(text: $searchText, prompt: searchPrompt)
         .searchDictationBehavior(.automatic)
         .searchPresentationToolbarBehavior(.avoidHidingContent)
-        .onTapGesture {
-            focusManager.activeRowID = nil
-        }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 15)
-                .onChanged { value in
-                    let isVerticalScroll =
-                        abs(value.translation.height)
-                        > abs(value.translation.width)
-                    if isVerticalScroll && focusManager.activeRowID != nil {
-                        focusManager.activeRowID = nil
-                    }
-                }
-        )
         .navigationDestination(item: $selectedFood) { foodToLog in
             if foodToLog.type == .recipe {
                 LogRecipeView(recipe: foodToLog)
@@ -254,7 +244,7 @@ struct LibraryView<Header: View>: View {
             basePortion: food.servingSize
         )
 
-        let mealRowView = MealRow(
+        MealRow(
             name: food.name,
             source: food.source?.source ?? "None",
             isCustomDefaultServing: food.isCustomDefaultServing,
@@ -287,27 +277,6 @@ struct LibraryView<Header: View>: View {
             icon: selectedTypes.count != 1 ? food.type.appSymbol : nil
         ) {
             handleSelect(food)
-        }
-
-        if allowSwipeActions {
-            CustomSwipeRow {
-                mealRowView
-            } onDelete: {
-                foodToDelete = food
-                showDeleteAlert = true
-            } onEdit: {
-                print("Edited \(food.name)")
-            } onFavorite: {
-                print("Favorited \(food.name)")
-            }
-            .transition(
-                .asymmetric(
-                    insertion: .identity,
-                    removal: .opacity.combined(with: .scale(scale: 0.9))
-                )
-            )
-        } else {
-            mealRowView
         }
     }
 
