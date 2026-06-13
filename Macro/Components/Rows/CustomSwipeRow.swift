@@ -10,7 +10,7 @@ import SwiftUI
 struct CustomSwipeRow<Content: View>: View {
     let id = UUID().uuidString
     @ViewBuilder var content: Content
-    var onDelete: () -> Void
+    var onDelete: (() -> Void)? = nil
     var onEdit: (() -> Void)? = nil
     var onFavorite: (() -> Void)? = nil
 
@@ -29,7 +29,10 @@ struct CustomSwipeRow<Content: View>: View {
 
     private var totalRevealWidth: CGFloat {
         let buttonCount =
-            1 + (onEdit != nil ? 1 : 0) + (onFavorite != nil ? 1 : 0)
+            (onDelete != nil ? 1 : 0) + (onEdit != nil ? 1 : 0)
+            + (onFavorite != nil ? 1 : 0)
+
+        if buttonCount == 0 { return 0 }
 
         let spacesCount = max(0, buttonCount - 1)
 
@@ -44,7 +47,9 @@ struct CustomSwipeRow<Content: View>: View {
             HStack(spacing: buttonSpacing) {
 
                 if let onFavAction = onFavorite {
-                    let favScale = computeButtonScale(forIndex: 2)
+                    let favPos =
+                        (onDelete != nil ? 1 : 0) + (onEdit != nil ? 1 : 0)
+                    let favScale = computeButtonScale(positionFromRight: favPos)
                     Button(action: {
                         closeRow()
                         onFavAction()
@@ -67,7 +72,10 @@ struct CustomSwipeRow<Content: View>: View {
                 }
 
                 if let onEditAction = onEdit {
-                    let editScale = computeButtonScale(forIndex: 1)
+                    let editPos = (onDelete != nil ? 1 : 0)
+                    let editScale = computeButtonScale(
+                        positionFromRight: editPos
+                    )
                     Button(action: {
                         closeRow()
                         onEditAction()
@@ -89,26 +97,28 @@ struct CustomSwipeRow<Content: View>: View {
                     .opacity(editScale > 0.01 ? 1 : 0)
                 }
 
-                let deleteScale = computeButtonScale(forIndex: 0)
-                Button(action: {
-                    closeRow()
-                    onDelete()
-                }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: buttonSize, height: buttonSize)
-                            .background(Color.red)
-                            .clipShape(Circle())
+                if let onDeleteAction = onDelete {
+                    let deleteScale = computeButtonScale(positionFromRight: 0)
+                    Button(action: {
+                        closeRow()
+                        onDeleteAction()
+                    }) {
+                        VStack(spacing: 4) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: buttonSize, height: buttonSize)
+                                .background(Color.red)
+                                .clipShape(Circle())
 
-                        Text("Delete")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.secondary)
+                            Text("Delete")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
                     }
+                    .scaleEffect(deleteScale)
+                    .opacity(deleteScale > 0.01 ? 1 : 0)
                 }
-                .scaleEffect(deleteScale)
-                .opacity(deleteScale > 0.01 ? 1 : 0)
             }
             .padding(.trailing, trailingPadding)
             .frame(width: totalRevealWidth, alignment: .trailing)
@@ -219,32 +229,18 @@ struct CustomSwipeRow<Content: View>: View {
         }
     }
 
-    private func computeButtonScale(forIndex index: Int) -> CGFloat {
+    private func computeButtonScale(positionFromRight: Int) -> CGFloat {
         let currentPull = -horizontalOffset
 
-        let deleteStart = trailingPadding + (buttonSize / 2)
-        let deleteFull = trailingPadding + buttonSize
+        let startOffset =
+            trailingPadding + CGFloat(positionFromRight)
+            * (buttonSize + buttonSpacing)
+        let buttonStart = startOffset + (buttonSize / 2)
+        let buttonFull = startOffset + buttonSize
 
-        let editStart = deleteFull + buttonSpacing + (buttonSize / 2)
-        let editFull = deleteFull + buttonSpacing + buttonSize
-
-        let favStart = editFull + buttonSpacing + (buttonSize / 2)
-        let favFull = editFull + buttonSpacing + buttonSize
-
-        if index == 0 {
-            if currentPull < deleteStart { return 0 }
-            let progress =
-                (currentPull - deleteStart) / (deleteFull - deleteStart)
-            return min(max(progress, 0), 1)
-        } else if index == 1 {
-            if currentPull < editStart { return 0 }
-            let progress = (currentPull - editStart) / (editFull - editStart)
-            return min(max(progress, 0), 1)
-        } else {
-            if currentPull < favStart { return 0 }
-            let progress = (currentPull - favStart) / (favFull - favStart)
-            return min(max(progress, 0), 1)
-        }
+        if currentPull < buttonStart { return 0 }
+        let progress = (currentPull - buttonStart) / (buttonFull - buttonStart)
+        return min(max(progress, 0), 1)
     }
 }
 

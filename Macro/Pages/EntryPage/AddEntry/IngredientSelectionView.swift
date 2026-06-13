@@ -25,7 +25,7 @@ struct IngredientSelectionView: View {
                 title: "Add Ingredient",
                 searchPrompt: "Search ingredients...",
                 defaultType: .specific(.ingredient),
-                allowSwipeActions: false,
+                swipeActions: [],
                 onSelect: { ingredient in
                     onSelect(ingredient)
                     dismiss()
@@ -55,7 +55,7 @@ struct IngredientSelectionView: View {
                                     NavigationLink(
                                         destination: LibraryView(
                                             defaultType: .specific(.food),
-                                            allowSwipeActions: false,
+                                            swipeActions: [],
                                             onSelect: { food in
                                                 onSelect(food)
                                                 dismiss()
@@ -71,7 +71,7 @@ struct IngredientSelectionView: View {
                                     NavigationLink(
                                         destination: LibraryView(
                                             defaultType: .specific(.recipe),
-                                            allowSwipeActions: false,
+                                            swipeActions: [],
                                             onSelect: { recipe in
                                                 onSelect(recipe)
                                                 dismiss()
