@@ -8,48 +8,6 @@
 import SwiftData
 import SwiftUI
 
-struct DraftRecipeIngredient: Identifiable {
-    let id = UUID()
-    let item: FoodItem
-
-    var quantity: String = "1"
-    var unit: String
-
-    init(item: FoodItem) {
-        self.item = item
-        self.unit = item.servingUnit?.unit ?? "serving"
-
-        let defaultQty =
-            item.isCustomDefaultServing
-            ? item.customServingSize : item.servingSize
-        self.quantity = EntryHelper.format(defaultQty)
-    }
-
-    var activeMultiplier: Double {
-        guard let qty = Double(quantity) else { return 0 }
-
-        if unit == item.servingWeightUnit, let baseWeight = item.servingWeight {
-            return qty / baseWeight
-        }
-        return qty / item.servingSize
-    }
-
-    var activeCalories: Double { item.calories * activeMultiplier }
-    var activeProtein: Double { item.protein * activeMultiplier }
-    var activeCarbs: Double { item.carbs * activeMultiplier }
-    var activeFat: Double { item.fat * activeMultiplier }
-    var activeFiber: Double { item.fiber * activeMultiplier }
-
-    var activeWeight: Double? {
-        if unit == item.servingWeightUnit {
-            return Double(quantity)
-        } else if let baseWeight = item.servingWeight {
-            return baseWeight * activeMultiplier
-        }
-        return nil
-    }
-}
-
 struct AddRecipeView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext

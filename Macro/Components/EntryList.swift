@@ -24,6 +24,8 @@ struct EntryList<Item: Identifiable & Equatable, RowContent: View>: View {
             RowGroup(.divider) {
                 ForEach(items) { item in
                     if allowSwipeActions {
+                        let deleteAction: (() -> Void)? =
+                            onDelete != nil ? { onDelete?(item) } : nil
                         let editAction: (() -> Void)? =
                             onEdit != nil ? { onEdit?(item) } : nil
                         let favoriteAction: (() -> Void)? =
@@ -31,9 +33,7 @@ struct EntryList<Item: Identifiable & Equatable, RowContent: View>: View {
 
                         CustomSwipeRow(
                             content: { rowContent(item) },
-                            onDelete: {
-                                onDelete?(item)
-                            },
+                            onDelete: deleteAction,
                             onEdit: editAction,
                             onFavorite: favoriteAction
                         )
@@ -58,33 +58,60 @@ struct EntryList<Item: Identifiable & Equatable, RowContent: View>: View {
 #Preview {
     struct EntryListPreviewWrapper: View {
         @State private var mockItems = [
-            ParsedFoodItem(
-                source: "Chipotle",
+            DraftFoodItem(
                 name: "Double Chicken Bowl",
+                source: "Chipotle",
+                category: "Meals",
+                foodGroup: "",
+                servingSize: 1.0,
+                servingUnit: "bowl",
+                servingWeight: nil,
+                servingWeightUnit: "g",
+                isAIEstimated: false,
                 calories: 1050,
                 protein: 85.0,
                 carbs: 80.0,
                 fat: 42.0,
                 fiber: 15.0,
+                isCustomDefaultServing: false,
+                customServingSize: nil,
                 isFavorite: true
             ),
-            ParsedFoodItem(
-                source: "Mom's Cooking",
+            DraftFoodItem(
                 name: "Paneer Paratha",
+                source: "Mom's Cooking",
+                category: "Meals",
+                foodGroup: "",
+                servingSize: 1.0,
+                servingUnit: "paratha",
+                servingWeight: 150.0,
+                servingWeightUnit: "g",
+                isAIEstimated: false,
                 calories: 350,
                 protein: 12.0,
                 carbs: 40.0,
                 fat: 15.0,
-                fiber: 4.0
+                fiber: 4.0,
+                isCustomDefaultServing: false,
+                customServingSize: nil
             ),
-            ParsedFoodItem(
-                source: "Generic",
+            DraftFoodItem(
                 name: "Protein Shake",
+                source: "Optimum Nutrition",
+                category: "Supplements",
+                foodGroup: "",
+                servingSize: 1.0,
+                servingUnit: "scoop",
+                servingWeight: 31.0,
+                servingWeightUnit: "g",
+                isAIEstimated: false,
                 calories: 160,
                 protein: 30.0,
                 carbs: 4.0,
                 fat: 2.0,
-                fiber: 1.0
+                fiber: 1.0,
+                isCustomDefaultServing: false,
+                customServingSize: nil
             ),
         ]
 

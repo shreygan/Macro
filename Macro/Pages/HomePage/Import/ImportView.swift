@@ -16,7 +16,7 @@ struct ImportView: View {
     @State private var isShowingFilePicker = false
     @State private var isLoading = false
 
-    @State private var parsedItems: [ParsedFoodItem] = []
+    @State private var parsedItems: [DraftFoodItem] = []
     @State private var showReviewSheet = false
 
     @State private var duplicateCount = 0
@@ -161,7 +161,7 @@ struct ImportView: View {
                     !$0.isEmpty
                 }
 
-                var extractedItems: [ParsedFoodItem] = []
+                var extractedItems: [DraftFoodItem] = []
                 var seenInCSV = Set<String>()
 
                 var skippedCount = 0
@@ -218,14 +218,23 @@ struct ImportView: View {
 
                     seenInCSV.insert(lookupKey)
 
-                    let newItem = ParsedFoodItem(
-                        source: source,
+                    let newItem = DraftFoodItem(
                         name: name,
+                        source: source,
+                        category: "",
+                        foodGroup: "",
+                        servingSize: 1.0,
+                        servingUnit: "serving",
+                        servingWeight: nil,
+                        servingWeightUnit: "g",
+                        isAIEstimated: false,
                         calories: calories,
                         protein: protein,
                         carbs: carbs,
                         fat: fat,
-                        fiber: fiber
+                        fiber: fiber,
+                        isCustomDefaultServing: false,
+                        customServingSize: nil
                     )
                     extractedItems.append(newItem)
                 }

@@ -13,12 +13,12 @@ struct ImportReviewView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    @Binding var items: [ParsedFoodItem]
+    @Binding var items: [DraftFoodItem]
     @Binding var duplicateCount: Int
     @Binding var errorCount: Int
     @Binding var isLoading: Bool
 
-    @State private var itemToEdit: ParsedFoodItem?
+    @State private var itemToEdit: DraftFoodItem?
     @State private var isShowingFilePicker = false
 
     var onProcessNewCSV: (URL) -> Void
@@ -122,8 +122,31 @@ struct ImportReviewView: View {
                 }
             }
             .sheet(item: $itemToEdit) { editingItem in
-                // TODO: Route to actual edit screen
-                Text("Edit Screen for \(editingItem.name)")
+                let dummy = FoodItem(
+                    name: "",
+                    servingSize: 1.0,
+                    servingWeightUnit: "",
+                    isAIEstimated: false,
+                    calories: 0,
+                    protein: 0,
+                    carbs: 0,
+                    fat: 0,
+                    fiber: 0,
+                    isCustomDefaultServing: false
+                )
+
+                EditEntryView(
+                    foodItem: dummy,
+                    draftItem: editingItem,
+                    isImportMode: true,
+                    onImportSave: { updatedDraft in
+                        if let index = items.firstIndex(where: {
+                            $0.id == editingItem.id
+                        }) {
+                            items[index] = updatedDraft
+                        }
+                    }
+                )
             }
             .fileImporter(
                 isPresented: $isShowingFilePicker,
@@ -185,60 +208,81 @@ struct ImportReviewView: View {
     }
 
     @ViewBuilder
-    private func reviewRow(for item: ParsedFoodItem) -> some View {
+    private func reviewRow(for item: DraftFoodItem) -> some View {
+
+        let activeMultiplier: Double = {
+            guard item.isCustomDefaultServing,
+                let target = item.customServingSize
+            else {
+                return 1.0
+            }
+            return EntryHelper.calculateMultiplier(
+                targetPortion: target,
+                basePortion: item.servingSize
+            )
+        }()
+
+        let formatDropZero: (Double?) -> String = { value in
+            guard let value = value else { return "" }
+            return value.formatted(.number.precision(.fractionLength(0...1)))
+        }
+
         MealRow(
             name: item.name,
             source: item.source,
-            isCustomDefaultServing: false,
-            customServingSize: "",
-            servingSize: "1",
-            servingSizeUnit: "serving",
-            servingWeight: "",
-            servingWeightUnit: "",
+            isCustomDefaultServing: item.isCustomDefaultServing,
+            customServingSize: formatDropZero(item.customServingSize),
+            servingSize: formatDropZero(item.servingSize),
+            servingSizeUnit: item.servingUnit,
+            servingWeight: formatDropZero(item.servingWeight),
+            servingWeightUnit: item.servingWeightUnit,
             servingUnits: [],
-            calorie: String(format: "%.0f", item.calories),
-            protein: String(format: "%.1f", item.protein),
-            carbs: String(format: "%.1f", item.carbs),
-            fat: String(format: "%.1f", item.fat),
-            fiber: String(format: "%.1f", item.fiber),
+            calorie: formatDropZero(item.calories * activeMultiplier),
+            protein: formatDropZero(item.protein * activeMultiplier),
+            carbs: formatDropZero(item.carbs * activeMultiplier),
+            fat: formatDropZero(item.fat * activeMultiplier),
+            fiber: formatDropZero(item.fiber * activeMultiplier),
+            icon: item.type == .ingredient ? item.type.appSymbol : nil
         ) {
             itemToEdit = item
         }
     }
 
-    private func toggleFavorite(for item: ParsedFoodItem) {
+    private func toggleFavorite(for item: DraftFoodItem) {
         if let index = items.firstIndex(where: { $0.id == item.id }) {
             items[index].isFavorite.toggle()
         }
     }
 
     private func saveAllToDatabase() {
-        for parsedItem in items {
-            let sourceName =
-                parsedItem.source.isEmpty ? "" : parsedItem.source
-            let source = fetchOrCreateSource(name: sourceName)
-
-            let unit = fetchOrCreateUnit(name: "serving")
+        for draft in items {
+            let sourceName = draft.source.isEmpty ? "" : draft.source
+            let resolvedSource = fetchOrCreateSource(name: sourceName)
+            let resolvedUnit = fetchOrCreateUnit(
+                name: draft.servingUnit.isEmpty ? "serving" : draft.servingUnit
+            )
+            let resolvedCategory = fetchOrCreateCategory(name: draft.category)
+            let resolvedGroup = fetchOrCreateFoodGroup(name: draft.foodGroup)
 
             let newFood = FoodItem(
                 id: UUID(),
-                name: parsedItem.name,
-                type: .food,
-                source: source,
-                category: nil,
-                foodGroup: nil,
-                servingSize: 1.0,
-                servingUnit: unit,
-                servingWeight: nil,
-                servingWeightUnit: "",
-                isAIEstimated: false,
-                calories: parsedItem.calories,
-                protein: parsedItem.protein,
-                carbs: parsedItem.carbs,
-                fat: parsedItem.fat,
-                fiber: parsedItem.fiber,
-                isCustomDefaultServing: false,
-                customServingSize: nil,
+                name: draft.name,
+                type: draft.type,
+                source: resolvedSource,
+                category: resolvedCategory,
+                foodGroup: resolvedGroup,
+                servingSize: draft.servingSize,
+                servingUnit: resolvedUnit,
+                servingWeight: draft.servingWeight,
+                servingWeightUnit: draft.servingWeightUnit,
+                isAIEstimated: draft.isAIEstimated,
+                calories: draft.calories,
+                protein: draft.protein,
+                carbs: draft.carbs,
+                fat: draft.fat,
+                fiber: draft.fiber,
+                isCustomDefaultServing: draft.isCustomDefaultServing,
+                customServingSize: draft.customServingSize,
                 dateAdded: Date()
             )
 
@@ -275,6 +319,49 @@ struct ImportReviewView: View {
         return newSource
     }
 
+    private func fetchOrCreateCategory(name: String) -> CategorySource {
+        let descriptor = FetchDescriptor<CategorySource>(
+            predicate: #Predicate { $0.category == name }
+        )
+
+        if let existing = try? modelContext.fetch(descriptor).first {
+            return existing
+        }
+
+        let allDescriptor = FetchDescriptor<CategorySource>()
+        let currentCount = (try? modelContext.fetchCount(allDescriptor)) ?? 0
+
+        let newCategory = CategorySource(
+            category: name,
+            displayOrder: currentCount + 1
+        )
+
+        modelContext.insert(newCategory)
+        return newCategory
+    }
+
+    private func fetchOrCreateFoodGroup(name: String) -> FoodGroupSource {
+        let descriptor = FetchDescriptor<FoodGroupSource>(
+            predicate: #Predicate { $0.foodGroup == name }
+        )
+
+        if let existing = try? modelContext.fetch(descriptor).first {
+            return existing
+        }
+
+        let allDescriptor = FetchDescriptor<FoodGroupSource>()
+        let currentCount = (try? modelContext.fetchCount(allDescriptor)) ?? 0
+
+        let newGroup = FoodGroupSource(
+            foodGroup: name,
+            isDefault: false,
+            displayOrder: currentCount + 1
+        )
+
+        modelContext.insert(newGroup)
+        return newGroup
+    }
+
     private func fetchOrCreateUnit(name: String) -> ServingSizeUnit {
         let descriptor = FetchDescriptor<ServingSizeUnit>(
             predicate: #Predicate { $0.unit == name }
@@ -302,33 +389,60 @@ struct ImportReviewView: View {
 #Preview {
     struct PreviewWrapper: View {
         @State private var mockItems = [
-            ParsedFoodItem(
-                source: "Chipotle",
+            DraftFoodItem(
                 name: "Double Chicken Bowl",
+                source: "Chipotle",
+                category: "Meals",
+                foodGroup: "",
+                servingSize: 1.0,
+                servingUnit: "bowl",
+                servingWeight: nil,
+                servingWeightUnit: "g",
+                isAIEstimated: false,
                 calories: 1050,
                 protein: 85.0,
                 carbs: 80.0,
                 fat: 42.0,
                 fiber: 15.0,
+                isCustomDefaultServing: false,
+                customServingSize: nil,
                 isFavorite: true
             ),
-            ParsedFoodItem(
-                source: "",
+            DraftFoodItem(
                 name: "Paneer Paratha",
+                source: "Mom's Cooking",
+                category: "Meals",
+                foodGroup: "",
+                servingSize: 1.0,
+                servingUnit: "paratha",
+                servingWeight: 150.0,
+                servingWeightUnit: "g",
+                isAIEstimated: false,
                 calories: 350,
                 protein: 12.0,
                 carbs: 40.0,
                 fat: 15.0,
-                fiber: 4.0
+                fiber: 4.0,
+                isCustomDefaultServing: false,
+                customServingSize: nil
             ),
-            ParsedFoodItem(
-                source: "Generic",
+            DraftFoodItem(
                 name: "Protein Shake",
+                source: "Optimum Nutrition",
+                category: "Supplements",
+                foodGroup: "",
+                servingSize: 1.0,
+                servingUnit: "scoop",
+                servingWeight: 31.0,
+                servingWeightUnit: "g",
+                isAIEstimated: false,
                 calories: 160,
                 protein: 30.0,
                 carbs: 4.0,
                 fat: 2.0,
-                fiber: 1.0
+                fiber: 1.0,
+                isCustomDefaultServing: false,
+                customServingSize: nil
             ),
         ]
 

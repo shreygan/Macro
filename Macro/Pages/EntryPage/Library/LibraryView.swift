@@ -18,12 +18,16 @@ enum FoodSortOption {
     case fiber
 }
 
+nonisolated enum SwipeAction: Hashable, Sendable {
+    case edit, delete, favorite
+}
+
 struct LibraryView<Header: View>: View {
     @Environment(\.modelContext) private var modelContext
 
     var title: String
     var searchPrompt: String
-    var allowSwipeActions: Bool
+    var swipeActions: Set<SwipeAction>
     var onSelect: ((FoodItem) -> Void)? = nil
     var defaultType: LibraryFilterType
     let headerContent: Header
@@ -46,6 +50,9 @@ struct LibraryView<Header: View>: View {
 
     @State private var showDeleteAlert = false
     @State private var foodToDelete: FoodItem?
+
+    @State private var showEditSheet = false
+    @State private var foodToEdit: FoodItem?
 
     private var dynamicTitle: String {
         if selectedTypes.count == 1, let singleType = selectedTypes.first {
@@ -120,14 +127,14 @@ struct LibraryView<Header: View>: View {
         title: String = "Library",
         searchPrompt: String = "What did you eat today?",
         defaultType: LibraryFilterType = .all,
-        allowSwipeActions: Bool = true,
+        swipeActions: Set<SwipeAction> = [.edit, .delete, .favorite],
         onSelect: ((FoodItem) -> Void)? = nil,
         @ViewBuilder headerContent: () -> Header = { EmptyView() }
     ) {
         self.title = title
         self.searchPrompt = searchPrompt
         self.defaultType = defaultType
-        self.allowSwipeActions = allowSwipeActions
+        self.swipeActions = swipeActions
         self.onSelect = onSelect
         self.headerContent = headerContent()
 
@@ -159,23 +166,27 @@ struct LibraryView<Header: View>: View {
                     VStack {
                         headerContent
                             .padding([.horizontal, .bottom])
-                        
+
                         EntryList(
                             items: filteredFoods,
-                            allowSwipeActions: allowSwipeActions,
+                            allowSwipeActions: !swipeActions.isEmpty,
                             rowContent: { food in
                                 foodRow(for: food)
                             },
-                            onDelete: { food in
-                                foodToDelete = food
-                                showDeleteAlert = true
-                            },
-                            onEdit: { food in
-                                print("Edited \(food.name)")
-                            },
-                            onFavorite: { food in
-                                print("Favorited \(food.name)")
-                            }
+                            onDelete: swipeActions.contains(.delete)
+                                ? { food in
+                                    foodToDelete = food
+                                    showDeleteAlert = true
+                                } : nil,
+                            onEdit: swipeActions.contains(.edit)
+                                ? { food in
+                                    foodToEdit = food
+                                    showEditSheet = true
+                                } : nil,
+                            onFavorite: swipeActions.contains(.favorite)
+                                ? { food in
+                                    print("Favorited \(food.name)")
+                                } : nil
                         )
                         .padding([.horizontal, .bottom])
                     }
@@ -197,6 +208,13 @@ struct LibraryView<Header: View>: View {
                 LogRecipeView(recipe: foodToLog)
             } else {
                 LogEntryView(food: foodToLog)
+            }
+        }
+        .sheet(item: $foodToEdit) { food in
+            if food.type == .recipe {
+                EditRecipeView(recipe: food)
+            } else {
+                EditEntryView(foodItem: food)
             }
         }
         .sheet(isPresented: $showFilterSheet) {
@@ -488,7 +506,7 @@ struct LibraryView<Header: View>: View {
         }
 
         return NavigationStack {
-            LibraryView(defaultType: .all)
+            LibraryView(defaultType: .all, swipeActions: [.delete, .edit])
         }
         .modelContainer(container)
 
