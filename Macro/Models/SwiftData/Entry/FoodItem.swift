@@ -37,6 +37,9 @@ class FoodItem {
 
     var dateAdded: Date
 
+    @Relationship(deleteRule: .cascade)
+    var stickyNote: Note?
+
     @Relationship(deleteRule: .cascade, inverse: \RecipeIngredient.parentRecipe)
     var recipeIngredients: [RecipeIngredient]? = []
 
@@ -59,6 +62,7 @@ class FoodItem {
         fiber: Double,
         isCustomDefaultServing: Bool,
         customServingSize: Double? = nil,
+        stickyNote: Note? = nil,
         dateAdded: Date = Date()
     ) {
         self.id = id
@@ -79,6 +83,7 @@ class FoodItem {
         self.fiber = fiber
         self.isCustomDefaultServing = isCustomDefaultServing
         self.customServingSize = customServingSize
+        self.stickyNote = stickyNote
         self.dateAdded = dateAdded
     }
 }
