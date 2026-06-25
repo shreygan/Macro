@@ -55,6 +55,17 @@ struct LogRecipeView: View {
 
     @State private var focusManager = SwipeFocusManager()
 
+    @State private var stickyNote: String
+    @State private var stickyNoteDate: Date
+
+    @State private var newNote: String = ""
+    @State private var isAddingNewNote: Bool = false
+    @State private var isNewNotePinned: Bool = false
+    @State private var isOriginalNotePinned: Bool
+
+    @State private var showingAllNotes: Bool = false
+    @State private var dateAdded: Date
+
     var isEdited: Bool {
         draftIngredients != initialIngredients
             || sourceSelection != initialSourceSelection
@@ -75,7 +86,6 @@ struct LogRecipeView: View {
         portionUnitOptions.map { $0.unit }
     }
 
-    // Dynamic Macro Calculations based on current ingredients
     var totalBaseCalories: Double {
         draftIngredients.reduce(0) { $0 + $1.activeCalories }
     }
@@ -192,7 +202,6 @@ struct LogRecipeView: View {
         self.servingWeight = EntryHelper.format(recipe.servingWeight)
         self.servingWeightUnit = recipe.servingWeightUnit
 
-        // Load existing recipe ingredients into the editable draft array
         let existingIngredients =
             recipe.recipeIngredients?
             .sorted(by: { $0.displayOrder < $1.displayOrder })
@@ -200,6 +209,14 @@ struct LogRecipeView: View {
 
         _initialIngredients = State(initialValue: existingIngredients)
         _draftIngredients = State(initialValue: existingIngredients)
+
+        let initialNoteText = recipe.stickyNote?.text ?? ""
+        _stickyNote = State(initialValue: initialNoteText)
+        _isOriginalNotePinned = State(initialValue: !initialNoteText.isEmpty)
+        _stickyNoteDate = State(
+            initialValue: recipe.stickyNote?.lastUpdated ?? Date()
+        )
+        _dateAdded = State(initialValue: recipe.dateAdded)
     }
 
     var body: some View {
@@ -230,6 +247,123 @@ struct LogRecipeView: View {
                             }
                         }
                         .padding([.leading, .trailing])
+
+                        Card {
+                            RowGroup(.divider) {
+                                if !stickyNote.isEmpty {
+                                    let deleteOriginalNoteAction: () -> Void = {
+                                        withAnimation(
+                                            .spring(
+                                                response: 0.3,
+                                                dampingFraction: 0.8
+                                            )
+                                        ) {
+                                            stickyNote = ""
+                                            isOriginalNotePinned = false
+                                        }
+                                    }
+
+                                    let pinOriginalNoteAction: () -> Void = {
+                                        withAnimation {
+                                            isOriginalNotePinned.toggle()
+                                            if isOriginalNotePinned {
+                                                isNewNotePinned = false
+                                            }
+                                        }
+                                    }
+
+                                    CustomSwipeRow(
+                                        content: {
+                                            WrappedInputRow(
+                                                placeholder: "Sticky Note",
+                                                text: $stickyNote,
+                                                isSticky: isOriginalNotePinned,
+                                                timestamp: stickyNoteDate
+                                            )
+                                        },
+                                        onDelete: deleteOriginalNoteAction,
+                                        onPin: pinOriginalNoteAction,
+                                        isPinned: isOriginalNotePinned
+                                    )
+                                    .transition(
+                                        .opacity.combined(
+                                            with: .move(edge: .top)
+                                        )
+                                    )
+                                }
+
+                                if isAddingNewNote {
+                                    let deleteNoteAction: () -> Void = {
+                                        withAnimation(
+                                            .spring(
+                                                response: 0.3,
+                                                dampingFraction: 0.8
+                                            )
+                                        ) {
+                                            isAddingNewNote = false
+                                            newNote = ""
+                                            isNewNotePinned = false
+                                        }
+                                    }
+
+                                    let pinNoteAction: () -> Void = {
+                                        withAnimation {
+                                            isNewNotePinned.toggle()
+                                            if isNewNotePinned {
+                                                isOriginalNotePinned = false
+                                            }
+                                        }
+                                    }
+
+                                    CustomSwipeRow(
+                                        content: {
+                                            WrappedInputRow(
+                                                placeholder: "Add a note...",
+                                                text: $newNote,
+                                                isSticky: isNewNotePinned,
+                                                timestamp: Date()
+                                            )
+                                        },
+                                        onDelete: deleteNoteAction,
+                                        onPin: pinNoteAction,
+                                        isPinned: isNewNotePinned
+                                    )
+                                    .transition(
+                                        .opacity.combined(
+                                            with: .move(edge: .top)
+                                        )
+                                    )
+
+                                    ButtonRow(
+                                        title: "View All Notes",
+                                        topPadding: 16,
+                                        action: { showingAllNotes = true }
+                                    )
+                                    .transition(.opacity)
+
+                                } else {
+                                    DoubleButtonRow(
+                                        topPadding: 16,
+                                        leftTitle: "Add New Note",
+                                        leftAction: {
+                                            withAnimation(
+                                                .spring(
+                                                    response: 0.3,
+                                                    dampingFraction: 0.8
+                                                )
+                                            ) {
+                                                isAddingNewNote = true
+                                            }
+                                        },
+                                        rightTitle: "View All Notes",
+                                        rightAction: {
+                                            showingAllNotes = true
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        .padding([.top, .leading, .trailing])
 
                         Card {
                             BaseRowLayout(title: "Portion") {
@@ -394,6 +528,20 @@ struct LogRecipeView: View {
                 }
             }
             .environment(focusManager)
+            .sheet(isPresented: $showingAllNotes) {
+                NavigationStack {
+                    VStack(spacing: 20) {
+                        Image(systemName: "note.text")
+                            .font(.system(size: 40))
+                            .foregroundStyle(.secondary)
+                        Text("TODO: View All Notes Implementation")
+                            .foregroundStyle(.secondary)
+                    }
+                    .navigationTitle("All Notes")
+                    .navigationBarTitleDisplayMode(.inline)
+                }
+                .presentationDetents([.medium, .large])
+            }
             .onChange(of: portionUnitSelection) { oldUnit, newUnit in
                 guard oldUnit != newUnit, totalRecipeWeight > 0 else { return }
                 let currentQuantity = Double(portionQuantity) ?? 0

@@ -38,6 +38,8 @@ struct AddRecipeView: View {
     @State private var draftIngredients: [DraftRecipeIngredient] = []
     @State private var showIngredientSelectionSheet = false
 
+    @State private var stickyNote: String = ""
+
     @State private var focusManager = SwipeFocusManager()
 
     var totalCalories: Double {
@@ -202,6 +204,12 @@ struct AddRecipeView: View {
             parseOptionalDouble(servingWeight)
             ?? (calculatedTotalWeight > 0 ? calculatedTotalWeight : nil)
 
+        let trimmedNote = stickyNote.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        let resolvedStickyNote =
+            trimmedNote.isEmpty ? nil : Note(text: trimmedNote)
+
         let newRecipe = FoodItem(
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             type: .recipe,
@@ -219,7 +227,8 @@ struct AddRecipeView: View {
             fat: totalFat,
             fiber: totalFiber,
             isCustomDefaultServing: isCustomDefaultServing,
-            customServingSize: parseOptionalDouble(customServingSize)
+            customServingSize: parseOptionalDouble(customServingSize),
+            stickyNote: resolvedStickyNote
         )
 
         modelContext.insert(newRecipe)
@@ -306,6 +315,16 @@ struct AddRecipeView: View {
                             }
                         }
                         .padding([.leading, .trailing])
+
+                        Card {
+                            WrappedInputRow(
+                                placeholder: "Pinned Note",
+                                text: $stickyNote,
+                                isEditable: true,
+                                characterLimit: 2000
+                            )
+                        }
+                        .padding([.top, .leading, .trailing])
 
                         Card {
                             RowGroup(.divider) {
