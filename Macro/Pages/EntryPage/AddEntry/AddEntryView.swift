@@ -51,6 +51,8 @@ struct AddEntryView: View {
     @State private var isCustomDefaultServing: Bool = false
     @State private var customServingSize: String = "1"
 
+    @State private var stickyNote: String = ""
+
     var formattedSubtitle: String {
         let activeSize =
             isCustomDefaultServing ? customServingSize : servingSize
@@ -210,6 +212,12 @@ struct AddEntryView: View {
             return string.isEmpty ? nil : Double(normalized)
         }
 
+        let trimmedNote = stickyNote.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        let resolvedStickyNote =
+            trimmedNote.isEmpty ? nil : Note(text: trimmedNote)
+
         let newEntry = FoodItem(
             name: name,
             type: entryType,
@@ -227,7 +235,8 @@ struct AddEntryView: View {
             fat: parseDouble(fatValue),
             fiber: parseDouble(fiberValue),
             isCustomDefaultServing: isCustomDefaultServing,
-            customServingSize: parseOptionalDouble(customServingSize)
+            customServingSize: parseOptionalDouble(customServingSize),
+            stickyNote: resolvedStickyNote
         )
 
         modelContext.insert(newEntry)
@@ -297,6 +306,16 @@ struct AddEntryView: View {
                         }
                     }
                     .padding([.leading, .trailing])
+
+                    Card {
+                        WrappedInputRow(
+                            placeholder: "Pinned Note",
+                            text: $stickyNote,
+                            isEditable: true,
+                            characterLimit: 2000
+                        )
+                    }
+                    .padding([.top, .leading, .trailing])
 
                     Card {
                         RowGroup(.divider) {

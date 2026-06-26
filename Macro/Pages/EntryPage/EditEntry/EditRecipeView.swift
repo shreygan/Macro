@@ -43,6 +43,8 @@ struct EditRecipeView: View {
     @State private var isCustomDefaultServing: Bool
     @State private var customServingSize: String
 
+    @State private var stickyNote: String
+
     @State private var draftIngredients: [DraftRecipeIngredient]
     @State private var showIngredientSelectionSheet = false
 
@@ -98,6 +100,8 @@ struct EditRecipeView: View {
         } else {
             _customServingSize = State(initialValue: "1")
         }
+
+        _stickyNote = State(initialValue: recipe.stickyNote?.text ?? "")
 
         let existingIngredients = (recipe.recipeIngredients ?? [])
             .sorted { $0.displayOrder < $1.displayOrder }
@@ -259,6 +263,10 @@ struct EditRecipeView: View {
             parseOptionalDouble(servingWeight)
             ?? (calculatedTotalWeight > 0 ? calculatedTotalWeight : nil)
 
+        let trimmedNote = stickyNote.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+
         if saveMode == .update {
             recipe.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
             recipe.source = resolvedSource
@@ -269,6 +277,17 @@ struct EditRecipeView: View {
             recipe.servingWeightUnit = servingWeightUnit
             recipe.isCustomDefaultServing = isCustomDefaultServing
             recipe.customServingSize = parseOptionalDouble(customServingSize)
+
+            if trimmedNote.isEmpty {
+                recipe.stickyNote = nil
+            } else {
+                if let existingNote = recipe.stickyNote {
+                    existingNote.text = trimmedNote
+                    existingNote.lastUpdated = Date()
+                } else {
+                    recipe.stickyNote = Note(text: trimmedNote)
+                }
+            }
 
             recipe.calories = totalCalories
             recipe.protein = totalProtein
@@ -321,6 +340,9 @@ struct EditRecipeView: View {
             }
 
         } else {
+            let resolvedStickyNote =
+                trimmedNote.isEmpty ? nil : Note(text: trimmedNote)
+
             let newRecipe = FoodItem(
                 name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                 type: .recipe,
@@ -338,7 +360,8 @@ struct EditRecipeView: View {
                 fat: totalFat,
                 fiber: totalFiber,
                 isCustomDefaultServing: isCustomDefaultServing,
-                customServingSize: parseOptionalDouble(customServingSize)
+                customServingSize: parseOptionalDouble(customServingSize),
+                stickyNote: resolvedStickyNote
             )
 
             modelContext.insert(newRecipe)
@@ -412,6 +435,16 @@ struct EditRecipeView: View {
                         }
                     }
                     .padding([.leading, .trailing])
+
+                    Card {
+                        WrappedInputRow(
+                            placeholder: "Pinned Note",
+                            text: $stickyNote,
+                            isEditable: true,
+                            characterLimit: 2000
+                        )
+                    }
+                    .padding([.top, .leading, .trailing])
 
                     Card {
                         RowGroup(.divider) {

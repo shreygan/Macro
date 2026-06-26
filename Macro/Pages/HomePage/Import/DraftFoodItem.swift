@@ -27,5 +27,6 @@ struct DraftFoodItem: Identifiable, Equatable {
     var fiber: Double
     var isCustomDefaultServing: Bool
     var customServingSize: Double?
+    var stickyNote: String?
     var isFavorite: Bool = false
 }

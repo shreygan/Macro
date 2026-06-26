@@ -58,6 +58,8 @@ struct EditEntryView: View {
     @State private var isCustomDefaultServing: Bool
     @State private var customServingSize: String
 
+    @State private var stickyNote: String
+
     @State private var saveMode: EditSaveMode = .update
     @State private var showUpdateRecipesAlert: Bool = false
     @State private var uniqueRecipesCount: Int = 0
@@ -152,6 +154,10 @@ struct EditEntryView: View {
         } else {
             _customServingSize = State(initialValue: "1")
         }
+
+        let initialNoteText =
+            draftItem?.stickyNote ?? foodItem.stickyNote?.text ?? ""
+        _stickyNote = State(initialValue: initialNoteText)
     }
 
     private var activeMultiplier: Double {
@@ -287,7 +293,12 @@ struct EditEntryView: View {
             }
         }
 
+        let trimmedNote = stickyNote.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+
         if saveMode == .update {
+
             foodItem.name = name
             foodItem.type = type
             foodItem.source = resolvedSource
@@ -305,6 +316,16 @@ struct EditEntryView: View {
             foodItem.fiber = parseDouble(fiberValue)
             foodItem.isCustomDefaultServing = isCustomDefaultServing
             foodItem.customServingSize = parseOptionalDouble(customServingSize)
+            if trimmedNote.isEmpty {
+                foodItem.stickyNote = nil
+            } else {
+                if let existingNote = foodItem.stickyNote {
+                    existingNote.text = trimmedNote
+                    existingNote.lastUpdated = Date()
+                } else {
+                    foodItem.stickyNote = Note(text: trimmedNote)
+                }
+            }
 
             if cascade {
                 let allRecipeIngredients =
@@ -375,6 +396,9 @@ struct EditEntryView: View {
                 print("Error saving edited entry")
             }
         } else {
+            let resolvedStickyNote =
+                trimmedNote.isEmpty ? nil : Note(text: trimmedNote)
+
             let copiedEntry = FoodItem(
                 name: name,
                 type: type,
@@ -392,7 +416,8 @@ struct EditEntryView: View {
                 fat: parseDouble(fatValue),
                 fiber: parseDouble(fiberValue),
                 isCustomDefaultServing: isCustomDefaultServing,
-                customServingSize: parseOptionalDouble(customServingSize)
+                customServingSize: parseOptionalDouble(customServingSize),
+                stickyNote: resolvedStickyNote
             )
 
             modelContext.insert(copiedEntry)
@@ -455,6 +480,16 @@ struct EditEntryView: View {
                         }
                     }
                     .padding([.leading, .trailing])
+
+                    Card {
+                        WrappedInputRow(
+                            placeholder: "Pinned Note",
+                            text: $stickyNote,
+                            isEditable: true,
+                            characterLimit: 2000
+                        )
+                    }
+                    .padding([.top, .leading, .trailing])
 
                     Card {
                         RowGroup(.divider) {
@@ -595,6 +630,10 @@ struct EditEntryView: View {
                         }
 
                         Button {
+                            let trimmedNote = stickyNote.trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            )
+
                             let updatedDraft = DraftFoodItem(
                                 type: type,
                                 name: name,
@@ -616,7 +655,8 @@ struct EditEntryView: View {
                                 isCustomDefaultServing: isCustomDefaultServing,
                                 customServingSize: parseOptionalDouble(
                                     customServingSize
-                                )
+                                ),
+                                stickyNote: trimmedNote
                             )
                             onImportSave?(updatedDraft)
                             dismiss()

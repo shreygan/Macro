@@ -14,6 +14,9 @@ struct CustomSwipeRow<Content: View>: View {
     var onEdit: (() -> Void)? = nil
     var onFavorite: (() -> Void)? = nil
 
+    var onPin: (() -> Void)? = nil
+    var isPinned: Bool = false
+
     @Environment(SwipeFocusManager.self) private var focusManager
 
     @State private var horizontalOffset: CGFloat = 0
@@ -22,7 +25,7 @@ struct CustomSwipeRow<Content: View>: View {
     @State private var isDragging: Bool = false
     @State private var isVerticalDrag: Bool = false
 
-    private let buttonSize: CGFloat = 50
+    private let buttonSize: CGFloat = 44
     private let buttonSpacing: CGFloat = 12
     private let leadingPadding: CGFloat = 8
     private let trailingPadding: CGFloat = 16
@@ -30,13 +33,15 @@ struct CustomSwipeRow<Content: View>: View {
     private var totalRevealWidth: CGFloat {
         let buttonCount =
             (onDelete != nil ? 1 : 0) + (onEdit != nil ? 1 : 0)
-            + (onFavorite != nil ? 1 : 0)
+            + (onFavorite != nil ? 1 : 0) + (onPin != nil ? 1 : 0)
 
         if buttonCount == 0 { return 0 }
 
         let spacesCount = max(0, buttonCount - 1)
 
-        return (buttonSize * CGFloat(buttonCount))
+        return
+            (buttonSize
+            * CGFloat(buttonCount))
             + (buttonSpacing * CGFloat(spacesCount)) + trailingPadding
             + leadingPadding
     }
@@ -49,6 +54,7 @@ struct CustomSwipeRow<Content: View>: View {
                 if let onFavAction = onFavorite {
                     let favPos =
                         (onDelete != nil ? 1 : 0) + (onEdit != nil ? 1 : 0)
+                        + (onPin != nil ? 1 : 0)
                     let favScale = computeButtonScale(positionFromRight: favPos)
                     Button(action: {
                         closeRow()
@@ -56,9 +62,17 @@ struct CustomSwipeRow<Content: View>: View {
                     }) {
                         VStack(spacing: 4) {
                             Image(systemName: "star.fill")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(
+                                    .system(
+                                        size: 16,
+                                        weight: .semibold
+                                    )
+                                )
                                 .foregroundColor(.white)
-                                .frame(width: buttonSize, height: buttonSize)
+                                .frame(
+                                    width: buttonSize,
+                                    height: buttonSize
+                                )
                                 .background(Color.yellow)
                                 .clipShape(Circle())
 
@@ -69,6 +83,42 @@ struct CustomSwipeRow<Content: View>: View {
                     }
                     .scaleEffect(favScale)
                     .opacity(favScale > 0.01 ? 1 : 0)
+                }
+
+                if let onPinAction = onPin {
+                    let pinPos =
+                        (onDelete != nil ? 1 : 0) + (onEdit != nil ? 1 : 0)
+                    let pinScale = computeButtonScale(positionFromRight: pinPos)
+                    Button(action: {
+                        closeRow()
+                        onPinAction()
+                    }) {
+                        VStack(spacing: 4) {
+                            Image(
+                                systemName: isPinned
+                                    ? "pin.slash.fill" : "pin.fill"
+                            )
+                            .font(
+                                .system(
+                                    size: 16,
+                                    weight: .semibold
+                                )
+                            )
+                            .foregroundColor(.white)
+                            .frame(
+                                width: buttonSize,
+                                height: buttonSize
+                            )
+                            .background(Color.orange)
+                            .clipShape(Circle())
+
+                            Text(isPinned ? "Unpin" : "Pin")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .scaleEffect(pinScale)
+                    .opacity(pinScale > 0.01 ? 1 : 0)
                 }
 
                 if let onEditAction = onEdit {
@@ -82,9 +132,17 @@ struct CustomSwipeRow<Content: View>: View {
                     }) {
                         VStack(spacing: 4) {
                             Image(systemName: "pencil")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(
+                                    .system(
+                                        size: 16,
+                                        weight: .semibold
+                                    )
+                                )
                                 .foregroundColor(.white)
-                                .frame(width: buttonSize, height: buttonSize)
+                                .frame(
+                                    width: buttonSize,
+                                    height: buttonSize
+                                )
                                 .background(Color.gray)
                                 .clipShape(Circle())
 
@@ -105,9 +163,17 @@ struct CustomSwipeRow<Content: View>: View {
                     }) {
                         VStack(spacing: 4) {
                             Image(systemName: "trash")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(
+                                    .system(
+                                        size: 16,
+                                        weight: .semibold
+                                    )
+                                )
                                 .foregroundColor(.white)
-                                .frame(width: buttonSize, height: buttonSize)
+                                .frame(
+                                    width: buttonSize,
+                                    height: buttonSize
+                                )
                                 .background(Color.red)
                                 .clipShape(Circle())
 
@@ -124,6 +190,7 @@ struct CustomSwipeRow<Content: View>: View {
             .frame(width: totalRevealWidth, alignment: .trailing)
 
             content
+                .frame(minHeight: buttonSize + 16)
                 .contentShape(Rectangle())
                 .clipped()
                 .offset(x: horizontalOffset)
@@ -246,6 +313,8 @@ struct CustomSwipeRow<Content: View>: View {
 
 #Preview {
     @Previewable @State var focusManager = SwipeFocusManager()
+    //    @Previewable @State var text: String = ""
+
     let mockUnits = [
         ServingSizeUnit(unit: "bowl", displayOrder: 1),
         ServingSizeUnit(unit: "chip", pluralVariant: "chips", displayOrder: 2),
@@ -266,6 +335,23 @@ struct CustomSwipeRow<Content: View>: View {
                 ScrollView {
                     Card {
                         RowGroup(.divider) {
+
+                            CustomSwipeRow {
+                                WrappedInputRow(
+                                    placeholder: "Add a note...",
+                                    text: .constant("test"),
+                                    //                                    text: $text,
+                                    isSticky: true,
+                                    timestamp: Date()
+                                )
+                            } onDelete: {
+                                print("Custom delete chips")
+                            } onEdit: {
+                                print("Custom edit chips")
+                            } onPin: {
+                                print("Custom favorite chips")
+                            }
+
                             CustomSwipeRow {
                                 MealRow(
                                     name: "Grilled Chicken Salad",
@@ -362,7 +448,7 @@ struct CustomSwipeRow<Content: View>: View {
                                 print("Custom delete chips")
                             } onEdit: {
                                 print("Custom edit chips")
-                            } onFavorite: {
+                            } onPin: {
                                 print("Custom favorite chips")
                             }
                         }

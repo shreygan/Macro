@@ -264,6 +264,12 @@ struct ImportReviewView: View {
             let resolvedCategory = fetchOrCreateCategory(name: draft.category)
             let resolvedGroup = fetchOrCreateFoodGroup(name: draft.foodGroup)
 
+            let draftNoteText = (draft.stickyNote ?? "").trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            let resolvedStickyNote =
+                draftNoteText.isEmpty ? nil : Note(text: draftNoteText)
+
             let newFood = FoodItem(
                 id: UUID(),
                 name: draft.name,
@@ -283,6 +289,7 @@ struct ImportReviewView: View {
                 fiber: draft.fiber,
                 isCustomDefaultServing: draft.isCustomDefaultServing,
                 customServingSize: draft.customServingSize,
+                stickyNote: resolvedStickyNote,
                 dateAdded: Date()
             )
 
