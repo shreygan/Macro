@@ -1,5 +1,5 @@
 //
-//  MealPhotoGalleryCard.swift
+//  PhotoPickerCard.swift
 //  Macro
 //
 //  Created by Shrey Gangwar on 5/15/26.
@@ -14,7 +14,7 @@ struct LoggedPhoto: Identifiable {
     let pickerItem: PhotosPickerItem?
 }
 
-struct MealPhotoGalleryCard: View {
+struct PhotoPickerCard: View {
     @State private var images: [LoggedPhoto] = []
 
     @State private var showCamera = false
@@ -25,28 +25,43 @@ struct MealPhotoGalleryCard: View {
     let maxPhotos = 5
 
     var body: some View {
-        Card {
+        Group {
             if images.isEmpty {
-                addMenu
-                    .aspectRatio(1, contentMode: .fit)
+                emptyStateMenu
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
             } else {
-                TabView(selection: $currentTabIndex) {
-                    ForEach(images.indices, id: \.self) { index in
-                        InteractivePhotoView(image: images[index].image) {
-                            deleteImage(at: index)
-                        }
-                        .tag(index)
-                    }
-
-                    if images.count < maxPhotos {
-                        addMenu
-                            .tag(images.count)
-                    }
+                Card {
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .overlay(
+                            TabView(selection: $currentTabIndex) {
+                                ForEach(images.indices, id: \.self) { index in
+                                    InteractivePhotoView(image: images[index].image) {
+                                        deleteImage(at: index)
+                                    }
+                                    .padding(.horizontal, 5)
+                                    .tag(index)
+                                }
+                                
+                                if images.count < maxPhotos {
+                                    carouselAddSlide
+                                        .padding(.horizontal, 5)
+                                        .tag(images.count)
+                                }
+                            }
+                                .tabViewStyle(.page(indexDisplayMode: .always))
+                                .padding(.horizontal, -5)
+                        )
+                        .clipped()
                 }
-                .tabViewStyle(.page(indexDisplayMode: .always))
-                .aspectRatio(1, contentMode: .fit)
+                .padding()
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
             }
         }
+        .animation(
+            .spring(response: 0.4, dampingFraction: 0.8),
+            value: images.isEmpty
+        )
         .photosPicker(
             isPresented: $showPhotoLibrary,
             selection: $selectedPhotosPickerItems,
@@ -58,7 +73,6 @@ struct MealPhotoGalleryCard: View {
         .onChange(of: selectedPhotosPickerItems) { oldItems, newItems in
             Task {
                 let cameraPhotos = images.filter { $0.pickerItem == nil }
-
                 var updatedLibraryPhotos: [LoggedPhoto] = []
 
                 for item in newItems {
@@ -81,13 +95,13 @@ struct MealPhotoGalleryCard: View {
 
                 await MainActor.run {
                     let previouslyEmpty = images.isEmpty
-
-                    images = cameraPhotos + updatedLibraryPhotos
-
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8))
+                    {
+                        images = cameraPhotos + updatedLibraryPhotos
+                    }
                     if images.isEmpty { return }
 
                     let addedItems = newItems.filter { !oldItems.contains($0) }
-
                     let isStrictDeletion =
                         newItems.count < oldItems.count && addedItems.isEmpty
 
@@ -111,9 +125,8 @@ struct MealPhotoGalleryCard: View {
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraImagePicker { image in
-                images.append(LoggedPhoto(image: image, pickerItem: nil))
-
-                withAnimation(.easeInOut) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    images.append(LoggedPhoto(image: image, pickerItem: nil))
                     currentTabIndex = images.count - 1
                 }
             }
@@ -122,19 +135,23 @@ struct MealPhotoGalleryCard: View {
     }
 
     @ViewBuilder
-    private var addMenu: some View {
+    private var emptyStateMenu: some View {
         Menu {
-            Button {
-                showCamera = true
-            } label: {
-                Label("Take Picture", systemImage: "camera")
-            }
+            photoMenuOptions
+        } label: {
+            ButtonRow(
+                icon: .customSymbol("camera", tint: .primary),
+                title: "Add Photos",
+                topPadding: 16,
+                action: {}
+            )
+        }
+    }
 
-            Button {
-                showPhotoLibrary = true
-            } label: {
-                Label("Choose from Library", systemImage: "photo.on.rectangle")
-            }
+    @ViewBuilder
+    private var carouselAddSlide: some View {
+        Menu {
+            photoMenuOptions
         } label: {
             Image(systemName: "photo")
                 .font(.system(size: 40, weight: .medium))
@@ -144,6 +161,21 @@ struct MealPhotoGalleryCard: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
+    @ViewBuilder
+    private var photoMenuOptions: some View {
+        Button {
+            showCamera = true
+        } label: {
+            Label("Take Picture", systemImage: "camera")
+        }
+
+        Button {
+            showPhotoLibrary = true
+        } label: {
+            Label("Choose from Library", systemImage: "photo.on.rectangle")
+        }
+    }
+
     private func deleteImage(at index: Int) {
         let photoToRemove = images[index]
 
@@ -151,10 +183,10 @@ struct MealPhotoGalleryCard: View {
             selectedPhotosPickerItems.removeAll { $0 == item }
         }
 
-        images.remove(at: index)
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            images.remove(at: index)
 
-        if currentTabIndex >= images.count {
-            withAnimation(.easeInOut) {
+            if currentTabIndex >= images.count {
                 currentTabIndex = max(0, images.count - 1)
             }
         }
@@ -167,8 +199,8 @@ struct MealPhotoGalleryCard: View {
 
         Spacer()
 
-        MealPhotoGalleryCard()
-            .padding()
+        PhotoPickerCard()
+        //            .padding()
 
         Spacer()
     }
