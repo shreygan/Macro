@@ -414,8 +414,7 @@ struct LogRecipeView: View {
                         }
                         .padding([.top, .leading, .trailing])
 
-                        MealPhotoGalleryCard()
-                            .padding([.top, .leading, .trailing])
+                        PhotoPickerCard()
 
                         Spacer()
                     }
