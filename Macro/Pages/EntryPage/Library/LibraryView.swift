@@ -185,8 +185,30 @@ struct LibraryView<Header: View>: View {
                                 } : nil,
                             onFavorite: swipeActions.contains(.favorite)
                                 ? { food in
-                                    print("Favorited \(food.name)")
-                                } : nil
+                                    let descriptor = FetchDescriptor<
+                                        FavoriteEntry
+                                    >()
+                                    let existingFavorites =
+                                        (try? modelContext.fetch(descriptor))
+                                        ?? []
+
+                                    let maxIndex =
+                                        existingFavorites.compactMap {
+                                            $0.orderIndex
+                                        }.max() ?? -1
+
+                                    let newFavorite = FavoriteEntry(
+                                        orderIndex: maxIndex + 1,
+                                        foodItem: food
+                                    )
+                                    modelContext.insert(newFavorite)
+
+                                    try? modelContext.save()
+
+                                } : nil,
+                            isFavorited: { food in
+                                food.favoriteEntry != nil
+                            }
                         )
                         .padding([.horizontal, .bottom])
                     }

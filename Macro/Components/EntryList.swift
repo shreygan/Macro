@@ -5,53 +5,77 @@
 //  Created by Shrey Gangwar on 5/31/26.
 //
 
+import SwiftData
 import SwiftUI
 
 struct EntryList<Item: Identifiable & Equatable, RowContent: View>: View {
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var focusManager = SwipeFocusManager()
+
     var title: String? = nil
 
     var items: [Item]
     var allowSwipeActions: Bool = true
+    var showCard: Bool = true
 
     @ViewBuilder var rowContent: (Item) -> RowContent
 
     var onDelete: ((Item) -> Void)? = nil
     var onEdit: ((Item) -> Void)? = nil
     var onFavorite: ((Item) -> Void)? = nil
+    var isFavorited: ((Item) -> Bool)? = nil
 
     var body: some View {
-        Card(title) {
-            RowGroup(.divider) {
-                ForEach(items) { item in
-                    if allowSwipeActions {
-                        let deleteAction: (() -> Void)? =
-                            onDelete != nil ? { onDelete?(item) } : nil
-                        let editAction: (() -> Void)? =
-                            onEdit != nil ? { onEdit?(item) } : nil
-                        let favoriteAction: (() -> Void)? =
-                            onFavorite != nil ? { onFavorite?(item) } : nil
+        let content = RowGroup(.divider) {
+            ForEach(items) { item in
+                if allowSwipeActions {
+                    let deleteAction: (() -> Void)? =
+                        onDelete != nil ? { onDelete?(item) } : nil
+                    let editAction: (() -> Void)? =
+                        onEdit != nil ? { onEdit?(item) } : nil
+                    let favoriteAction: (() -> Void)? =
+                        onFavorite != nil ? { onFavorite?(item) } : nil
 
-                        CustomSwipeRow(
-                            content: { rowContent(item) },
-                            onDelete: deleteAction,
-                            onEdit: editAction,
-                            onFavorite: favoriteAction
-                        )
-                        .transition(
-                            .asymmetric(
-                                insertion: .identity,
-                                removal: .opacity.combined(
-                                    with: .scale(scale: 0.9)
-                                )
+                    CustomSwipeRow(
+                        content: { rowContent(item) },
+                        onDelete: deleteAction,
+                        onEdit: editAction,
+                        onFavorite: favoriteAction,
+                        isFavorited: isFavorited?(item) ?? false,
+                    )
+                    .transition(
+                        .asymmetric(
+                            insertion: .identity,
+                            removal: .opacity.combined(
+                                with: .scale(scale: 0.9)
                             )
                         )
-                    } else {
-                        rowContent(item)
-                    }
+                    )
+                } else {
+                    rowContent(item)
                 }
             }
         }
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: items)
+
+        if showCard {
+            Card(title) {
+                content
+            }
+            .environment(focusManager)
+            .animation(
+                .spring(response: 0.4, dampingFraction: 0.8),
+                value: items
+            )
+        } else {
+            content
+                .environment(focusManager)
+                .animation(
+                    .spring(response: 0.4, dampingFraction: 0.8),
+                    value: items
+                )
+        }
+
     }
 }
 

@@ -12,7 +12,9 @@ struct CustomSwipeRow<Content: View>: View {
     @ViewBuilder var content: Content
     var onDelete: (() -> Void)? = nil
     var onEdit: (() -> Void)? = nil
+
     var onFavorite: (() -> Void)? = nil
+    var isFavorited: Bool = false
 
     var onPin: (() -> Void)? = nil
     var isPinned: Bool = false
@@ -61,22 +63,25 @@ struct CustomSwipeRow<Content: View>: View {
                         onFavAction()
                     }) {
                         VStack(spacing: 4) {
-                            Image(systemName: "star.fill")
-                                .font(
-                                    .system(
-                                        size: 16,
-                                        weight: .semibold
-                                    )
+                            Image(
+                                systemName: isFavorited
+                                    ? "star.slash.fill" : "star.fill"
+                            )
+                            .font(
+                                .system(
+                                    size: 16,
+                                    weight: .semibold
                                 )
-                                .foregroundColor(.white)
-                                .frame(
-                                    width: buttonSize,
-                                    height: buttonSize
-                                )
-                                .background(Color.yellow)
-                                .clipShape(Circle())
+                            )
+                            .foregroundColor(.white)
+                            .frame(
+                                width: buttonSize,
+                                height: buttonSize
+                            )
+                            .background(Color.yellow)
+                            .clipShape(Circle())
 
-                            Text("Favorite")
+                            Text(isFavorited ? "Unfavorite" : "Favorite")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(.secondary)
                         }

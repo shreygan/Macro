@@ -33,6 +33,7 @@ struct MacroApp: App {
             CategorySource.self,
             FoodGroupSource.self,
             ServingSizeUnit.self,
+            FavoriteEntry.self,
         ])
         let modelConfiguration = ModelConfiguration(
             schema: schema,

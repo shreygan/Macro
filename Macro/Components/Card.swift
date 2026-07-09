@@ -11,6 +11,7 @@ struct Card<Content: View, MenuContent: View>: View {
     var title: String?
     var cornerRadius: CGFloat
     var tintColor: Color
+    var titleBottomPadding: CGFloat
 
     var content: Content
     var menuItems: MenuContent
@@ -22,9 +23,9 @@ struct Card<Content: View, MenuContent: View>: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 16)
+                    .padding(.top, 12)
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 4)
+                    .padding(.bottom, titleBottomPadding)
             }
 
             content
@@ -74,11 +75,13 @@ extension Card where MenuContent == EmptyView {
         _ title: String? = nil,
         cornerRadius: CGFloat = 24.0,
         tintColor: Color = Color(white: 0.96),
+        titleBottomPadding: CGFloat = 0,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.cornerRadius = cornerRadius
         self.tintColor = tintColor
+        self.titleBottomPadding = titleBottomPadding
         self.content = content()
         self.menuItems = EmptyView()
     }
@@ -89,12 +92,14 @@ extension Card {
         _ title: String? = nil,
         cornerRadius: CGFloat = 24.0,
         tintColor: Color = Color(white: 0.96),
+        titleBottomPadding: CGFloat = 0,
         @ViewBuilder content: () -> Content,
         @ViewBuilder menuItems: () -> MenuContent
     ) {
         self.title = title
         self.cornerRadius = cornerRadius
         self.tintColor = tintColor
+        self.titleBottomPadding = titleBottomPadding
         self.content = content()
         self.menuItems = menuItems()
     }
