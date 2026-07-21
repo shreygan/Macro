@@ -29,6 +29,8 @@ struct NewEntryView: View {
     @State private var foodToDelete: FoodItem?
     @State private var showEditSheet = false
     @State private var foodToEdit: FoodItem?
+    
+    @State private var showReorderFavoritesSheet = false
 
     @ViewBuilder
     private func foodRow(for food: FoodItem) -> some View {
@@ -183,10 +185,6 @@ struct NewEntryView: View {
                                     rowContent: { food in
                                         foodRow(for: food)
                                     },
-                                    onDelete: { food in
-                                        foodToDelete = food
-                                        showDeleteAlert = true
-                                    },
                                     onEdit: { food in
                                         foodToEdit = food
                                         showEditSheet = true
@@ -201,6 +199,12 @@ struct NewEntryView: View {
                                         food.favoriteEntry != nil
                                     }
                                 )
+                            }
+                        } menuItems: {
+                            Button {
+                                showReorderFavoritesSheet = true
+                            } label: {
+                                Label("Reorder Favorites", systemImage: "arrow.up.arrow.down")
                             }
                         }
                         .padding([.top, .leading, .trailing])
@@ -262,6 +266,9 @@ struct NewEntryView: View {
             } else {
                 EditEntryView(foodItem: food)
             }
+        }
+        .sheet(isPresented: $showReorderFavoritesSheet) {
+            ReorderFavoritesView()
         }
     }
 }
