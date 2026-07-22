@@ -16,6 +16,8 @@ struct LogEntryView: View {
     @Query(sort: \EntrySource.displayOrder) var sourceOptions: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var categoryOptions:
         [CategorySource]
+    @Query(sort: \FoodGroupSource.displayOrder) var foodGroupOptions:
+        [FoodGroupSource]
     @Query(sort: \ServingSizeUnit.displayOrder) var portionUnitOptions:
         [ServingSizeUnit]
 
@@ -30,6 +32,7 @@ struct LogEntryView: View {
 
     @State private var sourceSelection: String
     @State private var categorySelection: String
+    @State private var foodGroupSelection: String
 
     @State private var date = Date()
     @State private var time = Date()
@@ -128,6 +131,9 @@ struct LogEntryView: View {
 
         _sourceSelection = State(initialValue: food.source?.source ?? "")
         _categorySelection = State(initialValue: food.category?.category ?? "")
+        _foodGroupSelection = State(
+            initialValue: food.foodGroup?.foodGroup ?? ""
+        )
 
         let startingPortionDouble: Double
         if food.isCustomDefaultServing, let custom = food.customServingSize {
@@ -191,7 +197,6 @@ struct LogEntryView: View {
                     VStack {
                         Card {
                             // TODO: FIX DROPDOWN ROW GLITCHING FOR 2ish SECONDS WHEN SWITCHING OPTIONS
-                            // TODO: ENSURE LOGGING INGREDIENTS IS CAPTURED IN LOG ENTRY VIEW
                             RowGroup(.divider) {
                                 DropdownPillRow(
                                     title: "Source",
@@ -204,17 +209,35 @@ struct LogEntryView: View {
                                     },
                                     selection: $sourceSelection
                                 )
-                                DropdownPillRow(
-                                    title: "Category",
-                                    options: [""]
-                                        + categoryOptions.map { $0.category }
-                                        .filter {
-                                            !$0.trimmingCharacters(
-                                                in: .whitespacesAndNewlines
-                                            ).isEmpty
-                                        },
-                                    selection: $categorySelection
-                                )
+
+                                if food.type == .food {
+                                    DropdownPillRow(
+                                        title: "Category",
+                                        options: [""]
+                                            + categoryOptions.map {
+                                                $0.category
+                                            }.filter {
+                                                !$0.trimmingCharacters(
+                                                    in: .whitespacesAndNewlines
+                                                ).isEmpty
+                                            },
+                                        selection: $categorySelection
+                                    )
+                                } else {
+                                    DropdownPillRow(
+                                        title: "Food Group",
+                                        options: [""]
+                                            + foodGroupOptions.map {
+                                                $0.foodGroup
+                                            }.filter {
+                                                !$0.trimmingCharacters(
+                                                    in: .whitespacesAndNewlines
+                                                ).isEmpty
+                                            },
+                                        selection: $foodGroupSelection
+                                    )
+                                }
+
                                 DateTimePillRow(
                                     title: "Date & Time",
                                     dateSelection: $date,
@@ -426,7 +449,9 @@ struct LogEntryView: View {
                 .safeAreaInset(edge: .top) {
                     Card {
                         MealRow(
-                            name: name.isEmpty ? "New Food" : name,
+                            name: name.isEmpty
+                                ? "New \(food.type.rawValue.capitalized)"
+                                : name,
                             source: sourceSelection,
                             isCustomDefaultServing: false,
                             customServingSize: "",
