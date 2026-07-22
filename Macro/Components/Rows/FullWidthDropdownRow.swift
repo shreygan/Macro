@@ -25,7 +25,7 @@ struct FullWidthDropdownRow: View {
 
             Menu {
                 ForEach(options, id: \.self) { option in
-                    Button(option) {
+                    Button(option.isEmpty ? "-" : option) {
                         selection = option
                     }
                 }

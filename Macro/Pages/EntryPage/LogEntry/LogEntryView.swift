@@ -126,10 +126,8 @@ struct LogEntryView: View {
         self.name = food.name
         self.isPushedView = isPushedView
 
-        _sourceSelection = State(initialValue: food.source?.source ?? "Home")
-        _categorySelection = State(
-            initialValue: food.category?.category ?? "Meal"
-        )
+        _sourceSelection = State(initialValue: food.source?.source ?? "")
+        _categorySelection = State(initialValue: food.category?.category ?? "")
 
         let startingPortionDouble: Double
         if food.isCustomDefaultServing, let custom = food.customServingSize {
@@ -192,17 +190,29 @@ struct LogEntryView: View {
                 ScrollView {
                     VStack {
                         Card {
+                            // TODO: FIX DROPDOWN ROW GLITCHING FOR 2ish SECONDS WHEN SWITCHING OPTIONS
+                            // TODO: ENSURE LOGGING INGREDIENTS IS CAPTURED IN LOG ENTRY VIEW
                             RowGroup(.divider) {
                                 DropdownPillRow(
                                     title: "Source",
-                                    options: sourceOptions.map { $0.source },
+                                    options: [""]
+                                        + sourceOptions.map { $0.source }.filter
+                                    {
+                                        !$0.trimmingCharacters(
+                                            in: .whitespacesAndNewlines
+                                        ).isEmpty
+                                    },
                                     selection: $sourceSelection
                                 )
                                 DropdownPillRow(
                                     title: "Category",
-                                    options: categoryOptions.map {
-                                        $0.category
-                                    },
+                                    options: [""]
+                                        + categoryOptions.map { $0.category }
+                                        .filter {
+                                            !$0.trimmingCharacters(
+                                                in: .whitespacesAndNewlines
+                                            ).isEmpty
+                                        },
                                     selection: $categorySelection
                                 )
                                 DateTimePillRow(

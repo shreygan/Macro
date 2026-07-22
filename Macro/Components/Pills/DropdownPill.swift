@@ -41,7 +41,7 @@ struct DropdownPill: View {
                 Menu {
                     Picker("Options", selection: $selection) {
                         ForEach(options, id: \.self) { option in
-                            Text(option).tag(option)
+                            Text(option.isEmpty ? "-" : option).tag(option)
                         }
                     }
                     .pickerStyle(.inline)
@@ -57,9 +57,11 @@ struct DropdownPill: View {
                     }
                 } label: {
                     HStack(spacing: 4) {
-                        Text(selection)
+                        Text(selection.isEmpty ? "-" : selection)
                             .font(.system(size: 16))
-                            .foregroundColor(.primary)
+                            .foregroundColor(
+                                selection.isEmpty ? .secondary : .primary
+                            )
 
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.system(size: 12, weight: .semibold))
@@ -72,8 +74,10 @@ struct DropdownPill: View {
                     )
                 }
                 .onAppear {
-                    if selection.isEmpty, let first = options.first {
-                        selection = first
+                    if selection.isEmpty && !options.contains("") {
+                        if let first = options.first {
+                            selection = first
+                        }
                     }
                 }
             }
@@ -100,7 +104,9 @@ struct DropdownPill: View {
 
     private func validateAndRevert() {
         if selection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            if let first = options.first {
+            if options.contains("") {
+                selection = ""
+            } else if let first = options.first {
                 selection = first
             }
             isCustomMode = false

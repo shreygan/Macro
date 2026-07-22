@@ -129,7 +129,7 @@ struct AddRecipeView: View {
         let trimmedSource = source.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
-        if !trimmedSource.isEmpty {
+        if !trimmedSource.isEmpty && trimmedSource != "-" {
             if let existing = savedSources.first(where: {
                 $0.source == trimmedSource
             }) {
@@ -151,7 +151,7 @@ struct AddRecipeView: View {
         let trimmedCategory = category.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
-        if !trimmedCategory.isEmpty {
+        if !trimmedCategory.isEmpty && trimmedCategory != "-" {
             if let existing = savedCategories.first(where: {
                 $0.category == trimmedCategory
             }) {
@@ -300,15 +300,29 @@ struct AddRecipeView: View {
                                 )
                                 FullWidthDropdownRow(
                                     placeholder: "Source",
-                                    options: savedSources.map { $0.source },
+                                    options: [""]
+                                        + savedSources.map { $0.source }.filter
+                                    {
+                                        let trimmed = $0.trimmingCharacters(
+                                            in: .whitespacesAndNewlines
+                                        )
+                                        return !trimmed.isEmpty
+                                            && trimmed != "-"
+                                    },
                                     selection: $source
                                 )
 
                                 FullWidthDropdownRow(
                                     placeholder: "Category",
-                                    options: savedCategories.map {
-                                        $0.category
-                                    },
+                                    options: [""]
+                                        + savedCategories.map { $0.category }
+                                        .filter {
+                                            let trimmed = $0.trimmingCharacters(
+                                                in: .whitespacesAndNewlines
+                                            )
+                                            return !trimmed.isEmpty
+                                                && trimmed != "-"
+                                        },
                                     selection: $category
                                 )
 

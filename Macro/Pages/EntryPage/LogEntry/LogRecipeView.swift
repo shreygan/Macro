@@ -75,11 +75,19 @@ struct LogRecipeView: View {
     }
 
     var mappedSourceOptions: [String] {
-        sourceOptions.map { $0.source }
+        [""]
+            + sourceOptions.map { $0.source }.filter {
+                let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                return !trimmed.isEmpty && trimmed != "-"
+            }
     }
 
     var mappedCategoryOptions: [String] {
-        categoryOptions.map { $0.category }
+        [""]
+            + categoryOptions.map { $0.category }.filter {
+                let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                return !trimmed.isEmpty && trimmed != "-"
+            }
     }
 
     var mappedUnitOptions: [String] {
@@ -171,8 +179,8 @@ struct LogRecipeView: View {
         self.name = recipe.name
         self.isPushedView = isPushedView
 
-        let startSource = recipe.source?.source ?? "Home"
-        let startCategory = recipe.category?.category ?? "Meal"
+        let startSource = recipe.source?.source ?? ""
+        let startCategory = recipe.category?.category ?? ""
 
         self.initialSourceSelection = startSource
         self.initialCategorySelection = startCategory
