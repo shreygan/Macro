@@ -114,7 +114,7 @@ struct AddEntryView: View {
         let trimmedSource = source.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
-        if !trimmedSource.isEmpty {
+        if !trimmedSource.isEmpty && trimmedSource != "-" {
             if let existing = savedSources.first(where: {
                 $0.source == trimmedSource
             }) {
@@ -137,7 +137,7 @@ struct AddEntryView: View {
             let trimmedCategory = category.trimmingCharacters(
                 in: .whitespacesAndNewlines
             )
-            if !trimmedCategory.isEmpty {
+            if !trimmedCategory.isEmpty && trimmedCategory != "-" {
                 if let existing = savedCategories.first(where: {
                     $0.category == trimmedCategory
                 }) {
@@ -161,7 +161,7 @@ struct AddEntryView: View {
             let trimmedGroup = foodGroup.trimmingCharacters(
                 in: .whitespacesAndNewlines
             )
-            if !trimmedGroup.isEmpty {
+            if !trimmedGroup.isEmpty && trimmedGroup != "-" {
                 if let existing = savedFoodGroups.first(where: {
                     $0.foodGroup == trimmedGroup
                 }) {
@@ -281,24 +281,37 @@ struct AddEntryView: View {
                             )
                             FullWidthDropdownRow(
                                 placeholder: "Source",
-                                options: savedSources.map { $0.source },
+                                options: [""]
+                                    + savedSources.map { $0.source }.filter {
+                                        !$0.trimmingCharacters(
+                                            in: .whitespacesAndNewlines
+                                        ).isEmpty
+                                    },
                                 selection: $source
                             )
 
                             if entryType == .food {
                                 FullWidthDropdownRow(
                                     placeholder: "Category",
-                                    options: savedCategories.map {
-                                        $0.category
-                                    },
+                                    options: [""]
+                                        + savedCategories.map { $0.category }
+                                        .filter {
+                                            !$0.trimmingCharacters(
+                                                in: .whitespacesAndNewlines
+                                            ).isEmpty
+                                        },
                                     selection: $category
                                 )
                             } else {
                                 FullWidthDropdownRow(
                                     placeholder: "Food Group",
-                                    options: savedFoodGroups.map {
-                                        $0.foodGroup
-                                    },
+                                    options: [""]
+                                        + savedFoodGroups.map { $0.foodGroup }
+                                        .filter {
+                                            !$0.trimmingCharacters(
+                                                in: .whitespacesAndNewlines
+                                            ).isEmpty
+                                        },
                                     selection: $foodGroup
                                 )
                             }

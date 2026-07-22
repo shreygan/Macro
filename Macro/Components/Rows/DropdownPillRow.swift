@@ -33,7 +33,7 @@ struct DropdownPillRow: View {
 
 #Preview {
     struct DropdownPillPreviewWrapper: View {
-        @State private var options = ["1 Cup", "1/2 Cup", "1 Tbsp", "100g"]
+        @State private var options = ["1 Cup", "1/2 Cup", "1 Tbsp", "100g", "Real Long Option"]
         @State private var selection = "1 Cup"
 
         var body: some View {
