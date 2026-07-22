@@ -73,6 +73,8 @@ struct DropdownPill: View {
                         Capsule().fill(Color(UIColor.tertiarySystemFill))
                     )
                 }
+                .id(selection)
+                .fixedSize()
                 .onAppear {
                     if selection.isEmpty && !options.contains("") {
                         if let first = options.first {
@@ -128,7 +130,10 @@ struct DropdownPill: View {
                         title: "Serving Size"
                     ) {
                         DropdownPill(
-                            options: ["1 Cup", "1/2 Cup", "1 Tbsp", "100g"],
+                            options: [
+                                "1 Cup", "1/2 Cup", "1 Tbsp", "100g",
+                                "Really Long Option",
+                            ],
                             selection: $servingSize
                         )
                     }

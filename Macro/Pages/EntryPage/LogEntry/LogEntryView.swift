@@ -196,7 +196,6 @@ struct LogEntryView: View {
                 ScrollView {
                     VStack {
                         Card {
-                            // TODO: FIX DROPDOWN ROW GLITCHING FOR 2ish SECONDS WHEN SWITCHING OPTIONS
                             RowGroup(.divider) {
                                 DropdownPillRow(
                                     title: "Source",
