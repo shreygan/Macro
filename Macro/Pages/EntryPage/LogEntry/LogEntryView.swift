@@ -9,6 +9,8 @@ import SwiftData
 import SwiftUI
 
 struct LogEntryView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.rootDismiss) var rootDismiss
     @Environment(\.dismiss) var dismiss
 
     @State private var focusManager = SwipeFocusManager()
@@ -71,6 +73,8 @@ struct LogEntryView: View {
 
     @State private var showingAllNotes: Bool = false
 
+    @State private var imageData: Data? = nil
+
     @State private var dateAdded: Date
 
     var mappedSourceOptions: [String] {
@@ -124,7 +128,79 @@ struct LogEntryView: View {
         return scaledWeight.formatted(.number.precision(.fractionLength(0...2)))
     }
 
-    init(food: FoodItem, isPushedView: Bool = true) {
+    private func combineDateAndTime(date: Date, time: Date) -> Date {
+        let calendar = Calendar.current
+        let dateComponents = calendar.dateComponents(
+            [.year, .month, .day],
+            from: date
+        )
+        let timeComponents = calendar.dateComponents(
+            [.hour, .minute, .second],
+            from: time
+        )
+
+        var combinedComponents = DateComponents()
+        combinedComponents.year = dateComponents.year
+        combinedComponents.month = dateComponents.month
+        combinedComponents.day = dateComponents.day
+        combinedComponents.hour = timeComponents.hour
+        combinedComponents.minute = timeComponents.minute
+        combinedComponents.second = timeComponents.second
+
+        return calendar.date(from: combinedComponents) ?? Date()
+    }
+
+    private func parseDouble(_ string: String) -> Double {
+        let normalized = string.replacingOccurrences(of: ",", with: ".")
+        return Double(normalized) ?? 0.0
+    }
+
+    private func saveEntry() {
+        let combinedDate = combineDateAndTime(date: date, time: time)
+
+        let noteToSave = isAddingNewNote ? newNote : stickyNote
+        let trimmedNote = noteToSave.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        let resolvedNote = trimmedNote.isEmpty ? nil : trimmedNote
+
+        let newLog = LoggedEntry(
+            name: name,
+            typeRawValue: food.type.rawValue,
+            originalFoodItem: food,
+            timestamp: combinedDate,
+            location: location.isEmpty ? nil : location,
+            loggedQuantity: parseDouble(portionQuantity),
+            loggedUnit: portionUnitSelection,
+            calories: parseDouble(calorie),
+            protein: parseDouble(protein),
+            carbs: parseDouble(carbs),
+            fat: parseDouble(fat),
+            fiber: parseDouble(fiber),
+            isManualOverride: manualOverrideToggle,
+            logNote: resolvedNote,
+            imageData: imageData
+        )
+
+        modelContext.insert(newLog)
+
+        do {
+            try modelContext.save()
+
+            if let rootDismiss {
+                rootDismiss()
+            } else {
+                dismiss()
+            }
+        } catch {
+            print("Failed to save logged entry: \(error.localizedDescription)")
+        }
+    }
+
+    init(
+        food: FoodItem,
+        isPushedView: Bool = true,
+    ) {
         self.food = food
         self.name = food.name
         self.isPushedView = isPushedView
@@ -492,11 +568,7 @@ struct LogEntryView: View {
                     ToolbarItemGroup(placement: .topBarTrailing) {
 
                         Button {
-                            // TODO: Implement actual Logging & Saving logic later
-                            print(
-                                "Logging."
-                            )
-
+                            saveEntry()
                         } label: {
                             Image(systemName: "plus")
                                 .foregroundStyle(.primary)
