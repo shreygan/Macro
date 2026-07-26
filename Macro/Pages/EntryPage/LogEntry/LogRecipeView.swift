@@ -15,7 +15,11 @@ enum LogRecipeSaveOption: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+// TODO: IMPLEMENT THE PHOTO SAVING TO DB FOR ALL LOGGED ENTRIES
+
 struct LogRecipeView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.rootDismiss) var rootDismiss
     @Environment(\.dismiss) var dismiss
 
     @Query(sort: \EntrySource.displayOrder) var sourceOptions: [EntrySource]
@@ -65,6 +69,8 @@ struct LogRecipeView: View {
 
     @State private var showingAllNotes: Bool = false
     @State private var dateAdded: Date
+
+    @State private var imageData: Data? = nil
 
     var isEdited: Bool {
         draftIngredients != initialIngredients
@@ -174,7 +180,116 @@ struct LogRecipeView: View {
         return scaledWeight.formatted(.number.precision(.fractionLength(0...2)))
     }
 
-    init(recipe: FoodItem, isPushedView: Bool = true) {
+    private func combineDateAndTime(date: Date, time: Date) -> Date {
+        let calendar = Calendar.current
+        let dateComponents = calendar.dateComponents(
+            [.year, .month, .day],
+            from: date
+        )
+        let timeComponents = calendar.dateComponents(
+            [.hour, .minute, .second],
+            from: time
+        )
+
+        var combinedComponents = DateComponents()
+        combinedComponents.year = dateComponents.year
+        combinedComponents.month = dateComponents.month
+        combinedComponents.day = dateComponents.day
+        combinedComponents.hour = timeComponents.hour
+        combinedComponents.minute = timeComponents.minute
+        combinedComponents.second = timeComponents.second
+
+        return calendar.date(from: combinedComponents) ?? Date()
+    }
+
+    private func parseDouble(_ string: String) -> Double {
+        let normalized = string.replacingOccurrences(of: ",", with: ".")
+        return Double(normalized) ?? 0.0
+    }
+
+    private func saveEntry() {
+        let combinedDate = combineDateAndTime(date: date, time: time)
+
+        let noteToSave = isAddingNewNote ? newNote : stickyNote
+        let trimmedNote = noteToSave.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        let resolvedNote = trimmedNote.isEmpty ? nil : trimmedNote
+
+        let mainLog = LoggedEntry(
+            name: name.isEmpty ? "New Recipe" : name,
+            typeRawValue: recipe.type.rawValue,
+            originalFoodItem: recipe,
+            parentEntry: nil,
+            timestamp: combinedDate,
+            location: location.isEmpty ? nil : location,
+            loggedQuantity: parseDouble(portionQuantity),
+            loggedUnit: portionUnitSelection,
+            calories: displayCalories,
+            protein: displayProtein,
+            carbs: displayCarbs,
+            fat: displayFat,
+            fiber: displayFiber,
+            isManualOverride: false,
+            logNote: resolvedNote,
+            imageData: imageData
+        )
+
+        modelContext.insert(mainLog)
+
+        for draft in draftIngredients {
+            let baseDraftQuantity = parseDouble(draft.quantity)
+            let scaledQuantity = baseDraftQuantity * activeMultiplier
+
+            let ingredientLog = LoggedEntry(
+                name: draft.name,
+                typeRawValue: "ingredient",
+                originalFoodItem: nil,
+                parentEntry: mainLog,
+                timestamp: combinedDate,
+                location: location.isEmpty ? nil : location,
+                loggedQuantity: scaledQuantity,
+                loggedUnit: draft.unit,
+                calories: draft.activeCalories * activeMultiplier,
+                protein: draft.activeProtein * activeMultiplier,
+                carbs: draft.activeCarbs * activeMultiplier,
+                fat: draft.activeFat * activeMultiplier,
+                fiber: draft.activeFiber * activeMultiplier,
+                isManualOverride: false,
+                logNote: nil
+            )
+
+            modelContext.insert(ingredientLog)
+        }
+
+        if saveOption == .updateOriginal {
+            recipe.source = sourceOptions.first(where: {
+                $0.source == sourceSelection
+            })
+            recipe.category = categoryOptions.first(where: {
+                $0.category == categorySelection
+            })
+        } else if saveOption == .saveAsNew {
+            // TODO: Handle duplication if necessary
+        }
+
+        do {
+            try modelContext.save()
+
+            if let rootDismiss {
+                rootDismiss()
+            } else {
+                dismiss()
+            }
+        } catch {
+            print("Failed to save recipe entry: \(error.localizedDescription)")
+        }
+    }
+
+    init(
+        recipe: FoodItem,
+        isPushedView: Bool = true,
+    ) {
         self.recipe = recipe
         self.name = recipe.name
         self.isPushedView = isPushedView
@@ -494,11 +609,7 @@ struct LogRecipeView: View {
                     ToolbarItemGroup(placement: .topBarTrailing) {
 
                         Button {
-                            // TODO: Implement actual Logging & Saving logic later
-                            print(
-                                "Log Triggered. Save action: \(saveOption.rawValue)"
-                            )
-
+                            saveEntry()
                         } label: {
                             Image(systemName: "plus")
                                 .foregroundStyle(.primary)
