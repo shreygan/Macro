@@ -29,7 +29,7 @@ struct NewEntryView: View {
     @State private var foodToDelete: FoodItem?
     @State private var showEditSheet = false
     @State private var foodToEdit: FoodItem?
-    
+
     @State private var showReorderFavoritesSheet = false
 
     @ViewBuilder
@@ -204,7 +204,10 @@ struct NewEntryView: View {
                             Button {
                                 showReorderFavoritesSheet = true
                             } label: {
-                                Label("Reorder Favorites", systemImage: "arrow.up.arrow.down")
+                                Label(
+                                    "Reorder Favorites",
+                                    systemImage: "arrow.up.arrow.down"
+                                )
                             }
                         }
                         .padding([.top, .leading, .trailing])
@@ -232,6 +235,7 @@ struct NewEntryView: View {
                 }
             }
         }
+        .environment(\.rootDismiss, { dismiss() })
         .sheet(isPresented: $showAddIngredientSheet) {
             AddEntryView(
                 entryType: .ingredient,
