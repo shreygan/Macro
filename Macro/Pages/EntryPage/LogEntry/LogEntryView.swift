@@ -318,6 +318,7 @@ struct LogEntryView: View {
                                     dateSelection: $date,
                                     timeSelection: $time
                                 )
+
                                 PillRow(title: "Location", text: $location)
                             }
                         }
