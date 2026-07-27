@@ -73,7 +73,7 @@ struct LogEntryView: View {
 
     @State private var showingAllNotes: Bool = false
 
-    @State private var imageData: Data? = nil
+    @State private var selectedPhotos: [LoggedPhoto] = []
 
     @State private var dateAdded: Date
 
@@ -178,9 +178,18 @@ struct LogEntryView: View {
             fat: parseDouble(fat),
             fiber: parseDouble(fiber),
             isManualOverride: manualOverrideToggle,
-            logNote: resolvedNote,
-            imageData: imageData
+            logNote: resolvedNote
         )
+
+        let photoEntities = selectedPhotos.map { photo in
+            EntryPhoto(
+                imageData: photo.originalData,
+                scale: Double(photo.scale),
+                offsetX: Double(photo.offset.width),
+                offsetY: Double(photo.offset.height)
+            )
+        }
+        newLog.photos = photoEntities
 
         modelContext.insert(newLog)
 
@@ -517,7 +526,7 @@ struct LogEntryView: View {
                         }
                         .padding([.top, .leading, .trailing])
 
-                        PhotoPickerCard()
+                        PhotoPickerCard(images: $selectedPhotos)
 
                         Spacer()
                     }

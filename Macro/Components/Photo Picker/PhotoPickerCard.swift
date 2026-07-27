@@ -11,11 +11,15 @@ import SwiftUI
 struct LoggedPhoto: Identifiable {
     let id = UUID()
     let image: UIImage
+    let originalData: Data
     let pickerItem: PhotosPickerItem?
+
+    var scale: CGFloat = 1.0
+    var offset: CGSize = .zero
 }
 
 struct PhotoPickerCard: View {
-    @State private var images: [LoggedPhoto] = []
+    @Binding var images: [LoggedPhoto]
 
     @State private var showCamera = false
     @State private var showPhotoLibrary = false
@@ -23,6 +27,10 @@ struct PhotoPickerCard: View {
     @State private var selectedPhotosPickerItems: [PhotosPickerItem] = []
 
     let maxPhotos = 5
+
+    private var availableSelectionCount: Int {
+        maxPhotos - images.filter({ $0.pickerItem == nil }).count
+    }
 
     var body: some View {
         Group {
@@ -36,21 +44,22 @@ struct PhotoPickerCard: View {
                         .overlay(
                             TabView(selection: $currentTabIndex) {
                                 ForEach(images.indices, id: \.self) { index in
-                                    InteractivePhotoView(image: images[index].image) {
+                                    InteractivePhotoView(photo: $images[index])
+                                    {
                                         deleteImage(at: index)
                                     }
                                     .padding(.horizontal, 5)
                                     .tag(index)
                                 }
-                                
+
                                 if images.count < maxPhotos {
                                     carouselAddSlide
                                         .padding(.horizontal, 5)
                                         .tag(images.count)
                                 }
                             }
-                                .tabViewStyle(.page(indexDisplayMode: .always))
-                                .padding(.horizontal, -5)
+                            .tabViewStyle(.page(indexDisplayMode: .always))
+                            .padding(.horizontal, -5)
                         )
                         .clipped()
                 }
@@ -65,8 +74,7 @@ struct PhotoPickerCard: View {
         .photosPicker(
             isPresented: $showPhotoLibrary,
             selection: $selectedPhotosPickerItems,
-            maxSelectionCount: maxPhotos
-                - images.filter({ $0.pickerItem == nil }).count,
+            maxSelectionCount: availableSelectionCount,
             selectionBehavior: .ordered,
             matching: .images
         )
@@ -87,7 +95,11 @@ struct PhotoPickerCard: View {
                             let uiImage = UIImage(data: data)
                         {
                             updatedLibraryPhotos.append(
-                                LoggedPhoto(image: uiImage, pickerItem: item)
+                                LoggedPhoto(
+                                    image: uiImage,
+                                    originalData: data,
+                                    pickerItem: item
+                                )
                             )
                         }
                     }
@@ -125,9 +137,18 @@ struct PhotoPickerCard: View {
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraImagePicker { image in
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    images.append(LoggedPhoto(image: image, pickerItem: nil))
-                    currentTabIndex = images.count - 1
+                if let data = image.jpegData(compressionQuality: 1.0) {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8))
+                    {
+                        images.append(
+                            LoggedPhoto(
+                                image: image,
+                                originalData: data,
+                                pickerItem: nil
+                            )
+                        )
+                        currentTabIndex = images.count - 1
+                    }
                 }
             }
             .ignoresSafeArea()
@@ -194,14 +215,17 @@ struct PhotoPickerCard: View {
 }
 
 #Preview {
+    @Previewable @State var previewImages: [LoggedPhoto] = []
+
     ZStack {
         Color.background.ignoresSafeArea()
 
-        Spacer()
+        VStack {
+            Spacer()
 
-        PhotoPickerCard()
-        //            .padding()
+            PhotoPickerCard(images: $previewImages)
 
-        Spacer()
+            Spacer()
+        }
     }
 }

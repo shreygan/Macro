@@ -70,7 +70,7 @@ struct LogRecipeView: View {
     @State private var showingAllNotes: Bool = false
     @State private var dateAdded: Date
 
-    @State private var imageData: Data? = nil
+    @State private var selectedPhotos: [LoggedPhoto] = []
 
     var isEdited: Bool {
         draftIngredients != initialIngredients
@@ -231,9 +231,18 @@ struct LogRecipeView: View {
             fat: displayFat,
             fiber: displayFiber,
             isManualOverride: false,
-            logNote: resolvedNote,
-            imageData: imageData
+            logNote: resolvedNote
         )
+
+        let photoEntities = selectedPhotos.map { photo in
+            EntryPhoto(
+                imageData: photo.originalData,
+                scale: Double(photo.scale),
+                offsetX: Double(photo.offset.width),
+                offsetY: Double(photo.offset.height)
+            )
+        }
+        mainLog.photos = photoEntities
 
         modelContext.insert(mainLog)
 
@@ -537,7 +546,7 @@ struct LogRecipeView: View {
                         }
                         .padding([.top, .leading, .trailing])
 
-                        PhotoPickerCard()
+                        PhotoPickerCard(images: $selectedPhotos)
 
                         Spacer()
                     }

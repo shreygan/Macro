@@ -39,8 +39,8 @@ class LoggedEntry {
 
     var logNote: String?
 
-    @Attribute(.externalStorage)
-    var imageData: Data?
+    @Relationship(deleteRule: .cascade, inverse: \EntryPhoto.parentEntry)
+    var photos: [EntryPhoto]? = []
 
     init(
         id: UUID = UUID(),
@@ -59,7 +59,7 @@ class LoggedEntry {
         fiber: Double,
         isManualOverride: Bool = false,
         logNote: String? = nil,
-        imageData: Data? = nil
+        photos: [EntryPhoto]? = nil
     ) {
         self.id = id
         self.name = name
@@ -77,7 +77,7 @@ class LoggedEntry {
         self.fiber = fiber
         self.isManualOverride = isManualOverride
         self.logNote = logNote
-        self.imageData = imageData
+        self.photos = photos
     }
 
     var entryType: EntryType? {
