@@ -9,22 +9,19 @@ import SwiftUI
 import UIKit
 
 struct InteractivePhotoView: View {
-    let image: UIImage
+    @Binding var photo: LoggedPhoto
     let onDelete: () -> Void
-
-    @State private var scale: CGFloat = 1.0
-    @State private var offset: CGSize = .zero
 
     var body: some View {
         GeometryReader { geometry in
             Color.clear
                 .aspectRatio(1, contentMode: .fit)
                 .overlay(
-                    Image(uiImage: image)
+                    Image(uiImage: photo.image)
                         .resizable()
                         .scaledToFill()
-                        .scaleEffect(scale)
-                        .offset(offset)
+                        .scaleEffect(photo.scale)
+                        .offset(photo.offset)
                 )
                 .clipped()
                 .overlay(
@@ -71,14 +68,15 @@ struct InteractivePhotoView: View {
         translationDelta: CGSize,
         size: CGSize
     ) {
-        scale *= scaleDelta
-        scale = max(1.0, scale)
+        photo.scale *= scaleDelta
+        photo.scale = max(1.0, photo.scale)
 
-        offset.width += translationDelta.width
-        offset.height += translationDelta.height
+        photo.offset.width += translationDelta.width
+        photo.offset.height += translationDelta.height
 
         let imageRatio =
-            image.size.height == 0 ? 1 : image.size.width / image.size.height
+            photo.image.size.height == 0
+            ? 1 : photo.image.size.width / photo.image.size.height
         var baseWidth = size.width
         var baseHeight = size.height
 
@@ -88,14 +86,14 @@ struct InteractivePhotoView: View {
             baseHeight = size.width / imageRatio
         }
 
-        let scaledWidth = baseWidth * scale
-        let scaledHeight = baseHeight * scale
+        let scaledWidth = baseWidth * photo.scale
+        let scaledHeight = baseHeight * photo.scale
 
         let maxX = max(0, (scaledWidth - size.width) / 2)
         let maxY = max(0, (scaledHeight - size.height) / 2)
 
-        offset.width = min(max(offset.width, -maxX), maxX)
-        offset.height = min(max(offset.height, -maxY), maxY)
+        photo.offset.width = min(max(photo.offset.width, -maxX), maxX)
+        photo.offset.height = min(max(photo.offset.height, -maxY), maxY)
     }
 }
 

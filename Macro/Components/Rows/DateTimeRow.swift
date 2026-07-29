@@ -23,15 +23,15 @@ struct DateTimePillRow: View {
             titleExtension: titleExtension,
             subtitle: subtitle
         ) {
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 Spacer()
 
                 DateTimePill(selection: $dateSelection, components: .date)
-                    .padding(.trailing, -10)
                 DateTimePill(
                     selection: $timeSelection,
                     components: .hourAndMinute
                 )
+                .padding(.trailing, -5)
             }
             .padding(.vertical, -2)
         }
