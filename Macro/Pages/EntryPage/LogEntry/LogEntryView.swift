@@ -77,6 +77,15 @@ struct LogEntryView: View {
 
     @State private var dateAdded: Date
 
+    @State private var saveOption: LogSaveOption = .logOnly
+
+    var isEdited: Bool {
+        sourceSelection != (food.source?.source ?? "")
+            || categorySelection != (food.category?.category ?? "")
+            || foodGroupSelection != (food.foodGroup?.foodGroup ?? "")
+            || manualOverrideToggle
+    }
+
     var mappedSourceOptions: [String] {
         sourceOptions.map { $0.source }
     }
@@ -192,6 +201,140 @@ struct LogEntryView: View {
         newLog.photos = photoEntities
 
         modelContext.insert(newLog)
+
+        if saveOption == .updateOriginal || saveOption == .saveAsNew {
+            var resolvedSource: EntrySource? = nil
+            let trimmedSource = sourceSelection.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if !trimmedSource.isEmpty && trimmedSource != "-" {
+                if let existing = sourceOptions.first(where: {
+                    $0.source == trimmedSource
+                }) {
+                    resolvedSource = existing
+                } else {
+                    let nextOrder =
+                        (sourceOptions.map { $0.displayOrder }.max() ?? 0) + 1
+                    let newSource = EntrySource(
+                        source: trimmedSource,
+                        displayOrder: nextOrder
+                    )
+                    modelContext.insert(newSource)
+                    resolvedSource = newSource
+                }
+            }
+
+            var resolvedCategory: CategorySource? = nil
+            let trimmedCategory = categorySelection.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if !trimmedCategory.isEmpty && trimmedCategory != "-" {
+                if let existing = categoryOptions.first(where: {
+                    $0.category == trimmedCategory
+                }) {
+                    resolvedCategory = existing
+                } else {
+                    let nextOrder =
+                        (categoryOptions.map { $0.displayOrder }.max() ?? 0) + 1
+                    let newCategory = CategorySource(
+                        category: trimmedCategory,
+                        displayOrder: nextOrder
+                    )
+                    modelContext.insert(newCategory)
+                    resolvedCategory = newCategory
+                }
+            }
+
+            var resolvedFoodGroup: FoodGroupSource? = nil
+            let trimmedGroup = foodGroupSelection.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if !trimmedGroup.isEmpty && trimmedGroup != "-" {
+                if let existing = foodGroupOptions.first(where: {
+                    $0.foodGroup == trimmedGroup
+                }) {
+                    resolvedFoodGroup = existing
+                } else {
+                    let nextOrder =
+                        (foodGroupOptions.map { $0.displayOrder }.max() ?? 0)
+                        + 1
+                    let newGroup = FoodGroupSource(
+                        foodGroup: trimmedGroup,
+                        displayOrder: nextOrder
+                    )
+                    modelContext.insert(newGroup)
+                    resolvedFoodGroup = newGroup
+                }
+            }
+
+            let safeMultiplier = activeMultiplier > 0 ? activeMultiplier : 1.0
+            let baseCal =
+                manualOverrideToggle
+                ? (parseDouble(calorie) / safeMultiplier) : food.calories
+            let basePro =
+                manualOverrideToggle
+                ? (parseDouble(protein) / safeMultiplier) : food.protein
+            let baseCarb =
+                manualOverrideToggle
+                ? (parseDouble(carbs) / safeMultiplier) : food.carbs
+            let baseFat =
+                manualOverrideToggle
+                ? (parseDouble(fat) / safeMultiplier) : food.fat
+            let baseFib =
+                manualOverrideToggle
+                ? (parseDouble(fiber) / safeMultiplier) : food.fiber
+
+            if saveOption == .updateOriginal {
+                food.source = resolvedSource
+                food.category = resolvedCategory
+                food.foodGroup = resolvedFoodGroup
+
+                if manualOverrideToggle {
+                    food.calories = baseCal
+                    food.protein = basePro
+                    food.carbs = baseCarb
+                    food.fat = baseFat
+                    food.fiber = baseFib
+                }
+
+                if let resolvedNote = resolvedNote {
+                    if let existingNote = food.stickyNote {
+                        existingNote.text = resolvedNote
+                    } else {
+                        food.stickyNote = Note(text: resolvedNote)
+                    }
+                } else if let existingNote = food.stickyNote {
+                    modelContext.delete(existingNote)
+                    food.stickyNote = nil
+                }
+
+            } else if saveOption == .saveAsNew {
+                let newFood = FoodItem(
+                    name: name.isEmpty ? "New Entry" : name,
+                    type: food.type,
+                    source: resolvedSource,
+                    category: resolvedCategory,
+                    foodGroup: resolvedFoodGroup,
+                    servingSize: food.servingSize,
+                    servingUnit: food.servingUnit,
+                    servingWeight: food.servingWeight,
+                    servingWeightUnit: food.servingWeightUnit,
+                    isAIEstimated: false,
+                    calories: baseCal,
+                    protein: basePro,
+                    carbs: baseCarb,
+                    fat: baseFat,
+                    fiber: baseFib,
+                    isCustomDefaultServing: food.isCustomDefaultServing,
+                    customServingSize: food.customServingSize,
+                    stickyNote: resolvedNote != nil
+                        ? Note(text: resolvedNote!) : nil
+                )
+                modelContext.insert(newFood)
+
+                newLog.originalFoodItem = newFood
+            }
+        }
 
         do {
             try modelContext.save()
@@ -575,8 +718,52 @@ struct LogEntryView: View {
                         }
                     }
 
-                    ToolbarItemGroup(placement: .topBarTrailing) {
+                    ToolbarItemGroup(placement: .automatic) {
+                        Menu {
+                            ForEach(LogSaveOption.allCases) { option in
+                                Button {
+                                    saveOption = option
+                                } label: {
+                                    if saveOption == option {
+                                        Label(
+                                            option.rawValue,
+                                            systemImage: "checkmark"
+                                        )
+                                    } else {
+                                        Text(option.rawValue)
+                                    }
+                                }
+                                .disabled(!isEdited && option != .logOnly)
+                            }
 
+                            if isEdited {
+                                Divider()
+
+                                Button(role: .destructive) {
+                                    withAnimation {
+                                        sourceSelection =
+                                            food.source?.source ?? ""
+                                        categorySelection =
+                                            food.category?.category ?? ""
+                                        foodGroupSelection =
+                                            food.foodGroup?.foodGroup ?? ""
+                                        manualOverrideToggle = false
+                                        saveOption = .logOnly
+                                    }
+                                } label: {
+                                    Label(
+                                        "Reset to Original",
+                                        systemImage: "arrow.counterclockwise"
+                                    )
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .foregroundStyle(.primary)
+                        }
+                    }
+
+                    ToolbarItemGroup(placement: .topBarTrailing) {
                         Button {
                             saveEntry()
                         } label: {
@@ -585,6 +772,11 @@ struct LogEntryView: View {
                         }
                         .tint(Color.blue)
                         .buttonStyle(.glassProminent)
+                    }
+                }
+                .onChange(of: isEdited) { oldVal, newVal in
+                    if !newVal && saveOption != .logOnly {
+                        saveOption = .logOnly
                     }
                 }
                 .onChange(of: portionUnitSelection) { oldUnit, newUnit in
@@ -679,6 +871,11 @@ struct LogEntryView: View {
                 }
                 .onChange(of: fiber) {
                     if manualOverrideToggle { fiberDynamic = fiber }
+                }
+                .onChange(of: isEdited) { oldVal, newVal in
+                    if !newVal && saveOption != .logOnly {
+                        saveOption = .logOnly
+                    }
                 }
             }
         }

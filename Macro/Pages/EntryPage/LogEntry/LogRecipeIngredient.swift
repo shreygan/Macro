@@ -27,7 +27,8 @@ struct LogRecipeIngredient: Identifiable, Equatable {
 
     var icon: String?
 
-    // Initialize from an existing recipe ingredient
+    var ingredientItem: FoodItem?
+
     init(recipeIngredient: RecipeIngredient) {
         self.name = recipeIngredient.name
         self.quantity = EntryHelper.format(recipeIngredient.quantity)
@@ -45,9 +46,9 @@ struct LogRecipeIngredient: Identifiable, Equatable {
         self.baseFiber = recipeIngredient.baseFiber
 
         self.icon = recipeIngredient.ingredientItem?.type.appSymbol.rawValue
+        self.ingredientItem = recipeIngredient.ingredientItem
     }
 
-    // Initialize from a newly added FoodItem
     init(item: FoodItem) {
         self.name = item.name
         self.unit = item.servingUnit?.unit ?? "serving"
@@ -69,6 +70,7 @@ struct LogRecipeIngredient: Identifiable, Equatable {
         self.baseFiber = item.fiber
 
         self.icon = item.type.appSymbol.rawValue
+        self.ingredientItem = item
     }
 
     var activeMultiplier: Double {

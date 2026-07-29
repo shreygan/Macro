@@ -8,15 +8,6 @@
 import SwiftData
 import SwiftUI
 
-enum LogRecipeSaveOption: String, CaseIterable, Identifiable {
-    case logOnly = "Log Only"
-    case updateOriginal = "Log & Update Original"
-    case saveAsNew = "Log & Save as New"
-    var id: Self { self }
-}
-
-// TODO: IMPLEMENT THE PHOTO SAVING TO DB FOR ALL LOGGED ENTRIES
-
 struct LogRecipeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.rootDismiss) var rootDismiss
@@ -55,7 +46,7 @@ struct LogRecipeView: View {
     private let initialPortionQuantity: String
     private let initialPortionUnitSelection: String
     @State private var initialIngredients: [LogRecipeIngredient] = []
-    @State private var saveOption: LogRecipeSaveOption = .logOnly
+    @State private var saveOption: LogSaveOption = .logOnly
 
     @State private var focusManager = SwipeFocusManager()
 
@@ -271,15 +262,149 @@ struct LogRecipeView: View {
             modelContext.insert(ingredientLog)
         }
 
-        if saveOption == .updateOriginal {
-            recipe.source = sourceOptions.first(where: {
-                $0.source == sourceSelection
-            })
-            recipe.category = categoryOptions.first(where: {
-                $0.category == categorySelection
-            })
-        } else if saveOption == .saveAsNew {
-            // TODO: Handle duplication if necessary
+        if saveOption == .updateOriginal || saveOption == .saveAsNew {
+            var resolvedSource: EntrySource? = nil
+            let trimmedSource = sourceSelection.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if !trimmedSource.isEmpty && trimmedSource != "-" {
+                if let existing = sourceOptions.first(where: {
+                    $0.source == trimmedSource
+                }) {
+                    resolvedSource = existing
+                } else {
+                    let nextOrder =
+                        (sourceOptions.map { $0.displayOrder }.max() ?? 0) + 1
+                    let newSource = EntrySource(
+                        source: trimmedSource,
+                        displayOrder: nextOrder
+                    )
+                    modelContext.insert(newSource)
+                    resolvedSource = newSource
+                }
+            }
+
+            var resolvedCategory: CategorySource? = nil
+            let trimmedCategory = categorySelection.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if !trimmedCategory.isEmpty && trimmedCategory != "-" {
+                if let existing = categoryOptions.first(where: {
+                    $0.category == trimmedCategory
+                }) {
+                    resolvedCategory = existing
+                } else {
+                    let nextOrder =
+                        (categoryOptions.map { $0.displayOrder }.max() ?? 0) + 1
+                    let newCategory = CategorySource(
+                        category: trimmedCategory,
+                        displayOrder: nextOrder
+                    )
+                    modelContext.insert(newCategory)
+                    resolvedCategory = newCategory
+                }
+            }
+
+            if saveOption == .updateOriginal {
+                recipe.source = resolvedSource
+                recipe.category = resolvedCategory
+
+                recipe.calories = totalBaseCalories
+                recipe.protein = totalBaseProtein
+                recipe.carbs = totalBaseCarbs
+                recipe.fat = totalBaseFat
+                recipe.fiber = totalBaseFiber
+                recipe.servingWeight =
+                    calculatedTotalWeight > 0 ? calculatedTotalWeight : nil
+
+                if let resolvedNote = resolvedNote {
+                    if let existingNote = recipe.stickyNote {
+                        existingNote.text = resolvedNote
+                    } else {
+                        recipe.stickyNote = Note(text: resolvedNote)
+                    }
+                } else if let existingNote = recipe.stickyNote {
+                    modelContext.delete(existingNote)
+                    recipe.stickyNote = nil
+                }
+
+                if let existingIngredients = recipe.recipeIngredients {
+                    for old in existingIngredients {
+                        modelContext.delete(old)
+                    }
+                }
+                recipe.recipeIngredients = []
+
+                for (index, draft) in draftIngredients.enumerated() {
+                    let newIngredient = RecipeIngredient(
+                        quantity: parseDouble(draft.quantity),
+                        unit: draft.unit,
+                        displayOrder: index,
+                        name: draft.name,
+                        baseServingSize: draft.baseServingSize,
+                        baseServingUnitName: draft.baseServingUnitName,
+                        baseServingWeight: draft.baseServingWeight,
+                        baseServingWeightUnit: draft.baseServingWeightUnit,
+                        baseCalories: draft.baseCalories,
+                        baseProtein: draft.baseProtein,
+                        baseCarbs: draft.baseCarbs,
+                        baseFat: draft.baseFat,
+                        baseFiber: draft.baseFiber
+                    )
+                    newIngredient.ingredientItem = draft.ingredientItem
+                    newIngredient.parentRecipe = recipe
+                    modelContext.insert(newIngredient)
+                    recipe.recipeIngredients?.append(newIngredient)
+                }
+
+            } else if saveOption == .saveAsNew {
+                let newRecipe = FoodItem(
+                    name: name.isEmpty ? "New Recipe" : name,
+                    type: recipe.type,
+                    source: resolvedSource,
+                    category: resolvedCategory,
+                    foodGroup: recipe.foodGroup,
+                    servingSize: recipe.servingSize,
+                    servingUnit: recipe.servingUnit,
+                    servingWeight: calculatedTotalWeight > 0
+                        ? calculatedTotalWeight : nil,
+                    servingWeightUnit: recipe.servingWeightUnit,
+                    isAIEstimated: false,
+                    calories: totalBaseCalories,
+                    protein: totalBaseProtein,
+                    carbs: totalBaseCarbs,
+                    fat: totalBaseFat,
+                    fiber: totalBaseFiber,
+                    isCustomDefaultServing: recipe.isCustomDefaultServing,
+                    customServingSize: recipe.customServingSize,
+                    stickyNote: resolvedNote != nil
+                        ? Note(text: resolvedNote!) : nil
+                )
+
+                modelContext.insert(newRecipe)
+
+                for (index, draft) in draftIngredients.enumerated() {
+                    let newIngredient = RecipeIngredient(
+                        quantity: parseDouble(draft.quantity),
+                        unit: draft.unit,
+                        displayOrder: index,
+                        name: draft.name,
+                        baseServingSize: draft.baseServingSize,
+                        baseServingUnitName: draft.baseServingUnitName,
+                        baseServingWeight: draft.baseServingWeight,
+                        baseServingWeightUnit: draft.baseServingWeightUnit,
+                        baseCalories: draft.baseCalories,
+                        baseProtein: draft.baseProtein,
+                        baseCarbs: draft.baseCarbs,
+                        baseFat: draft.baseFat,
+                        baseFiber: draft.baseFiber
+                    )
+                    newIngredient.ingredientItem = draft.ingredientItem
+                    newIngredient.parentRecipe = newRecipe
+                    modelContext.insert(newIngredient)
+                    newRecipe.recipeIngredients?.append(newIngredient)
+                }
+            }
         }
 
         do {
@@ -577,11 +702,20 @@ struct LogRecipeView: View {
 
                     ToolbarItemGroup(placement: .automatic) {
                         Menu {
-                            Picker("Save Options", selection: $saveOption) {
-                                ForEach(LogRecipeSaveOption.allCases) {
-                                    option in
-                                    Text(option.rawValue).tag(option)
+                            ForEach(LogSaveOption.allCases) { option in
+                                Button {
+                                    saveOption = option
+                                } label: {
+                                    if saveOption == option {
+                                        Label(
+                                            option.rawValue,
+                                            systemImage: "checkmark"
+                                        )
+                                    } else {
+                                        Text(option.rawValue)
+                                    }
                                 }
+                                .disabled(!isEdited && option != .logOnly)
                             }
 
                             if isEdited {
@@ -589,14 +723,11 @@ struct LogRecipeView: View {
 
                                 Button(role: .destructive) {
                                     withAnimation {
-                                        draftIngredients =
-                                            initialIngredients
-                                        sourceSelection =
-                                            initialSourceSelection
+                                        draftIngredients = initialIngredients
+                                        sourceSelection = initialSourceSelection
                                         categorySelection =
                                             initialCategorySelection
-                                        portionQuantity =
-                                            initialPortionQuantity
+                                        portionQuantity = initialPortionQuantity
                                         portionUnitSelection =
                                             initialPortionUnitSelection
                                         saveOption = .logOnly
@@ -604,8 +735,7 @@ struct LogRecipeView: View {
                                 } label: {
                                     Label(
                                         "Reset to Original",
-                                        systemImage:
-                                            "arrow.counterclockwise"
+                                        systemImage: "arrow.counterclockwise"
                                     )
                                 }
                             }
@@ -691,6 +821,11 @@ struct LogRecipeView: View {
                     portionQuantity = newQuantity.formatted(
                         .number.precision(.fractionLength(0...2))
                     )
+                }
+            }
+            .onChange(of: isEdited) { oldVal, newVal in
+                if !newVal && saveOption != .logOnly {
+                    saveOption = .logOnly
                 }
             }
         }
