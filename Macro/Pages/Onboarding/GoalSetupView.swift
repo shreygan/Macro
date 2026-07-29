@@ -171,16 +171,21 @@ struct GoalSetupView: View {
 
                 try? context.save()
 
+                dismiss()
+
             } label: {
-                Text("Start")
-                    .font(.system(.caption, design: .rounded))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .clipShape(
-                        Capsule()
-                    )
+                Text(
+                    (users.first?.onboardingComplete ?? false)
+                        ? "Save" : "Start"
+                )
+                .font(.system(.caption, design: .rounded))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(Color.accentColor)
+                .foregroundStyle(.white)
+                .clipShape(
+                    Capsule()
+                )
             }
             .padding(.horizontal, 40)
             .padding(.top, 8)
@@ -235,10 +240,12 @@ struct GoalSetupView: View {
     }
 }
 
-//#Preview {
-//    GoalSetupView(
-//        isCalorieActive: .constant(false),
-//        isProteinActive: .constant(false),
-//        isCarbsActive: .constant(false)
-//    )
-//}
+#Preview {
+    GoalSetupView(
+        isCalorieActive: .constant(false),
+        isProteinActive: .constant(false),
+        isCarbsActive: .constant(false),
+        isFatActive: .constant(false),
+        isFiberActive: .constant(false),
+    )
+}

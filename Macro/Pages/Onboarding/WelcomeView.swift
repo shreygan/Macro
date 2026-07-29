@@ -92,6 +92,7 @@ struct WelcomeView: View {
                 }
                 .offset(y: -p * height)
             }
+            .background(Color(UIColor.systemBackground).ignoresSafeArea())
             .simultaneousGesture(
                 DragGesture()
                     .onChanged { value in
