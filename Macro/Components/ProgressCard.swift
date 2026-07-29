@@ -114,18 +114,18 @@ struct ProgressCard: View {
         protein: 180,
         proteinMode: .floor,
         carbs: 200,
-        carbsMode: .off,
+        carbsMode: .floor,
         fat: 150,
-        fatMode: .off,
+        fatMode: .ceiling,
         fiber: 25,
         fiberMode: .off
     )
 
     let mockProgress = DailyProgress(
-        calories: 1254,
-        protein: 95,
+        calories: 3254,
+        protein: 125,
         carbs: 220,
-        fat: 220,
+        fat: 100,
         fiber: 25
     )
 
