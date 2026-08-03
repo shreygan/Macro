@@ -23,6 +23,10 @@ class LoggedEntry {
 
     var parentEntry: LoggedEntry?
 
+    var source: EntrySource?
+    var category: CategorySource?
+    var foodGroup: FoodGroupSource?
+
     var timestamp: Date
     var location: String?
 
@@ -48,6 +52,9 @@ class LoggedEntry {
         typeRawValue: String,
         originalFoodItem: FoodItem? = nil,
         parentEntry: LoggedEntry? = nil,
+        source: EntrySource? = nil,
+        category: CategorySource? = nil,
+        foodGroup: FoodGroupSource? = nil,
         timestamp: Date = Date(),
         location: String? = nil,
         loggedQuantity: Double,
@@ -66,6 +73,9 @@ class LoggedEntry {
         self.typeRawValue = typeRawValue
         self.originalFoodItem = originalFoodItem
         self.parentEntry = parentEntry
+        self.source = source
+        self.category = category
+        self.foodGroup = foodGroup
         self.timestamp = timestamp
         self.location = location
         self.loggedQuantity = loggedQuantity
