@@ -9,66 +9,93 @@ import SwiftData
 import SwiftUI
 
 struct TimelineCard: View {
-    var entries: [LoggedEntry]
+    @Query private var entries: [LoggedEntry]
 
-    var sortedEntries: [LoggedEntry] {
-        entries.sorted { $0.timestamp < $1.timestamp }
+    init(date: Date) {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+
+        let predicate = #Predicate<LoggedEntry> { entry in
+            entry.timestamp >= startOfDay && entry.timestamp < endOfDay
+        }
+
+        _entries = Query(filter: predicate, sort: \.timestamp)
     }
 
     var body: some View {
         Card("Timeline") {
             VStack(spacing: 0) {
-                ForEach(Array(sortedEntries.enumerated()), id: \.element.id) {
-                    index,
-                    entry in
-                    let isFirst = index == 0
-                    let isLast = index == sortedEntries.count - 1
-
-                    VStack(alignment: .leading, spacing: 0) {
-
-                        HStack(spacing: 0) {
-                            Text(formatTime(entry.timestamp))
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
-
-                            Text(", \(entry.typeRawValue)")
-                                .foregroundColor(.secondary)
-                        }
-                        .font(.system(size: 13))
-                        .padding(.leading, -8)
-
-                        MealRow(
-                            name: entry.name,
-                            source: buildSourceString(for: entry),
-                            isCustomDefaultServing: entry.originalFoodItem?
-                                .isCustomDefaultServing ?? false,
-                            customServingSize: String(
-                                entry.originalFoodItem?.customServingSize ?? 0
-                            ),
-                            servingSize: String(entry.loggedQuantity),
-                            servingSizeUnit: entry.loggedUnit,
-                            servingWeight: String(
-                                entry.originalFoodItem?.servingWeight ?? 0
-                            ),
-                            servingWeightUnit: entry.originalFoodItem?
-                                .servingWeightUnit ?? "",
-                            servingUnits: [],
-                            calorie: String(entry.calories),
-                            protein: String(entry.protein),
-                            carbs: String(entry.carbs),
-                            fat: String(entry.fat),
-                            fiber: String(entry.fiber),
-                            action: {
-                            }
-                        )
-                        .padding(.leading, -12)
+                if entries.isEmpty {
+                    VStack(spacing: 16) {
+                        Text("No entries logged today.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
                     }
-                    .padding(.leading, 32)
-                    .overlay(alignment: .topLeading) {
-                        ZStack(alignment: .top) {
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
+                    .padding(.bottom, 16)
+                } else {
+                    ForEach(Array(entries.enumerated()), id: \.element.id) {
+                        index,
+                        entry in
+                        let isFirst = index == 0
+                        let isLast = index == entries.count - 1
 
-                            if sortedEntries.count > 1 {
-                                if isFirst {
+                        VStack(alignment: .leading, spacing: 0) {
+
+                            HStack(spacing: 0) {
+                                Text(formatTime(entry.timestamp))
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+
+                                if let categoryName = entry.category?.category,
+                                    !categoryName.isEmpty
+                                {
+                                    Text(", \(categoryName)")
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .font(.system(size: 13))
+                            .padding(.leading, -8)
+
+                            MealRow(
+                                name: entry.name,
+                                source: entry.source?.source ?? "None",
+                                isCustomDefaultServing: entry.originalFoodItem?
+                                    .isCustomDefaultServing ?? false,
+                                customServingSize: EntryHelper.format(
+                                    entry.originalFoodItem?.customServingSize
+                                        ?? 0
+                                ),
+                                servingSize: EntryHelper.format(
+                                    entry.loggedQuantity
+                                ),
+                                servingSizeUnit: entry.loggedUnit,
+                                servingWeight: "",
+                                servingWeightUnit: "",
+                                servingUnits: [],
+                                calorie: String(entry.calories),
+                                protein: String(entry.protein),
+                                carbs: String(entry.carbs),
+                                fat: String(entry.fat),
+                                fiber: String(entry.fiber),
+                                action: {
+                                }
+                            )
+                            .padding(.leading, -12)
+                        }
+                        .padding(.leading, 32)
+                        .overlay(alignment: .topLeading) {
+                            ZStack(alignment: .top) {
+
+                                if isFirst && isLast {
+                                    Capsule()
+                                        .fill(Color.gray.opacity(0.3))
+                                        .frame(width: 2)
+                                        .padding(.top, 8)
+                                        .padding(.bottom, 16)
+                                } else if isFirst {
                                     Rectangle()
                                         .fill(Color.gray.opacity(0.3))
                                         .frame(width: 2)
@@ -83,15 +110,16 @@ struct TimelineCard: View {
                                         .fill(Color.gray.opacity(0.3))
                                         .frame(width: 2)
                                 }
-                            }
 
-                            Circle()
-                                .fill(Color.black)
-                                .frame(width: 8, height: 8)
-                                .padding(.top, 4)
+                                Circle()
+                                    .fill(Color.black)
+                                    .frame(width: 8, height: 8)
+                                    .padding(.top, 4)
+
+                            }
+                            .frame(width: 32)
+                            .frame(maxHeight: .infinity, alignment: .top)
                         }
-                        .frame(width: 32)
-                        .frame(maxHeight: .infinity, alignment: .top)
                     }
                 }
             }
@@ -105,14 +133,6 @@ struct TimelineCard: View {
         formatter.timeStyle = .short
         return formatter.string(from: date).lowercased()
     }
-
-    private func buildSourceString(for entry: LoggedEntry) -> String {
-        var sourceText = entry.originalFoodItem?.source?.source ?? ""
-        if entry.originalFoodItem?.isAIEstimated == true {
-            sourceText += sourceText.isEmpty ? "AI estimate" : ", AI estimate"
-        }
-        return sourceText
-    }
 }
 
 #Preview {
@@ -123,6 +143,22 @@ struct TimelineCard: View {
         calendar.date(bySettingHour: hour, minute: minute, second: 0, of: today)
             ?? today
     }
+
+    let container: ModelContainer
+    do {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        container = try ModelContainer(
+            for: LoggedEntry.self,
+            FoodItem.self,
+            configurations: config
+        )
+    } catch {
+        fatalError(
+            "Failed to create preview container: \(error.localizedDescription)"
+        )
+    }
+
+    let context = container.mainContext
 
     // 1. Eggs & Tater Tots
     let eggsEntry = LoggedEntry(
@@ -150,6 +186,7 @@ struct TimelineCard: View {
         isCustomDefaultServing: false
     )
     eggsEntry.originalFoodItem = eggsFood
+    context.insert(eggsEntry)
 
     // 2. Double Chicken Bowl
     let chickenEntry = LoggedEntry(
@@ -164,6 +201,7 @@ struct TimelineCard: View {
         fat: 38,
         fiber: 11
     )
+    context.insert(chickenEntry)
 
     // 3. Coconut Water
     let coconutEntry = LoggedEntry(
@@ -178,6 +216,7 @@ struct TimelineCard: View {
         fat: 0,
         fiber: 0
     )
+    context.insert(coconutEntry)
 
     // 4. Vanilla Chocolate Sprinkle Bar
     let barEntry = LoggedEntry(
@@ -192,6 +231,7 @@ struct TimelineCard: View {
         fat: 23,
         fiber: 0
     )
+    context.insert(barEntry)
 
     // 5. Lights Caramel Action
     let iceCreamEntry = LoggedEntry(
@@ -220,16 +260,12 @@ struct TimelineCard: View {
         isCustomDefaultServing: false
     )
     iceCreamEntry.originalFoodItem = iceCreamFood
+    context.insert(iceCreamEntry)
 
     return ScrollView {
-        TimelineCard(entries: [
-            eggsEntry,
-            chickenEntry,
-            coconutEntry,
-            barEntry,
-            iceCreamEntry,
-        ])
-        .padding()
+        TimelineCard(date: today)
+            .padding()
     }
     .background(Color(UIColor.systemGroupedBackground))
+    .modelContainer(container)
 }

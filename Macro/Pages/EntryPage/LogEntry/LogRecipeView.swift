@@ -207,11 +207,55 @@ struct LogRecipeView: View {
         )
         let resolvedNote = trimmedNote.isEmpty ? nil : trimmedNote
 
+        var resolvedSource: EntrySource? = nil
+        let trimmedSource = sourceSelection.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !trimmedSource.isEmpty && trimmedSource != "-" {
+            if let existing = sourceOptions.first(where: {
+                $0.source == trimmedSource
+            }) {
+                resolvedSource = existing
+            } else {
+                let nextOrder =
+                    (sourceOptions.map { $0.displayOrder }.max() ?? 0) + 1
+                let newSource = EntrySource(
+                    source: trimmedSource,
+                    displayOrder: nextOrder
+                )
+                modelContext.insert(newSource)
+                resolvedSource = newSource
+            }
+        }
+
+        var resolvedCategory: CategorySource? = nil
+        let trimmedCategory = categorySelection.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !trimmedCategory.isEmpty && trimmedCategory != "-" {
+            if let existing = categoryOptions.first(where: {
+                $0.category == trimmedCategory
+            }) {
+                resolvedCategory = existing
+            } else {
+                let nextOrder =
+                    (categoryOptions.map { $0.displayOrder }.max() ?? 0) + 1
+                let newCategory = CategorySource(
+                    category: trimmedCategory,
+                    displayOrder: nextOrder
+                )
+                modelContext.insert(newCategory)
+                resolvedCategory = newCategory
+            }
+        }
+
         let mainLog = LoggedEntry(
             name: name.isEmpty ? "New Recipe" : name,
             typeRawValue: recipe.type.rawValue,
             originalFoodItem: recipe,
             parentEntry: nil,
+            source: resolvedSource,
+            category: resolvedCategory,
             timestamp: combinedDate,
             location: location.isEmpty ? nil : location,
             loggedQuantity: parseDouble(portionQuantity),
@@ -263,48 +307,6 @@ struct LogRecipeView: View {
         }
 
         if saveOption == .updateOriginal || saveOption == .saveAsNew {
-            var resolvedSource: EntrySource? = nil
-            let trimmedSource = sourceSelection.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-            if !trimmedSource.isEmpty && trimmedSource != "-" {
-                if let existing = sourceOptions.first(where: {
-                    $0.source == trimmedSource
-                }) {
-                    resolvedSource = existing
-                } else {
-                    let nextOrder =
-                        (sourceOptions.map { $0.displayOrder }.max() ?? 0) + 1
-                    let newSource = EntrySource(
-                        source: trimmedSource,
-                        displayOrder: nextOrder
-                    )
-                    modelContext.insert(newSource)
-                    resolvedSource = newSource
-                }
-            }
-
-            var resolvedCategory: CategorySource? = nil
-            let trimmedCategory = categorySelection.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-            if !trimmedCategory.isEmpty && trimmedCategory != "-" {
-                if let existing = categoryOptions.first(where: {
-                    $0.category == trimmedCategory
-                }) {
-                    resolvedCategory = existing
-                } else {
-                    let nextOrder =
-                        (categoryOptions.map { $0.displayOrder }.max() ?? 0) + 1
-                    let newCategory = CategorySource(
-                        category: trimmedCategory,
-                        displayOrder: nextOrder
-                    )
-                    modelContext.insert(newCategory)
-                    resolvedCategory = newCategory
-                }
-            }
-
             if saveOption == .updateOriginal {
                 recipe.source = resolvedSource
                 recipe.category = resolvedCategory

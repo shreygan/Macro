@@ -17,7 +17,7 @@ struct MacroProgressRow: View {
     var unit: String
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 0) {
             HStack {
                 HStack(spacing: 6) {
                     iconView
@@ -65,18 +65,18 @@ struct MacroProgressRow: View {
 
                         Capsule()
                             .fill(tintColor)
-                            .frame(width: fillWidth, height: 8)
+                            .frame(width: fillWidth, height: 6)
                             .position(x: fillWidth / 2, y: 12)
 
                         let isFloor = mode == .floor
 
                         Text(isFloor ? "[" : "]")
-                            .font(.system(size: 18, weight: .bold))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundColor(.primary)
                             .position(x: markerPosition, y: 11)
                     }
                 }
-                .frame(height: 24)
+                .frame(height: 14)
             }
         }
     }
@@ -95,7 +95,7 @@ struct MacroProgressRow: View {
             if current >= goal {
                 Image(systemName: "checkmark")
             } else {
-                Image(systemName: "progress.indicator")
+                Image(systemName: "xmark")
             }
         } else if mode == .ceiling {
             if current <= goal {

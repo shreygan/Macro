@@ -5,6 +5,7 @@
 //  Created by Shrey Gangwar on 7/29/26.
 //
 
+import SwiftData
 import SwiftUI
 
 struct DailyProgress {
@@ -17,7 +18,37 @@ struct DailyProgress {
 
 struct ProgressCard: View {
     var goals: UserGoals
-    var progress: DailyProgress
+    @Query private var entries: [LoggedEntry]
+
+    private var progress: DailyProgress {
+        let totalCalories = entries.reduce(0) { $0 + $1.calories }
+        let totalProtein = entries.reduce(0) { $0 + $1.protein }
+        let totalCarbs = entries.reduce(0) { $0 + $1.carbs }
+        let totalFat = entries.reduce(0) { $0 + $1.fat }
+        let totalFiber = entries.reduce(0) { $0 + $1.fiber }
+
+        return DailyProgress(
+            calories: totalCalories,
+            protein: totalProtein,
+            carbs: totalCarbs,
+            fat: totalFat,
+            fiber: totalFiber
+        )
+    }
+
+    init(goals: UserGoals, date: Date) {
+        self.goals = goals
+
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+
+        let predicate = #Predicate<LoggedEntry> { entry in
+            entry.timestamp >= startOfDay && entry.timestamp < endOfDay
+        }
+
+        _entries = Query(filter: predicate)
+    }
 
     struct MacroConfig: Identifiable {
         var id: String { title }
@@ -102,12 +133,30 @@ struct ProgressCard: View {
             }
             .padding(.top, 12)
             .padding(.horizontal, 16)
-            .padding(.bottom, 20)
+            .padding(.bottom, 24)
         }
     }
 }
 
 #Preview {
+    let today = Date()
+
+    let container: ModelContainer
+    do {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        container = try ModelContainer(
+            for: LoggedEntry.self,
+            FoodItem.self,
+            configurations: config
+        )
+    } catch {
+        fatalError(
+            "Failed to create preview container: \(error.localizedDescription)"
+        )
+    }
+
+    let context = container.mainContext
+
     let mockGoals = UserGoals(
         calories: 2500,
         calorieMode: .ceiling,
@@ -121,16 +170,24 @@ struct ProgressCard: View {
         fiberMode: .off
     )
 
-    let mockProgress = DailyProgress(
+    let mockEntry = LoggedEntry(
+        name: "Mock Daily Totals",
+        typeRawValue: "meal",
+        timestamp: today,
+        loggedQuantity: 1,
+        loggedUnit: "serving",
         calories: 3254,
         protein: 125,
         carbs: 220,
         fat: 100,
         fiber: 25
     )
+    context.insert(mockEntry)
 
-    ScrollView {
-        ProgressCard(goals: mockGoals, progress: mockProgress)
+    return ScrollView {
+        ProgressCard(goals: mockGoals, date: today)
             .padding()
     }
+    .background(Color(UIColor.systemGroupedBackground))
+    .modelContainer(container)
 }
