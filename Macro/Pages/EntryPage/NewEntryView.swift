@@ -260,9 +260,15 @@ struct NewEntryView: View {
         }
         .sheet(item: $foodToLog) { food in
             LogEntryView(food: food, isPushedView: false)
+                .environment(\.rootDismiss) {
+                    dismiss()
+                }
         }
         .sheet(item: $recipeToLog) { recipe in
             LogRecipeView(recipe: recipe, isPushedView: false)
+                .environment(\.rootDismiss) {
+                    dismiss()
+                }
         }
         .sheet(item: $foodToEdit) { food in
             if food.type == .recipe {
