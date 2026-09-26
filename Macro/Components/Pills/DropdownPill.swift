@@ -10,6 +10,7 @@ import SwiftUI
 struct DropdownPill: View {
     var options: [String]
     var displayCustomOption: Bool = true
+    var isEnabled: Bool = true
 
     @Binding var selection: String
 
@@ -18,7 +19,7 @@ struct DropdownPill: View {
 
     var body: some View {
         Group {
-            if isCustomMode && displayCustomOption {
+            if isCustomMode && displayCustomOption && isEnabled {
                 TextField("", text: $selection)
                     .textFieldStyle(.plain)
                     .textInputAutocapitalization(.never)
@@ -60,19 +61,30 @@ struct DropdownPill: View {
                         Text(selection.isEmpty ? "-" : selection)
                             .font(.system(size: 16))
                             .foregroundColor(
-                                selection.isEmpty ? .secondary : .primary
+                                !isEnabled || selection.isEmpty
+                                    ? .secondary : .primary
                             )
 
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.tertiary)
+                        if isEnabled {
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.tertiary)
+                                .transition(
+                                    .scale(scale: 0.8).combined(with: .opacity)
+                                )
+                        }
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(
-                        Capsule().fill(Color(UIColor.tertiarySystemFill))
+                        Capsule().fill(
+                            isEnabled
+                                ? Color(UIColor.tertiarySystemFill)
+                                : Color.clear
+                        )
                     )
                 }
+                .disabled(!isEnabled)
                 .id(selection)
                 .fixedSize()
                 .onAppear {
@@ -85,6 +97,12 @@ struct DropdownPill: View {
             }
         }
         .animation(.snappy(duration: 0.3), value: isCustomMode)
+        .animation(.snappy(duration: 0.3), value: isEnabled)
+        .onChange(of: isEnabled) { _, newValue in
+            if !newValue && isCustomMode {
+                validateAndRevert()
+            }
+        }
     }
 
     private func switchToCustomMode() {
@@ -134,11 +152,35 @@ struct DropdownPill: View {
                                 "1 Cup", "1/2 Cup", "1 Tbsp", "100g",
                                 "Really Long Option",
                             ],
-                            selection: $servingSize
+                            isEnabled: true,
+                            selection: $servingSize,
                         )
                     }
+
+                    BaseRowLayout(
+                        icon: .customSymbol("cup.and.saucer.fill", tint: .blue),
+                        title: "Serving Size"
+                    ) {
+                        DropdownPill(
+                            options: [
+                                "1 Cup", "1/2 Cup", "1 Tbsp", "100g",
+                                "Really Long Option",
+                            ],
+                            isEnabled: false,
+                            selection: $servingSize,
+                        )
+                    }
+                    
+                    TextInputRow(
+                        icon: .customSymbol("flame.fill", tint: .orange),
+                        title: "Calories",
+                        titleExtension: "(kcal)",
+                        text: .constant("test"),
+                        isEnabled: false
+                    )
                 }
                 .padding()
+                
             }
         }
     }

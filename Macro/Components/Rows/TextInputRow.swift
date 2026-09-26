@@ -39,7 +39,6 @@ struct TextInputRow: View {
                         ? Color(uiColor: .label)
                         : Color(uiColor: .secondaryLabel)
                 )
-                .opacity(isEnabled ? 1.0 : 0.7)
                 .disabled(!isEnabled)
                 .numericKeyboardFilter(text: $text, type: keyboardType)
         }

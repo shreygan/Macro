@@ -14,6 +14,8 @@ struct DropdownPillRow: View {
     var subtitle: String? = nil
 
     var options: [String]
+    var isEnabled: Bool = true
+
     @Binding var selection: String
 
     var body: some View {
@@ -25,7 +27,8 @@ struct DropdownPillRow: View {
         ) {
             DropdownPill(
                 options: options,
-                selection: $selection,
+                isEnabled: isEnabled,
+                selection: $selection
             )
         }
     }
@@ -33,7 +36,9 @@ struct DropdownPillRow: View {
 
 #Preview {
     struct DropdownPillPreviewWrapper: View {
-        @State private var options = ["1 Cup", "1/2 Cup", "1 Tbsp", "100g", "Real Long Option"]
+        @State private var options = [
+            "1 Cup", "1/2 Cup", "1 Tbsp", "100g", "Real Long Option",
+        ]
         @State private var selection = "1 Cup"
 
         var body: some View {
@@ -52,6 +57,7 @@ struct DropdownPillRow: View {
                     DropdownPillRow(
                         title: "Portion Size Two",
                         options: options,
+                        isEnabled: true,
                         selection: $selection
                     )
                 }
