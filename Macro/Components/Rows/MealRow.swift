@@ -164,6 +164,7 @@ struct MealRow<Content: View>: View {
                                 .foregroundColor(.tertiary)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     ViewThatFits(in: .horizontal) {
                         Text(subtitle)
