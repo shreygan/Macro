@@ -257,12 +257,13 @@ struct LogEntryView: View {
             logNote: resolvedNote
         )
 
-        let photoEntities = selectedPhotos.map { photo in
+        let photoEntities = selectedPhotos.enumerated().map { index, photo in
             EntryPhoto(
                 imageData: photo.originalData,
                 scale: Double(photo.scale),
                 offsetX: Double(photo.offset.width),
-                offsetY: Double(photo.offset.height)
+                offsetY: Double(photo.offset.height),
+                displayOrder: index,
             )
         }
         newLog.photos = photoEntities

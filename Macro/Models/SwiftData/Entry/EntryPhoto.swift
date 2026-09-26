@@ -16,17 +16,21 @@ class EntryPhoto {
     var offsetX: Double
     var offsetY: Double
 
+    var displayOrder: Int
+
     var parentEntry: LoggedEntry?
 
     init(
         imageData: Data,
         scale: Double = 1.0,
         offsetX: Double = 0.0,
-        offsetY: Double = 0.0
+        offsetY: Double = 0.0,
+        displayOrder: Int = 0
     ) {
         self.imageData = imageData
         self.scale = scale
         self.offsetX = offsetX
         self.offsetY = offsetY
+        self.displayOrder = displayOrder
     }
 }
