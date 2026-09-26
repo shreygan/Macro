@@ -8,6 +8,9 @@
 import SwiftData
 import SwiftUI
 
+// TODO: FIX LOGGED RECIPE IN TIMELINE SHOWING EACH INGREDIENT TOO
+// TODO: MAKE RECIPES WORK ACROSS EVERYWHERE SO MUCH WORK
+
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
 
@@ -18,6 +21,13 @@ struct HomeView: View {
     @State private var showSharePopover = false
     @State private var showGoalSetupSheet = false
     @State private var showDeleteConfirmation = false
+
+    @State private var foodToLogAgain: FoodItem? = nil
+
+    @State private var entryToDelete: LoggedEntry? = nil
+    @State private var showEntryDeleteConfirmation = false
+
+    @State private var clickedEntry: LoggedEntry? = nil
 
     @State private var swapTargetDate: Date? = nil
     @State private var swapSubstituteDate: Date? = nil
@@ -260,13 +270,56 @@ struct HomeView: View {
                                     .padding()
                                 }
 
-                                TimelineCard(date: effectiveDate)
-                                    .padding(.horizontal)
-                                    .padding(.bottom, 24)
-                                    .padding(
-                                        .top,
-                                        users.first?.goals == nil ? nil : 0
-                                    )
+                                TimelineCard(
+                                    date: effectiveDate,
+                                    clickedEntry: $clickedEntry
+                                ) { entry in
+                                    Button {
+                                        if let originalFood = entry
+                                            .originalFoodItem
+                                        {
+                                            foodToLogAgain = originalFood
+                                        }
+                                    } label: {
+                                        Label(
+                                            "Log Again",
+                                            systemImage: "plus.square.on.square"
+                                        )
+                                    }
+                                    //                                    .disabled(entry.originalFoodItem == nil)
+
+                                    Button {
+                                        clickedEntry = entry
+                                    } label: {
+                                        Label(
+                                            "Edit Entry",
+                                            systemImage: "pencil"
+                                        )
+                                    }
+
+                                    Button {
+                                    } label: {
+                                        Label(
+                                            "Favorite Entry",
+                                            systemImage: "star"
+                                        )
+                                    }
+
+                                    Divider()
+
+                                    Button(role: .destructive) {
+                                        entryToDelete = entry
+                                        showEntryDeleteConfirmation = true
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                                .padding(.horizontal)
+                                .padding(.bottom, 24)
+                                .padding(
+                                    .top,
+                                    users.first?.goals == nil ? nil : 0
+                                )
                             }
                             .background(
                                 GeometryReader { geo in
@@ -464,6 +517,42 @@ struct HomeView: View {
                     isCarbsActive: .constant(false),
                     isFatActive: .constant(false),
                     isFiberActive: .constant(false)
+                )
+            }
+            .sheet(item: $clickedEntry) { entry in
+                NavigationStack {
+                    LoggedEntryDetailView(entry: entry)
+                }
+            }
+            // TODO: fix slight glitch with meal row disappearing when sheet pops up (add slight delay i think)
+            // TODO: add dismiss button to sheet popup
+            .sheet(item: $foodToLogAgain) { foodToLog in
+                NavigationStack {
+                    if foodToLog.type == .recipe {
+                        LogRecipeView(recipe: foodToLog)
+                    } else {
+                        LogEntryView(food: foodToLog)
+                    }
+                }
+            }
+            .alert(
+                "Delete Entry?",
+                isPresented: $showEntryDeleteConfirmation,
+                presenting: entryToDelete
+            ) { entry in
+                Button("Cancel", role: .cancel) {
+                    entryToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    withAnimation {
+                        modelContext.delete(entry)
+                        try? modelContext.save()
+                        entryToDelete = nil
+                    }
+                }
+            } message: { _ in
+                Text(
+                    "Are you sure you want to delete this entry? This action cannot be undone."
                 )
             }
             .alert("Delete All Data?", isPresented: $showDeleteConfirmation) {
