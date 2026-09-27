@@ -24,7 +24,7 @@ struct LogEntryView: View {
         [ServingSizeUnit]
 
     let food: FoodItem
-    var name: String
+    @State private var name: String
     var isPushedView: Bool = true
 
     private let isCustomDefaultServing: Bool
@@ -38,10 +38,13 @@ struct LogEntryView: View {
 
     @State private var date = Date()
     @State private var time = Date()
-    @State private var location = "TODO"
+    @State private var location: String
 
     @State private var portionQuantity: String
     @State private var portionUnitSelection: String
+
+    private let originalPortionQuantity: String
+    private let originalPortionUnitSelection: String
 
     private let calorieStatic: String
     private let proteinStatic: String
@@ -61,29 +64,43 @@ struct LogEntryView: View {
     @State private var fat: String
     @State private var fiber: String
 
-    @State private var manualOverrideToggle: Bool = false
+    @State private var manualOverrideToggle: Bool
 
     @State private var stickyNote: String
     @State private var stickyNoteDate: Date
 
-    @State private var newNote: String = ""
-    @State private var isAddingNewNote: Bool = false
+    private let originalNoteText: String
+
+    @State private var newNote: String
+    @State private var isAddingNewNote: Bool
     @State private var isNewNotePinned: Bool = false
     @State private var isOriginalNotePinned: Bool
 
     @State private var showingAllNotes: Bool = false
 
-    @State private var selectedPhotos: [LoggedPhoto] = []
+    @State private var selectedPhotos: [LoggedPhoto]
 
     @State private var dateAdded: Date
 
     @State private var saveOption: LogSaveOption = .logOnly
+
+    @State private var isResettingPortion = false
 
     var isEdited: Bool {
         sourceSelection != (food.source?.source ?? "")
             || categorySelection != (food.category?.category ?? "")
             || foodGroupSelection != (food.foodGroup?.foodGroup ?? "")
             || manualOverrideToggle
+    }
+
+    private var hasChangedFromOriginal: Bool {
+        isEdited
+            || name != food.name
+            || portionQuantity != originalPortionQuantity
+            || portionUnitSelection != originalPortionUnitSelection
+            || stickyNote != originalNoteText
+            || isAddingNewNote
+            || !selectedPhotos.isEmpty
     }
 
     var mappedSourceOptions: [String] {
@@ -257,12 +274,13 @@ struct LogEntryView: View {
             logNote: resolvedNote
         )
 
-        let photoEntities = selectedPhotos.map { photo in
+        let photoEntities = selectedPhotos.enumerated().map { index, photo in
             EntryPhoto(
                 imageData: photo.originalData,
                 scale: Double(photo.scale),
                 offsetX: Double(photo.offset.width),
-                offsetY: Double(photo.offset.height)
+                offsetY: Double(photo.offset.height),
+                displayOrder: index,
             )
         }
         newLog.photos = photoEntities
@@ -354,17 +372,28 @@ struct LogEntryView: View {
 
     init(
         food: FoodItem,
+        previousEntry: LoggedEntry? = nil,
         isPushedView: Bool = true,
     ) {
         self.food = food
-        self.name = food.name
         self.isPushedView = isPushedView
 
-        _sourceSelection = State(initialValue: food.source?.source ?? "")
-        _categorySelection = State(initialValue: food.category?.category ?? "")
-        _foodGroupSelection = State(
-            initialValue: food.foodGroup?.foodGroup ?? ""
+        _name = State(initialValue: previousEntry?.name ?? food.name)
+
+        _sourceSelection = State(
+            initialValue: previousEntry?.source?.source
+                ?? food.source?.source ?? ""
         )
+        _categorySelection = State(
+            initialValue: previousEntry?.category?.category
+                ?? food.category?.category ?? ""
+        )
+        _foodGroupSelection = State(
+            initialValue: previousEntry?.foodGroup?.foodGroup
+                ?? food.foodGroup?.foodGroup ?? ""
+        )
+
+        _location = State(initialValue: previousEntry?.location ?? "TODO")
 
         let startingPortionDouble: Double
         if food.isCustomDefaultServing, let custom = food.customServingSize {
@@ -373,11 +402,19 @@ struct LogEntryView: View {
             startingPortionDouble = food.servingSize
         }
 
+        let defaultPortionQuantity = String(format: "%g", startingPortionDouble)
+        let defaultPortionUnit = food.servingUnit?.unit ?? "serving"
+
+        self.originalPortionQuantity = defaultPortionQuantity
+        self.originalPortionUnitSelection = defaultPortionUnit
+
         _portionQuantity = State(
-            initialValue: String(format: "%g", startingPortionDouble)
+            initialValue: previousEntry.map {
+                EntryHelper.format($0.loggedQuantity)
+            } ?? defaultPortionQuantity
         )
         _portionUnitSelection = State(
-            initialValue: food.servingUnit?.unit ?? "serving"
+            initialValue: previousEntry?.loggedUnit ?? defaultPortionUnit
         )
 
         self.isCustomDefaultServing = food.isCustomDefaultServing
@@ -397,23 +434,48 @@ struct LogEntryView: View {
         self.fatStatic = fatStr
         self.fiberStatic = fibStr
 
-        _calorieDynamic = State(initialValue: calStr)
-        _proteinDynamic = State(initialValue: proStr)
-        _carbsDynamic = State(initialValue: carbStr)
-        _fatDynamic = State(initialValue: fatStr)
-        _fiberDynamic = State(initialValue: fibStr)
+        let initialCalorie =
+            previousEntry.map { EntryHelper.format($0.calories) } ?? calStr
+        let initialProtein =
+            previousEntry.map { EntryHelper.format($0.protein) } ?? proStr
+        let initialCarbs =
+            previousEntry.map { EntryHelper.format($0.carbs) } ?? carbStr
+        let initialFat =
+            previousEntry.map { EntryHelper.format($0.fat) } ?? fatStr
+        let initialFiber =
+            previousEntry.map { EntryHelper.format($0.fiber) } ?? fibStr
 
-        _calorie = State(initialValue: calStr)
-        _protein = State(initialValue: proStr)
-        _carbs = State(initialValue: carbStr)
-        _fat = State(initialValue: fatStr)
-        _fiber = State(initialValue: fibStr)
+        _calorieDynamic = State(initialValue: initialCalorie)
+        _proteinDynamic = State(initialValue: initialProtein)
+        _carbsDynamic = State(initialValue: initialCarbs)
+        _fatDynamic = State(initialValue: initialFat)
+        _fiberDynamic = State(initialValue: initialFiber)
 
-        let initialNoteText = food.stickyNote?.text ?? ""
-        _stickyNote = State(initialValue: initialNoteText)
-        _isOriginalNotePinned = State(initialValue: !initialNoteText.isEmpty)
+        _calorie = State(initialValue: initialCalorie)
+        _protein = State(initialValue: initialProtein)
+        _carbs = State(initialValue: initialCarbs)
+        _fat = State(initialValue: initialFat)
+        _fiber = State(initialValue: initialFiber)
+
+        _manualOverrideToggle = State(
+            initialValue: previousEntry?.isManualOverride ?? false
+        )
+
+        self.originalNoteText = food.stickyNote?.text ?? ""
+        _stickyNote = State(initialValue: originalNoteText)
+        _isOriginalNotePinned = State(initialValue: !originalNoteText.isEmpty)
         _stickyNoteDate = State(
             initialValue: food.stickyNote?.lastUpdated ?? Date()
+        )
+
+        let loggedNote = previousEntry?.logNote ?? ""
+        let hasDistinctLoggedNote =
+            !loggedNote.isEmpty && loggedNote != originalNoteText
+        _newNote = State(initialValue: hasDistinctLoggedNote ? loggedNote : "")
+        _isAddingNewNote = State(initialValue: hasDistinctLoggedNote)
+
+        _selectedPhotos = State(
+            initialValue: EntryHelper.loggedPhotos(from: previousEntry?.photos)
         )
 
         _dateAdded = State(initialValue: food.dateAdded)
@@ -739,19 +801,66 @@ struct LogEntryView: View {
                                 .disabled(!isEdited && option != .logOnly)
                             }
 
-                            if isEdited {
+                            if hasChangedFromOriginal {
                                 Divider()
 
                                 Button(role: .destructive) {
+                                    isResettingPortion = true
                                     withAnimation {
+                                        name = food.name
                                         sourceSelection =
                                             food.source?.source ?? ""
                                         categorySelection =
                                             food.category?.category ?? ""
                                         foodGroupSelection =
                                             food.foodGroup?.foodGroup ?? ""
+                                        location = "TODO"
+
+                                        portionQuantity =
+                                            originalPortionQuantity
+                                        portionUnitSelection =
+                                            originalPortionUnitSelection
+
                                         manualOverrideToggle = false
+                                        calorie = EntryHelper.scale(
+                                            calorieStatic,
+                                            by: activeMultiplier
+                                        )
+                                        protein = EntryHelper.scale(
+                                            proteinStatic,
+                                            by: activeMultiplier
+                                        )
+                                        carbs = EntryHelper.scale(
+                                            carbsStatic,
+                                            by: activeMultiplier
+                                        )
+                                        fat = EntryHelper.scale(
+                                            fatStatic,
+                                            by: activeMultiplier
+                                        )
+                                        fiber = EntryHelper.scale(
+                                            fiberStatic,
+                                            by: activeMultiplier
+                                        )
+                                        calorieDynamic = calorie
+                                        proteinDynamic = protein
+                                        carbsDynamic = carbs
+                                        fatDynamic = fat
+                                        fiberDynamic = fiber
+
+                                        stickyNote = originalNoteText
+                                        isOriginalNotePinned =
+                                            !originalNoteText.isEmpty
+                                        isAddingNewNote = false
+                                        newNote = ""
+                                        isNewNotePinned = false
+
+                                        selectedPhotos = []
+
                                         saveOption = .logOnly
+                                    }
+                                    DispatchQueue.main.async {
+                                        isResettingPortion = false
                                     }
                                 } label: {
                                     Label(
@@ -783,7 +892,8 @@ struct LogEntryView: View {
                     }
                 }
                 .onChange(of: portionUnitSelection) { oldUnit, newUnit in
-                    guard oldUnit != newUnit, let weight = food.servingWeight
+                    guard !isResettingPortion, oldUnit != newUnit,
+                        let weight = food.servingWeight
                     else { return }
                     let currentQuantity = Double(portionQuantity) ?? 0
                     let baseUnit = food.servingUnit?.unit ?? "serving"

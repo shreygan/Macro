@@ -20,7 +20,7 @@ struct LogRecipeView: View {
         [ServingSizeUnit]
 
     let recipe: FoodItem
-    var name: String
+    @State private var name: String
     var isPushedView: Bool = true
 
     private let isCustomDefaultServing: Bool
@@ -33,7 +33,7 @@ struct LogRecipeView: View {
 
     @State private var date = Date()
     @State private var time = Date()
-    @State private var location = "TODO"
+    @State private var location: String
 
     @State private var portionQuantity: String
     @State private var portionUnitSelection: String
@@ -48,20 +48,24 @@ struct LogRecipeView: View {
     @State private var initialIngredients: [LogRecipeIngredient] = []
     @State private var saveOption: LogSaveOption = .logOnly
 
+    @State private var isResettingPortion = false
+
     @State private var focusManager = SwipeFocusManager()
 
     @State private var stickyNote: String
     @State private var stickyNoteDate: Date
 
-    @State private var newNote: String = ""
-    @State private var isAddingNewNote: Bool = false
+    private let originalNoteText: String
+
+    @State private var newNote: String
+    @State private var isAddingNewNote: Bool
     @State private var isNewNotePinned: Bool = false
     @State private var isOriginalNotePinned: Bool
 
     @State private var showingAllNotes: Bool = false
     @State private var dateAdded: Date
 
-    @State private var selectedPhotos: [LoggedPhoto] = []
+    @State private var selectedPhotos: [LoggedPhoto]
 
     var isEdited: Bool {
         draftIngredients != initialIngredients
@@ -69,6 +73,14 @@ struct LogRecipeView: View {
             || categorySelection != initialCategorySelection
             || portionQuantity != initialPortionQuantity
             || portionUnitSelection != initialPortionUnitSelection
+    }
+
+    private var hasChangedFromOriginal: Bool {
+        isEdited
+            || name != recipe.name
+            || stickyNote != originalNoteText
+            || isAddingNewNote
+            || !selectedPhotos.isEmpty
     }
 
     var mappedSourceOptions: [String] {
@@ -269,26 +281,27 @@ struct LogRecipeView: View {
             logNote: resolvedNote
         )
 
-        let photoEntities = selectedPhotos.map { photo in
+        let photoEntities = selectedPhotos.enumerated().map { index, photo in
             EntryPhoto(
                 imageData: photo.originalData,
                 scale: Double(photo.scale),
                 offsetX: Double(photo.offset.width),
-                offsetY: Double(photo.offset.height)
+                offsetY: Double(photo.offset.height),
+                displayOrder: index,
             )
         }
         mainLog.photos = photoEntities
 
         modelContext.insert(mainLog)
 
-        for draft in draftIngredients {
+        for (index, draft) in draftIngredients.enumerated() {
             let baseDraftQuantity = parseDouble(draft.quantity)
             let scaledQuantity = baseDraftQuantity * activeMultiplier
 
             let ingredientLog = LoggedEntry(
                 name: draft.name,
                 typeRawValue: "ingredient",
-                originalFoodItem: nil,
+                originalFoodItem: draft.ingredientItem,
                 parentEntry: mainLog,
                 timestamp: combinedDate,
                 location: location.isEmpty ? nil : location,
@@ -300,7 +313,8 @@ struct LogRecipeView: View {
                 fat: draft.activeFat * activeMultiplier,
                 fiber: draft.activeFiber * activeMultiplier,
                 isManualOverride: false,
-                logNote: nil
+                logNote: nil,
+                displayOrder: index
             )
 
             modelContext.insert(ingredientLog)
@@ -424,11 +438,13 @@ struct LogRecipeView: View {
 
     init(
         recipe: FoodItem,
+        previousEntry: LoggedEntry? = nil,
         isPushedView: Bool = true,
     ) {
         self.recipe = recipe
-        self.name = recipe.name
         self.isPushedView = isPushedView
+
+        _name = State(initialValue: previousEntry?.name ?? recipe.name)
 
         let startSource = recipe.source?.source ?? ""
         let startCategory = recipe.category?.category ?? ""
@@ -436,8 +452,14 @@ struct LogRecipeView: View {
         self.initialSourceSelection = startSource
         self.initialCategorySelection = startCategory
 
-        _sourceSelection = State(initialValue: startSource)
-        _categorySelection = State(initialValue: startCategory)
+        _sourceSelection = State(
+            initialValue: previousEntry?.source?.source ?? startSource
+        )
+        _categorySelection = State(
+            initialValue: previousEntry?.category?.category ?? startCategory
+        )
+
+        _location = State(initialValue: previousEntry?.location ?? "TODO")
 
         let startingPortionDouble: Double
         if recipe.isCustomDefaultServing, let custom = recipe.customServingSize
@@ -453,8 +475,14 @@ struct LogRecipeView: View {
         self.initialPortionQuantity = startPortionQuantity
         self.initialPortionUnitSelection = startPortionUnit
 
-        _portionQuantity = State(initialValue: startPortionQuantity)
-        _portionUnitSelection = State(initialValue: startPortionUnit)
+        _portionQuantity = State(
+            initialValue: previousEntry.map {
+                EntryHelper.format($0.loggedQuantity)
+            } ?? startPortionQuantity
+        )
+        _portionUnitSelection = State(
+            initialValue: previousEntry?.loggedUnit ?? startPortionUnit
+        )
 
         self.isCustomDefaultServing = recipe.isCustomDefaultServing
         self.customServingSize = EntryHelper.format(recipe.customServingSize)
@@ -467,15 +495,33 @@ struct LogRecipeView: View {
             .map { LogRecipeIngredient(recipeIngredient: $0) } ?? []
 
         _initialIngredients = State(initialValue: existingIngredients)
-        _draftIngredients = State(initialValue: existingIngredients)
+        _draftIngredients = State(
+            initialValue: previousEntry.map {
+                LogRecipeIngredient.makeDrafts(for: $0)
+            } ?? existingIngredients
+        )
 
-        let initialNoteText = recipe.stickyNote?.text ?? ""
-        _stickyNote = State(initialValue: initialNoteText)
-        _isOriginalNotePinned = State(initialValue: !initialNoteText.isEmpty)
+        self.originalNoteText = recipe.stickyNote?.text ?? ""
+        _stickyNote = State(initialValue: originalNoteText)
+        _isOriginalNotePinned = State(initialValue: !originalNoteText.isEmpty)
         _stickyNoteDate = State(
             initialValue: recipe.stickyNote?.lastUpdated ?? Date()
         )
+
+        // The logged entry's own note is only a distinct "new" note if it
+        // differs from the recipe's pinned note; otherwise it's just the
+        // pinned note carried over unchanged
+        let loggedNote = previousEntry?.logNote ?? ""
+        let hasDistinctLoggedNote =
+            !loggedNote.isEmpty && loggedNote != originalNoteText
+        _newNote = State(initialValue: hasDistinctLoggedNote ? loggedNote : "")
+        _isAddingNewNote = State(initialValue: hasDistinctLoggedNote)
+
         _dateAdded = State(initialValue: recipe.dateAdded)
+
+        _selectedPhotos = State(
+            initialValue: EntryHelper.loggedPhotos(from: previousEntry?.photos)
+        )
     }
 
     var body: some View {
@@ -720,11 +766,13 @@ struct LogRecipeView: View {
                                 .disabled(!isEdited && option != .logOnly)
                             }
 
-                            if isEdited {
+                            if hasChangedFromOriginal {
                                 Divider()
 
                                 Button(role: .destructive) {
+                                    isResettingPortion = true
                                     withAnimation {
+                                        name = recipe.name
                                         draftIngredients = initialIngredients
                                         sourceSelection = initialSourceSelection
                                         categorySelection =
@@ -732,7 +780,21 @@ struct LogRecipeView: View {
                                         portionQuantity = initialPortionQuantity
                                         portionUnitSelection =
                                             initialPortionUnitSelection
+                                        location = "TODO"
+
+                                        stickyNote = originalNoteText
+                                        isOriginalNotePinned =
+                                            !originalNoteText.isEmpty
+                                        isAddingNewNote = false
+                                        newNote = ""
+                                        isNewNotePinned = false
+
+                                        selectedPhotos = []
+
                                         saveOption = .logOnly
+                                    }
+                                    DispatchQueue.main.async {
+                                        isResettingPortion = false
                                     }
                                 } label: {
                                     Label(
@@ -802,7 +864,9 @@ struct LogRecipeView: View {
                 .presentationDetents([.medium, .large])
             }
             .onChange(of: portionUnitSelection) { oldUnit, newUnit in
-                guard oldUnit != newUnit, totalRecipeWeight > 0 else { return }
+                guard !isResettingPortion, oldUnit != newUnit,
+                    totalRecipeWeight > 0
+                else { return }
                 let currentQuantity = Double(portionQuantity) ?? 0
                 let baseUnit = recipe.servingUnit?.unit ?? "serving"
 

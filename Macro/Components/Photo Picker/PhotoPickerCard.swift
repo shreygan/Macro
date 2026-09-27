@@ -21,10 +21,14 @@ struct LoggedPhoto: Identifiable {
 struct PhotoPickerCard: View {
     @Binding var images: [LoggedPhoto]
 
+    var isEditing: Bool = true
+
     @State private var showCamera = false
     @State private var showPhotoLibrary = false
     @State private var currentTabIndex: Int = 0
     @State private var selectedPhotosPickerItems: [PhotosPickerItem] = []
+
+    @State private var showAddSlide: Bool = false
 
     let maxPhotos = 5
 
@@ -45,14 +49,59 @@ struct PhotoPickerCard: View {
                             TabView(selection: $currentTabIndex) {
                                 ForEach(images.indices, id: \.self) { index in
                                     InteractivePhotoView(photo: $images[index])
-                                    {
-                                        deleteImage(at: index)
-                                    }
-                                    .padding(.horizontal, 5)
-                                    .tag(index)
+                                        .overlay(alignment: .topTrailing) {
+                                            Button(action: {
+                                                deleteImage(at: index)
+                                            }) {
+                                                Image(systemName: "trash")
+                                                    .font(
+                                                        .system(
+                                                            size: 12,
+                                                            weight: .bold
+                                                        )
+                                                    )
+                                                    .foregroundColor(
+                                                        .red.opacity(0.85)
+                                                    )
+                                                    .frame(
+                                                        width: 30,
+                                                        height: 30
+                                                    )
+                                                    .background(
+                                                        Circle()
+                                                            .fill(
+                                                                .regularMaterial
+                                                            )
+                                                    )
+                                                    .overlay(
+                                                        Circle()
+                                                            .strokeBorder(
+                                                                Color.white
+                                                                    .opacity(
+                                                                        0.4
+                                                                    ),
+                                                                lineWidth: 0.5
+                                                            )
+                                                    )
+                                                    .shadow(
+                                                        color: .black.opacity(
+                                                            0.15
+                                                        ),
+                                                        radius: 4,
+                                                        x: 0,
+                                                        y: 2
+                                                    )
+                                            }
+                                            .padding(12)
+                                            .opacity(isEditing ? 1 : 0)
+                                            .scaleEffect(isEditing ? 1 : 0.5)
+                                            .disabled(!isEditing)
+                                        }
+                                        .padding(.horizontal, 5)
+                                        .tag(index)
                                 }
 
-                                if images.count < maxPhotos {
+                                if images.count < maxPhotos && showAddSlide {
                                     carouselAddSlide
                                         .padding(.horizontal, 5)
                                         .tag(images.count)
@@ -78,6 +127,20 @@ struct PhotoPickerCard: View {
             selectionBehavior: .ordered,
             matching: .images
         )
+        .onAppear {
+            showAddSlide = isEditing
+        }
+        .onChange(of: isEditing) { oldVal, newVal in
+            if !newVal && currentTabIndex == images.count {
+                currentTabIndex = max(0, images.count - 1)
+            }
+
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                showAddSlide = newVal
+            }
+        }
         .onChange(of: selectedPhotosPickerItems) { oldItems, newItems in
             Task {
                 let cameraPhotos = images.filter { $0.pickerItem == nil }
@@ -157,16 +220,40 @@ struct PhotoPickerCard: View {
 
     @ViewBuilder
     private var emptyStateMenu: some View {
-        Menu {
-            photoMenuOptions
-        } label: {
-            ButtonRow(
-                icon: .customSymbol("camera", tint: .primary),
-                title: "Add Photos",
-                topPadding: 16,
-                action: {}
-            )
+        GeometryReader { proxy in
+            Menu {
+                photoMenuOptions
+            } label: {
+                addPhotosLabel(rowWidth: proxy.size.width)
+            }
         }
+        .frame(height: 36)
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 16)
+        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+    }
+    
+    @ViewBuilder
+    private func addPhotosLabel(rowWidth: CGFloat) -> some View {
+        ZStack {
+            Text("Add Photos")
+                .font(.system(size: 14, design: .rounded))
+                .frame(width: rowWidth, alignment: .center)
+            
+            Image(systemName: "camera")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.primary)
+                .frame(width: 15)
+                .padding(.leading, 12)
+                .frame(width: rowWidth, alignment: .leading)
+        }
+        .frame(height: 20)
+        .padding(.vertical, 8)
+        .background(Color.gray.opacity(0.1))
+        .foregroundStyle(Color.primary)
+        .clipShape(Capsule())
     }
 
     @ViewBuilder
@@ -223,7 +310,7 @@ struct PhotoPickerCard: View {
         VStack {
             Spacer()
 
-            PhotoPickerCard(images: $previewImages)
+            PhotoPickerCard(images: $previewImages, isEditing: false)
 
             Spacer()
         }

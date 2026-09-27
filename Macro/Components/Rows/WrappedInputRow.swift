@@ -61,7 +61,9 @@ struct WrappedInputRow: View {
             } else {
                 Text(text.isEmpty ? placeholder : text)
                     .foregroundColor(
-                        text.isEmpty ? .secondary.opacity(0.5) : .primary
+                        text.isEmpty
+                            ? .secondary.opacity(0.5)
+                            : Color(uiColor: .secondaryLabel)
                     )
                     .lineLimit(nil)
                     .frame(minHeight: 22, alignment: .topLeading)

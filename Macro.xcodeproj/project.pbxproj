@@ -52,6 +52,23 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		3546B97D3068BF5500D3AE5E /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				3556298F2F8F29F800120515 /* Macro.xcodeproj */,
+				356465A02FA33004007414C5 /* Macro.xcodeproj */,
+				35A9ED862FB1012400BD8B80 /* Macro.xcodeproj */,
+				CCD782B92FB1AE15004D70EC /* Macro.xcodeproj */,
+				CCD7835F2FB27C46004D70EC /* Macro.xcodeproj */,
+				3553261E2F9C38EA00FBFE88 /* Macro.xcodeproj */,
+				35A9EA062FAD665C00BD8B80 /* Macro.xcodeproj */,
+				CCD784002FB27E61004D70EC /* Macro.xcodeproj */,
+				CCD784FC2FB29CC1004D70EC /* Macro.xcodeproj */,
+				CCD780E72FB17D24004D70EC /* Macro.xcodeproj */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		355326202F9C38EA00FBFE88 /* Products */ = {
 			isa = PBXGroup;
 			name = Products;
@@ -72,6 +89,7 @@
 			children = (
 				35A79F862F8F22C200338167 /* Macro */,
 				35A79F852F8F22C200338167 /* Products */,
+				3546B97D3068BF5500D3AE5E /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -263,6 +281,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_UIUserInterfaceStyle = Light;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -302,6 +321,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_UIUserInterfaceStyle = Light;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

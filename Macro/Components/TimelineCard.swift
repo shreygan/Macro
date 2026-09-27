@@ -8,19 +8,30 @@
 import SwiftData
 import SwiftUI
 
-struct TimelineCard: View {
+struct TimelineCard<MenuContent: View>: View {
     @Query private var entries: [LoggedEntry]
+    @Binding var clickedEntry: LoggedEntry?
 
-    init(date: Date) {
+    let menuItems: (LoggedEntry) -> MenuContent
+
+    init(
+        date: Date,
+        clickedEntry: Binding<LoggedEntry?> = .constant(nil),
+        @ViewBuilder menuItems: @escaping (LoggedEntry) -> MenuContent
+    ) {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
 
         let predicate = #Predicate<LoggedEntry> { entry in
             entry.timestamp >= startOfDay && entry.timestamp < endOfDay
+                && entry.parentEntry == nil
         }
 
         _entries = Query(filter: predicate, sort: \.timestamp)
+
+        self._clickedEntry = clickedEntry
+        self.menuItems = menuItems
     }
 
     var body: some View {
@@ -57,9 +68,10 @@ struct TimelineCard: View {
                                 }
                             }
                             .font(.system(size: 13))
-                            .padding(.leading, -8)
+                            .padding(.leading, 4)
+                            .padding(.bottom, 6)
 
-                            MealRow(
+                            let mealRow = MealRow(
                                 name: entry.name,
                                 source: entry.source?.source ?? "None",
                                 isCustomDefaultServing: entry.originalFoodItem?
@@ -81,14 +93,40 @@ struct TimelineCard: View {
                                 fat: String(entry.fat),
                                 fiber: String(entry.fiber),
                                 action: {
+                                    clickedEntry = entry
                                 }
                             )
-                            .padding(.leading, -12)
+
+                            Group {
+                                if MenuContent.self != EmptyView.self {
+                                    Menu {
+                                        menuItems(entry)
+                                    } label: {
+                                        mealRow
+                                            .allowsHitTesting(false)
+                                            .contentShape(Rectangle())
+                                    } primaryAction: {
+                                        clickedEntry = entry
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.top, -8)
+
+                                } else {
+                                    mealRow
+                                        .padding(.top, -8)
+                                }
+                            }
                         }
-                        .padding(.leading, 32)
+                        .clipped()
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.combined(with: .scale(scale: 0.95)),
+                                removal: .opacity.animation(.linear(duration: 0))
+                            )
+                        )
+                        .padding(.leading, 20)
                         .overlay(alignment: .topLeading) {
                             ZStack(alignment: .top) {
-
                                 if isFirst && isLast {
                                     Capsule()
                                         .fill(Color.gray.opacity(0.3))
@@ -115,7 +153,6 @@ struct TimelineCard: View {
                                     .fill(Color.black)
                                     .frame(width: 8, height: 8)
                                     .padding(.top, 4)
-
                             }
                             .frame(width: 32)
                             .frame(maxHeight: .infinity, alignment: .top)
@@ -132,6 +169,19 @@ struct TimelineCard: View {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return formatter.string(from: date).lowercased()
+    }
+}
+
+extension TimelineCard where MenuContent == EmptyView {
+    init(
+        date: Date,
+        clickedEntry: Binding<LoggedEntry?> = .constant(nil)
+    ) {
+        self.init(
+            date: date,
+            clickedEntry: clickedEntry,
+            menuItems: { _ in EmptyView() }
+        )
     }
 }
 
@@ -263,8 +313,28 @@ struct TimelineCard: View {
     context.insert(iceCreamEntry)
 
     return ScrollView {
-        TimelineCard(date: today)
-            .padding()
+        TimelineCard(date: today) { entry in
+            Button {
+                print("Edit \(entry.name)")
+            } label: {
+                Label("Edit Entry", systemImage: "pencil")
+            }
+
+            Button {
+                print("Duplicate \(entry.name)")
+            } label: {
+                Label("Duplicate", systemImage: "plus.square.on.square")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                print("Delete \(entry.name)")
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .padding()
     }
     .background(Color(UIColor.systemGroupedBackground))
     .modelContainer(container)

@@ -12,9 +12,22 @@ struct DateTimePillRow: View {
     var title: String
     var titleExtension: String? = nil
     var subtitle: String? = nil
+    var isEnabled: Bool = true
 
     @Binding var dateSelection: Date
     @Binding var timeSelection: Date
+
+    private var formattedDateTime: String {
+        let dateString = dateSelection.formatted(
+            date: .abbreviated,
+            time: .omitted
+        )
+        let timeString = timeSelection.formatted(
+            date: .omitted,
+            time: .shortened
+        )
+        return "\(dateString) at \(timeString)"
+    }
 
     var body: some View {
         BaseRowLayout(
@@ -26,14 +39,32 @@ struct DateTimePillRow: View {
             HStack(spacing: 0) {
                 Spacer()
 
-                DateTimePill(selection: $dateSelection, components: .date)
-                DateTimePill(
-                    selection: $timeSelection,
-                    components: .hourAndMinute
-                )
-                .padding(.trailing, -5)
+                ZStack(alignment: .trailing) {
+                    HStack(spacing: 0) {
+                        DateTimePill(
+                            selection: $dateSelection,
+                            components: .date
+                        )
+                        DateTimePill(
+                            selection: $timeSelection,
+                            components: .hourAndMinute
+                        )
+                        .padding(.trailing, -5)
+                    }
+                    .opacity(isEnabled ? 1.0 : 0.0)
+                    .allowsHitTesting(isEnabled)
+                    .accessibilityHidden(!isEnabled)
+
+                    Text(formattedDateTime)
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary)
+                        .padding(.trailing, 8)
+                        .opacity(isEnabled ? 0.0 : 1.0)
+                        .accessibilityHidden(isEnabled)
+                }
             }
             .padding(.vertical, -2)
+            .animation(.snappy(duration: 0.3), value: isEnabled)
         }
     }
 }
@@ -69,6 +100,13 @@ struct DateTimePillRow: View {
                                 title: "Date & Time",
                                 dateSelection: $date,
                                 timeSelection: $time
+                            )
+
+                            DateTimePillRow(
+                                title: "Date & Time",
+                                isEnabled: false,
+                                dateSelection: $date,
+                                timeSelection: $time,
                             )
 
                             DropdownPillRow(

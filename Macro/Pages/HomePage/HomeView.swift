@@ -19,6 +19,13 @@ struct HomeView: View {
     @State private var showGoalSetupSheet = false
     @State private var showDeleteConfirmation = false
 
+    @State private var entryToLogAgain: LoggedEntry? = nil
+
+    @State private var entryToDelete: LoggedEntry? = nil
+    @State private var showEntryDeleteConfirmation = false
+
+    @State private var clickedEntry: LoggedEntry? = nil
+
     @State private var swapTargetDate: Date? = nil
     @State private var swapSubstituteDate: Date? = nil
 
@@ -92,6 +99,31 @@ struct HomeView: View {
                 "Failed to clear or reseed data: \(error.localizedDescription)"
             )
         }
+    }
+
+    private func isFavorited(_ entry: LoggedEntry) -> Bool {
+        entry.originalFoodItem?.favoriteEntry != nil
+    }
+
+    private func toggleFavorite(for entry: LoggedEntry) {
+        guard let food = entry.originalFoodItem else { return }
+
+        if let favorite = food.favoriteEntry {
+            modelContext.delete(favorite)
+        } else {
+            let descriptor = FetchDescriptor<FavoriteEntry>()
+            let existingFavorites = (try? modelContext.fetch(descriptor)) ?? []
+            let maxIndex =
+                existingFavorites.compactMap { $0.orderIndex }.max() ?? -1
+
+            let newFavorite = FavoriteEntry(
+                orderIndex: maxIndex + 1,
+                foodItem: food
+            )
+            modelContext.insert(newFavorite)
+        }
+
+        try? modelContext.save()
     }
 
     private func currDate(for date: Date) -> String {
@@ -260,13 +292,59 @@ struct HomeView: View {
                                     .padding()
                                 }
 
-                                TimelineCard(date: effectiveDate)
-                                    .padding(.horizontal)
-                                    .padding(.bottom, 24)
-                                    .padding(
-                                        .top,
-                                        users.first?.goals == nil ? nil : 0
-                                    )
+                                TimelineCard(
+                                    date: effectiveDate,
+                                    clickedEntry: $clickedEntry
+                                ) { entry in
+                                    Button {
+                                        if entry.originalFoodItem != nil {
+                                            entryToLogAgain = entry
+                                        }
+                                    } label: {
+                                        Label(
+                                            "Log Again",
+                                            systemImage: "plus.square.on.square"
+                                        )
+                                    }
+                                    //                                    .disabled(entry.originalFoodItem == nil)
+
+                                    Button {
+                                        clickedEntry = entry
+                                    } label: {
+                                        Label(
+                                            "Edit Entry",
+                                            systemImage: "pencil"
+                                        )
+                                    }
+
+                                    Button {
+                                        toggleFavorite(for: entry)
+                                    } label: {
+                                        Label(
+                                            isFavorited(entry)
+                                                ? "Unfavorite Entry"
+                                                : "Favorite Entry",
+                                            systemImage: isFavorited(entry)
+                                                ? "star.slash" : "star"
+                                        )
+                                    }
+                                    .disabled(entry.originalFoodItem == nil)
+
+                                    Divider()
+
+                                    Button(role: .destructive) {
+                                        entryToDelete = entry
+                                        showEntryDeleteConfirmation = true
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                                .padding(.horizontal)
+                                .padding(.bottom, 24)
+                                .padding(
+                                    .top,
+                                    users.first?.goals == nil ? nil : 0
+                                )
                             }
                             .background(
                                 GeometryReader { geo in
@@ -464,6 +542,50 @@ struct HomeView: View {
                     isCarbsActive: .constant(false),
                     isFatActive: .constant(false),
                     isFiberActive: .constant(false)
+                )
+            }
+            .sheet(item: $clickedEntry) { entry in
+                NavigationStack {
+                    LoggedEntryDetailView(entry: entry, isPushedView: false)
+                }
+            }
+            .sheet(item: $entryToLogAgain) { previousEntry in
+                NavigationStack {
+                    if let foodToLog = previousEntry.originalFoodItem {
+                        if foodToLog.type == .recipe {
+                            LogRecipeView(
+                                recipe: foodToLog,
+                                previousEntry: previousEntry,
+                                isPushedView: false
+                            )
+                        } else {
+                            LogEntryView(
+                                food: foodToLog,
+                                previousEntry: previousEntry,
+                                isPushedView: false
+                            )
+                        }
+                    }
+                }
+            }
+            .alert(
+                "Delete Entry?",
+                isPresented: $showEntryDeleteConfirmation,
+                presenting: entryToDelete
+            ) { entry in
+                Button("Cancel", role: .cancel) {
+                    entryToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    withAnimation {
+                        modelContext.delete(entry)
+                        try? modelContext.save()
+                        entryToDelete = nil
+                    }
+                }
+            } message: { _ in
+                Text(
+                    "Are you sure you want to delete this entry? This action cannot be undone."
                 )
             }
             .alert("Delete All Data?", isPresented: $showDeleteConfirmation) {

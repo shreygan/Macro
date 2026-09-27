@@ -10,7 +10,6 @@ import UIKit
 
 struct InteractivePhotoView: View {
     @Binding var photo: LoggedPhoto
-    let onDelete: () -> Void
 
     var body: some View {
         GeometryReader { geometry in
@@ -33,32 +32,6 @@ struct InteractivePhotoView: View {
                         )
                     }
                 )
-                .overlay(alignment: .topTrailing) {
-                    Button(action: onDelete) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.red.opacity(0.85))
-                            .frame(width: 30, height: 30)
-                            .background(
-                                Circle()
-                                    .fill(.regularMaterial)
-                            )
-                            .overlay(
-                                Circle()
-                                    .strokeBorder(
-                                        Color.white.opacity(0.4),
-                                        lineWidth: 0.5
-                                    )
-                            )
-                            .shadow(
-                                color: .black.opacity(0.15),
-                                radius: 4,
-                                x: 0,
-                                y: 2
-                            )
-                    }
-                    .padding(12)
-                }
         }
         .aspectRatio(1, contentMode: .fit)
     }

@@ -19,6 +19,7 @@ struct TextInputRow: View {
     var keyboardType: UIKeyboardType = .default
 
     var isEnabled: Bool = true
+    var maxWidth: CGFloat? = 120
 
     @FocusState private var isFocused: Bool
 
@@ -33,13 +34,12 @@ struct TextInputRow: View {
                 .focused($isFocused)
                 .autoFloatingToolbar(for: keyboardType)
                 .multilineTextAlignment(.trailing)
-                .frame(maxWidth: 120)
+                .frame(maxWidth: maxWidth)
                 .foregroundStyle(
                     isEnabled
                         ? Color(uiColor: .label)
                         : Color(uiColor: .secondaryLabel)
                 )
-                .opacity(isEnabled ? 1.0 : 0.7)
                 .disabled(!isEnabled)
                 .numericKeyboardFilter(text: $text, type: keyboardType)
         }
