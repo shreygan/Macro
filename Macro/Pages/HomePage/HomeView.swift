@@ -8,9 +8,6 @@
 import SwiftData
 import SwiftUI
 
-// TODO: FIX LOGGED RECIPE IN TIMELINE SHOWING EACH INGREDIENT TOO
-// TODO: MAKE RECIPES WORK ACROSS EVERYWHERE SO MUCH WORK
-
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
 
@@ -22,7 +19,7 @@ struct HomeView: View {
     @State private var showGoalSetupSheet = false
     @State private var showDeleteConfirmation = false
 
-    @State private var foodToLogAgain: FoodItem? = nil
+    @State private var entryToLogAgain: LoggedEntry? = nil
 
     @State private var entryToDelete: LoggedEntry? = nil
     @State private var showEntryDeleteConfirmation = false
@@ -102,6 +99,31 @@ struct HomeView: View {
                 "Failed to clear or reseed data: \(error.localizedDescription)"
             )
         }
+    }
+
+    private func isFavorited(_ entry: LoggedEntry) -> Bool {
+        entry.originalFoodItem?.favoriteEntry != nil
+    }
+
+    private func toggleFavorite(for entry: LoggedEntry) {
+        guard let food = entry.originalFoodItem else { return }
+
+        if let favorite = food.favoriteEntry {
+            modelContext.delete(favorite)
+        } else {
+            let descriptor = FetchDescriptor<FavoriteEntry>()
+            let existingFavorites = (try? modelContext.fetch(descriptor)) ?? []
+            let maxIndex =
+                existingFavorites.compactMap { $0.orderIndex }.max() ?? -1
+
+            let newFavorite = FavoriteEntry(
+                orderIndex: maxIndex + 1,
+                foodItem: food
+            )
+            modelContext.insert(newFavorite)
+        }
+
+        try? modelContext.save()
     }
 
     private func currDate(for date: Date) -> String {
@@ -275,10 +297,8 @@ struct HomeView: View {
                                     clickedEntry: $clickedEntry
                                 ) { entry in
                                     Button {
-                                        if let originalFood = entry
-                                            .originalFoodItem
-                                        {
-                                            foodToLogAgain = originalFood
+                                        if entry.originalFoodItem != nil {
+                                            entryToLogAgain = entry
                                         }
                                     } label: {
                                         Label(
@@ -298,12 +318,17 @@ struct HomeView: View {
                                     }
 
                                     Button {
+                                        toggleFavorite(for: entry)
                                     } label: {
                                         Label(
-                                            "Favorite Entry",
-                                            systemImage: "star"
+                                            isFavorited(entry)
+                                                ? "Unfavorite Entry"
+                                                : "Favorite Entry",
+                                            systemImage: isFavorited(entry)
+                                                ? "star.slash" : "star"
                                         )
                                     }
+                                    .disabled(entry.originalFoodItem == nil)
 
                                     Divider()
 
@@ -521,17 +546,25 @@ struct HomeView: View {
             }
             .sheet(item: $clickedEntry) { entry in
                 NavigationStack {
-                    LoggedEntryDetailView(entry: entry)
+                    LoggedEntryDetailView(entry: entry, isPushedView: false)
                 }
             }
-            // TODO: fix slight glitch with meal row disappearing when sheet pops up (add slight delay i think)
-            // TODO: add dismiss button to sheet popup
-            .sheet(item: $foodToLogAgain) { foodToLog in
+            .sheet(item: $entryToLogAgain) { previousEntry in
                 NavigationStack {
-                    if foodToLog.type == .recipe {
-                        LogRecipeView(recipe: foodToLog)
-                    } else {
-                        LogEntryView(food: foodToLog)
+                    if let foodToLog = previousEntry.originalFoodItem {
+                        if foodToLog.type == .recipe {
+                            LogRecipeView(
+                                recipe: foodToLog,
+                                previousEntry: previousEntry,
+                                isPushedView: false
+                            )
+                        } else {
+                            LogEntryView(
+                                food: foodToLog,
+                                previousEntry: previousEntry,
+                                isPushedView: false
+                            )
+                        }
                     }
                 }
             }
