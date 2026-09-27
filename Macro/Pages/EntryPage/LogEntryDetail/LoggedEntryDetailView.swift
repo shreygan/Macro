@@ -13,9 +13,11 @@ struct LoggedEntryDetailView: View {
     @Environment(\.dismiss) var dismiss
 
     let entry: LoggedEntry
+    var isPushedView: Bool = true
 
     @State private var isEditing: Bool = false
     @State private var showDeleteConfirmation: Bool = false
+    @State private var foodToLogAgain: FoodItem? = nil
 
     @Query(sort: \EntrySource.displayOrder) var sourceOptions: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var categoryOptions:
@@ -25,6 +27,7 @@ struct LoggedEntryDetailView: View {
     @Query(sort: \ServingSizeUnit.displayOrder) var portionUnitOptions:
         [ServingSizeUnit]
 
+    @State private var name: String
     @State private var sourceSelection: String
     @State private var categorySelection: String
     @State private var foodGroupSelection: String
@@ -45,8 +48,15 @@ struct LoggedEntryDetailView: View {
     @State private var fiber: String
 
     @State private var stickyNote: String
+    @State private var pinnedNoteText: String
+    @State private var isAddingEntryNote: Bool = false
+    @State private var showingAllNotes: Bool = false
 
     @State private var selectedPhotos: [LoggedPhoto] = []
+
+    @State private var draftIngredients: [LogRecipeIngredient]
+    @State private var showIngredientSelectionSheet = false
+    @State private var focusManager = SwipeFocusManager()
 
     private let baseServingSize: Double
     private let baseServingWeight: Double?
@@ -65,9 +75,11 @@ struct LoggedEntryDetailView: View {
     @State private var fatDynamic: String
     @State private var fiberDynamic: String
 
-    init(entry: LoggedEntry) {
+    init(entry: LoggedEntry, isPushedView: Bool = true) {
         self.entry = entry
+        self.isPushedView = isPushedView
 
+        _name = State(initialValue: entry.name)
         _sourceSelection = State(initialValue: entry.source?.source ?? "")
         _categorySelection = State(initialValue: entry.category?.category ?? "")
         _foodGroupSelection = State(
@@ -92,32 +104,27 @@ struct LoggedEntryDetailView: View {
         _fiber = State(initialValue: EntryHelper.format(entry.fiber))
 
         _stickyNote = State(initialValue: entry.logNote ?? "")
+        _pinnedNoteText = State(
+            initialValue: entry.originalFoodItem?.stickyNote?.text ?? ""
+        )
 
-        let existingPhotos =
-            entry.photos?
-            .sorted { $0.displayOrder < $1.displayOrder }
-            .compactMap { photoEntity -> LoggedPhoto? in
-                guard let uiImage = UIImage(data: photoEntity.imageData) else {
-                    return nil
-                }
-                return LoggedPhoto(
-                    image: uiImage,
-                    originalData: photoEntity.imageData,
-                    pickerItem: nil,
-                    scale: CGFloat(photoEntity.scale),
-                    offset: CGSize(
-                        width: photoEntity.offsetX,
-                        height: photoEntity.offsetY
-                    )
-                )
-            } ?? []
-        _selectedPhotos = State(initialValue: existingPhotos)
+        _selectedPhotos = State(
+            initialValue: EntryHelper.loggedPhotos(from: entry.photos)
+        )
 
+        _draftIngredients = State(
+            initialValue: LogRecipeIngredient.makeDrafts(for: entry)
+        )
+
+        // Without the original item, the logged portion itself is the base
+        // (the fallback macros below are the logged values too)
         let originalFood = entry.originalFoodItem
-        self.baseServingSize = originalFood?.servingSize ?? 1.0
+        self.baseServingSize =
+            originalFood?.servingSize
+            ?? (entry.loggedQuantity > 0 ? entry.loggedQuantity : 1.0)
         self.baseServingWeight = originalFood?.servingWeight
         self.baseServingWeightUnit = originalFood?.servingWeightUnit ?? "g"
-        self.baseUnit = originalFood?.servingUnit?.unit ?? "serving"
+        self.baseUnit = originalFood?.servingUnit?.unit ?? entry.loggedUnit
 
         let calStr = EntryHelper.format(
             originalFood?.calories ?? entry.calories
@@ -140,9 +147,48 @@ struct LoggedEntryDetailView: View {
         _fiberDynamic = State(initialValue: fibStr)
     }
 
+    private var isRecipe: Bool { entry.entryType == .recipe }
+
+    private var hasEntryNote: Bool {
+        !stickyNote.isEmpty
+    }
+
+    private var showsEntryNoteRow: Bool {
+        hasEntryNote || (isEditing && isAddingEntryNote)
+    }
+
+    private var shouldShowIngredientIcons: Bool {
+        draftIngredients.contains { $0.icon != nil }
+    }
+
+    private var totalIngredientCalories: Double {
+        draftIngredients.reduce(0) { $0 + $1.activeCalories }
+    }
+    private var totalIngredientProtein: Double {
+        draftIngredients.reduce(0) { $0 + $1.activeProtein }
+    }
+    private var totalIngredientCarbs: Double {
+        draftIngredients.reduce(0) { $0 + $1.activeCarbs }
+    }
+    private var totalIngredientFat: Double {
+        draftIngredients.reduce(0) { $0 + $1.activeFat }
+    }
+    private var totalIngredientFiber: Double {
+        draftIngredients.reduce(0) { $0 + $1.activeFiber }
+    }
+
+    private var activeServingWeight: Double? {
+        guard isRecipe, baseServingWeight == nil else {
+            return baseServingWeight
+        }
+        let totalWeight = draftIngredients.compactMap { $0.activeWeight }
+            .reduce(0, +)
+        return totalWeight > 0 ? totalWeight : nil
+    }
+
     var availableUnits: [String] {
         var units: [String] = [baseUnit]
-        if baseServingWeight != nil && baseServingWeightUnit != baseUnit {
+        if activeServingWeight != nil && baseServingWeightUnit != baseUnit {
             units.append(baseServingWeightUnit)
         }
         return units
@@ -150,11 +196,14 @@ struct LoggedEntryDetailView: View {
 
     private var activeMultiplier: Double {
         let currentPortion = Double(portionQuantity) ?? 0
-        let isWeightSelected =
-            (portionUnitSelection == baseServingWeightUnit
-                && baseServingWeight != nil)
-        let basePortion =
-            isWeightSelected ? baseServingWeight! : baseServingSize
+        let basePortion: Double
+        if portionUnitSelection == baseServingWeightUnit,
+            let weight = activeServingWeight
+        {
+            basePortion = weight
+        } else {
+            basePortion = baseServingSize
+        }
         return EntryHelper.calculateMultiplier(
             targetPortion: currentPortion,
             basePortion: basePortion
@@ -167,7 +216,7 @@ struct LoggedEntryDetailView: View {
     }
 
     private var displayServingWeight: String {
-        guard let weight = baseServingWeight else { return "" }
+        guard let weight = activeServingWeight else { return "" }
         let scaledWeight = activeMultiplier * weight
         return scaledWeight.formatted(.number.precision(.fractionLength(0...2)))
     }
@@ -180,6 +229,15 @@ struct LoggedEntryDetailView: View {
                 VStack {
                     Card {
                         RowGroup(.divider) {
+                            TextInputRow(
+                                title: "Name",
+                                placeholder: "-",
+                                text: $name,
+                                isEnabled: isEditing,
+                                maxWidth: nil
+                            )
+                            .padding(.trailing, 10)
+
                             DropdownPillRow(
                                 title: "Source",
                                 options: [""] + sourceOptions.map { $0.source },
@@ -187,7 +245,7 @@ struct LoggedEntryDetailView: View {
                                 selection: $sourceSelection
                             )
 
-                            if entry.typeRawValue == EntryType.food.rawValue {
+                            if entry.entryType == .food || isRecipe {
                                 DropdownPillRow(
                                     title: "Category",
                                     options: [""]
@@ -215,14 +273,58 @@ struct LoggedEntryDetailView: View {
                     }
                     .padding(.horizontal)
 
-                    if isEditing || !stickyNote.isEmpty {
+                    if isEditing || hasEntryNote {
                         Card {
-                            WrappedInputRow(
-                                placeholder: "Add a note...",
-                                text: $stickyNote,
-                                isEditable: isEditing,
-                                characterLimit: 2000
-                            )
+                            RowGroup(.divider) {
+                                if showsEntryNoteRow {
+                                    let entryNoteRow = WrappedInputRow(
+                                        placeholder: "Add a note...",
+                                        text: $stickyNote,
+                                        isSticky: false,
+                                        timestamp: entry.timestamp,
+                                        isEditable: isEditing,
+                                        characterLimit: 2000
+                                    )
+
+                                    if isEditing {
+                                        CustomSwipeRow(
+                                            content: { entryNoteRow },
+                                            onDelete: deleteEntryNote,
+                                            isPinned: false
+                                        )
+                                    } else {
+                                        entryNoteRow
+                                    }
+
+                                    ButtonRow(
+                                        title: "View All Notes",
+                                        topPadding: 16
+                                    ) {
+                                        showingAllNotes = true
+                                    }
+                                } else if isEditing {
+                                    DoubleButtonRow(
+                                        topPadding: 16,
+                                        leftTitle: "Add Note",
+                                        leftAction: {
+                                            withAnimation {
+                                                isAddingEntryNote = true
+                                            }
+                                        },
+                                        rightTitle: "View All Notes",
+                                        rightAction: {
+                                            showingAllNotes = true
+                                        }
+                                    )
+                                } else {
+                                    ButtonRow(
+                                        title: "View All Notes",
+                                        topPadding: 16
+                                    ) {
+                                        showingAllNotes = true
+                                    }
+                                }
+                            }
                         }
                         .padding([.top, .horizontal])
                     }
@@ -238,6 +340,37 @@ struct LoggedEntryDetailView: View {
                         )
                     }
                     .padding([.top, .horizontal])
+
+                    if isRecipe && (isEditing || !draftIngredients.isEmpty) {
+                        Card("Ingredients") {
+                            RowGroup(.divider) {
+                                ForEach($draftIngredients) { $draft in
+                                    IngredientRowView(
+                                        draft: $draft,
+                                        portionUnitOptions: portionUnitOptions,
+                                        shouldShowIngredientIcons:
+                                            shouldShowIngredientIcons,
+                                        isEnabled: isEditing,
+                                        onDelete: {
+                                            draftIngredients.removeAll {
+                                                $0.id == draft.id
+                                            }
+                                        }
+                                    )
+                                }
+                            } bottomContent: {
+                                if isEditing {
+                                    ButtonRow(
+                                        icon: .customSymbol("plus.circle.fill"),
+                                        title: "Add Ingredient"
+                                    ) {
+                                        showIngredientSelectionSheet = true
+                                    }
+                                }
+                            }
+                        }
+                        .padding([.top, .horizontal])
+                    }
 
                     Card {
                         RowGroup(.divider) {
@@ -306,7 +439,7 @@ struct LoggedEntryDetailView: View {
             .safeAreaInset(edge: .top) {
                 Card {
                     MealRow(
-                        name: entry.name,
+                        name: name.isEmpty ? "Unnamed Entry" : name,
                         source: sourceSelection,
                         isCustomDefaultServing: false,
                         customServingSize: "",
@@ -327,7 +460,47 @@ struct LoggedEntryDetailView: View {
                 .background(.ultraThinMaterial)
             }
         }
-        .navigationTitle(entry.name)
+        .environment(focusManager)
+        .sheet(isPresented: $showIngredientSelectionSheet) {
+            IngredientSelectionView { selectedItem in
+                draftIngredients.append(LogRecipeIngredient(item: selectedItem))
+                showIngredientSelectionSheet = false
+            }
+        }
+        .sheet(isPresented: $showingAllNotes) {
+            NavigationStack {
+                VStack(spacing: 20) {
+                    Image(systemName: "note.text")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.secondary)
+                    Text("TODO: View All Notes Implementation")
+                        .foregroundStyle(.secondary)
+                }
+                .navigationTitle("All Notes")
+                .navigationBarTitleDisplayMode(.inline)
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $foodToLogAgain) { foodToLog in
+            NavigationStack {
+                if foodToLog.type == .recipe {
+                    LogRecipeView(
+                        recipe: foodToLog,
+                        previousEntry: entry,
+                        isPushedView: false
+                    )
+                    .environment(\.rootDismiss) { dismiss() }
+                } else {
+                    LogEntryView(
+                        food: foodToLog,
+                        previousEntry: entry,
+                        isPushedView: false
+                    )
+                    .environment(\.rootDismiss) { dismiss() }
+                }
+            }
+        }
+        .navigationTitle(name.isEmpty ? "Unnamed Entry" : name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -342,12 +515,36 @@ struct LoggedEntryDetailView: View {
                     }
                     .fontWeight(.semibold)
                 } else {
-                    Button {
-                        withAnimation {
-                            isEditing = true
+                    Menu {
+                        Button {
+                            if let originalFood = entry.originalFoodItem {
+                                foodToLogAgain = originalFood
+                            }
+                        } label: {
+                            Label(
+                                "Log Again",
+                                systemImage: "plus.square.on.square"
+                            )
+                        }
+                        .disabled(entry.originalFoodItem == nil)
+
+                        Button {
+                            withAnimation {
+                                isEditing = true
+                            }
+                        } label: {
+                            Label("Edit Entry", systemImage: "pencil")
+                        }
+
+                        Divider()
+
+                        Button(role: .destructive) {
+                            showDeleteConfirmation = true
+                        } label: {
+                            Label("Delete Entry", systemImage: "trash")
                         }
                     } label: {
-                        Image(systemName: "pencil")
+                        Image(systemName: "ellipsis.circle")
                     }
                 }
             }
@@ -362,13 +559,13 @@ struct LoggedEntryDetailView: View {
                     } label: {
                         Image(systemName: "xmark")
                     }
-                } else {
-                    Button(role: .destructive) {
-                        showDeleteConfirmation = true
+                } else if !isPushedView {
+                    Button {
+                        dismiss()
                     } label: {
-                        Image(systemName: "trash")
+                        Image(systemName: "xmark")
+                            .foregroundStyle(.primary)
                     }
-                    .tint(.red)
                 }
             }
         }
@@ -387,7 +584,7 @@ struct LoggedEntryDetailView: View {
             )
         }
         .onChange(of: portionUnitSelection) { oldUnit, newUnit in
-            guard oldUnit != newUnit, let weight = baseServingWeight else {
+            guard oldUnit != newUnit, let weight = activeServingWeight else {
                 return
             }
             let currentQuantity = Double(portionQuantity) ?? 0
@@ -402,6 +599,12 @@ struct LoggedEntryDetailView: View {
         }
         .onChange(of: portionQuantity) { _, _ in
             if !manualOverrideToggle { updateMacrosFromMultiplier() }
+        }
+        .onChange(of: draftIngredients) { _, _ in
+            // Skipped outside edit mode so discarding keeps the logged macros
+            if isEditing && !manualOverrideToggle {
+                updateMacrosFromMultiplier()
+            }
         }
         .onChange(of: manualOverrideToggle) { _, isManual in
             if isManual {
@@ -430,11 +633,25 @@ struct LoggedEntryDetailView: View {
     }
 
     private func updateMacrosFromMultiplier() {
-        calorie = EntryHelper.scale(calorieStatic, by: activeMultiplier)
-        protein = EntryHelper.scale(proteinStatic, by: activeMultiplier)
-        carbs = EntryHelper.scale(carbsStatic, by: activeMultiplier)
-        fat = EntryHelper.scale(fatStatic, by: activeMultiplier)
-        fiber = EntryHelper.scale(fiberStatic, by: activeMultiplier)
+        if isRecipe {
+            // Recipes derive their macros from the logged ingredients rather
+            // than the (possibly since-edited) recipe item
+            calorie = EntryHelper.format(
+                totalIngredientCalories * activeMultiplier
+            )
+            protein = EntryHelper.format(
+                totalIngredientProtein * activeMultiplier
+            )
+            carbs = EntryHelper.format(totalIngredientCarbs * activeMultiplier)
+            fat = EntryHelper.format(totalIngredientFat * activeMultiplier)
+            fiber = EntryHelper.format(totalIngredientFiber * activeMultiplier)
+        } else {
+            calorie = EntryHelper.scale(calorieStatic, by: activeMultiplier)
+            protein = EntryHelper.scale(proteinStatic, by: activeMultiplier)
+            carbs = EntryHelper.scale(carbsStatic, by: activeMultiplier)
+            fat = EntryHelper.scale(fatStatic, by: activeMultiplier)
+            fiber = EntryHelper.scale(fiberStatic, by: activeMultiplier)
+        }
 
         calorieDynamic = calorie
         proteinDynamic = protein
@@ -464,10 +681,14 @@ struct LoggedEntryDetailView: View {
 
         entry.timestamp = calendar.date(from: combinedComponents) ?? Date()
 
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        entry.name = trimmedName.isEmpty ? entry.name : trimmedName
+
         let trimmedNote = stickyNote.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
         entry.logNote = trimmedNote.isEmpty ? nil : trimmedNote
+        isAddingEntryNote = false
         entry.location = location.isEmpty ? nil : location
 
         let trimmedSource = sourceSelection.trimmingCharacters(
@@ -569,6 +790,42 @@ struct LoggedEntryDetailView: View {
         }
         entry.photos = photoEntities
 
+        if isRecipe {
+            if let oldChildren = entry.childEntries {
+                for child in oldChildren {
+                    modelContext.delete(child)
+                }
+            }
+
+            // Child entries store the amounts actually eaten, so scale the
+            // per-recipe drafts by the current portion
+            let multiplier = activeMultiplier
+            entry.childEntries = draftIngredients.enumerated().map {
+                index, draft in
+                LoggedEntry(
+                    name: draft.name,
+                    typeRawValue: EntryType.ingredient.rawValue,
+                    originalFoodItem: draft.ingredientItem,
+                    timestamp: entry.timestamp,
+                    location: entry.location,
+                    loggedQuantity:
+                        (Double(
+                            draft.quantity.replacingOccurrences(
+                                of: ",",
+                                with: "."
+                            )
+                        ) ?? 0.0) * multiplier,
+                    loggedUnit: draft.unit,
+                    calories: draft.activeCalories * multiplier,
+                    protein: draft.activeProtein * multiplier,
+                    carbs: draft.activeCarbs * multiplier,
+                    fat: draft.activeFat * multiplier,
+                    fiber: draft.activeFiber * multiplier,
+                    displayOrder: index
+                )
+            }
+        }
+
         do {
             try modelContext.save()
         } catch {
@@ -576,7 +833,31 @@ struct LoggedEntryDetailView: View {
         }
     }
 
+    private func pinEntryNote() {
+        guard let food = entry.originalFoodItem else { return }
+        if let existingNote = food.stickyNote {
+            existingNote.text = stickyNote
+            existingNote.lastUpdated = Date()
+        } else {
+            food.stickyNote = Note(text: stickyNote)
+        }
+        try? modelContext.save()
+        withAnimation {
+            pinnedNoteText = stickyNote
+        }
+    }
+
+    private func deleteEntryNote() {
+        entry.logNote = nil
+        try? modelContext.save()
+        withAnimation {
+            stickyNote = ""
+            isAddingEntryNote = false
+        }
+    }
+
     private func discardChanges() {
+        name = entry.name
         sourceSelection = entry.source?.source ?? ""
         categorySelection = entry.category?.category ?? ""
         foodGroupSelection = entry.foodGroup?.foodGroup ?? ""
@@ -597,27 +878,11 @@ struct LoggedEntryDetailView: View {
         fiber = EntryHelper.format(entry.fiber)
 
         stickyNote = entry.logNote ?? ""
+        isAddingEntryNote = false
 
-        let existingPhotos =
-            entry.photos?
-            .sorted { $0.displayOrder < $1.displayOrder }
-            .compactMap { photoEntity -> LoggedPhoto? in
-                guard let uiImage = UIImage(data: photoEntity.imageData) else {
-                    return nil
-                }
-                return LoggedPhoto(
-                    image: uiImage,
-                    originalData: photoEntity.imageData,
-                    pickerItem: nil,
-                    scale: CGFloat(photoEntity.scale),
-                    offset: CGSize(
-                        width: photoEntity.offsetX,
-                        height: photoEntity.offsetY
-                    )
-                )
-            } ?? []
+        selectedPhotos = EntryHelper.loggedPhotos(from: entry.photos)
 
-        selectedPhotos = existingPhotos
+        draftIngredients = LogRecipeIngredient.makeDrafts(for: entry)
     }
 }
 
@@ -658,7 +923,7 @@ struct LoggedEntryDetailView: View {
         )
 
         let mockFood = FoodItem(
-            name: "Oatmeal with Berries",
+            name: "Oatmeal",
             type: .food,
             source: mockSource,
             category: mockCategory,
@@ -707,7 +972,7 @@ struct LoggedEntryDetailView: View {
 
         return AnyView(
             NavigationStack {
-                LoggedEntryDetailView(entry: mockLog)
+                LoggedEntryDetailView(entry: mockLog, isPushedView: false)
             }
             .modelContainer(container)
         )
