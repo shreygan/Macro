@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 
 enum EntryHelper {
 
@@ -29,5 +30,42 @@ enum EntryHelper {
             return valueString
         }
         return format(value * multiplier)
+    }
+
+    /// Converts a logged entry's saved photos into editable draft photos
+    static func loggedPhotos(from photos: [EntryPhoto]?) -> [LoggedPhoto] {
+        (photos ?? [])
+            .sorted { $0.displayOrder < $1.displayOrder }
+            .compactMap { photoEntity -> LoggedPhoto? in
+                guard let uiImage = UIImage(data: photoEntity.imageData) else {
+                    return nil
+                }
+                return LoggedPhoto(
+                    image: uiImage,
+                    originalData: photoEntity.imageData,
+                    pickerItem: nil,
+                    scale: CGFloat(photoEntity.scale),
+                    offset: CGSize(
+                        width: photoEntity.offsetX,
+                        height: photoEntity.offsetY
+                    )
+                )
+            }
+    }
+
+    /// The portion multiplier a recipe was logged with
+    static func loggedRecipeMultiplier(for entry: LoggedEntry) -> Double {
+        guard let recipe = entry.originalFoodItem else { return 1 }
+
+        let multiplier: Double
+        if entry.loggedUnit == recipe.servingWeightUnit
+            && entry.loggedUnit != recipe.servingUnit?.unit
+        {
+            multiplier = recipe.servingWeight.map { entry.loggedQuantity / $0 }
+                ?? 1
+        } else {
+            multiplier = entry.loggedQuantity / recipe.servingSize
+        }
+        return multiplier.isFinite && multiplier > 0 ? multiplier : 1
     }
 }

@@ -73,6 +73,72 @@ struct LogRecipeIngredient: Identifiable, Equatable {
         self.ingredientItem = item
     }
 
+    init(loggedEntry: LoggedEntry, recipeMultiplier: Double) {
+        let multiplier = recipeMultiplier > 0 ? recipeMultiplier : 1
+        let item = loggedEntry.originalFoodItem
+        let qty = loggedEntry.loggedQuantity / multiplier
+
+        self.name = loggedEntry.name
+        self.quantity = EntryHelper.format(qty)
+        self.unit = loggedEntry.loggedUnit
+        self.baseServingWeightUnit = item?.servingWeightUnit ?? "g"
+
+        if qty <= 0 {
+            // A zero quantity can't act as a base, so fall back to the item
+            self.baseServingSize = item?.servingSize ?? 1
+            self.baseServingUnitName =
+                item?.servingUnit?.unit ?? loggedEntry.loggedUnit
+            self.baseServingWeight = item?.servingWeight
+        } else if let item, let itemWeight = item.servingWeight,
+            itemWeight > 0, loggedEntry.loggedUnit == item.servingWeightUnit
+        {
+            // Logged by weight
+            self.baseServingWeight = qty
+            self.baseServingSize = qty / itemWeight * item.servingSize
+            self.baseServingUnitName = item.servingUnit?.unit
+        } else {
+            // Logged by serving unit
+            self.baseServingSize = qty
+            self.baseServingUnitName = loggedEntry.loggedUnit
+            if let item, let itemWeight = item.servingWeight,
+                item.servingSize > 0
+            {
+                self.baseServingWeight = qty / item.servingSize * itemWeight
+            } else {
+                self.baseServingWeight = nil
+            }
+        }
+
+        if qty <= 0, let item {
+            self.baseCalories = item.calories
+            self.baseProtein = item.protein
+            self.baseCarbs = item.carbs
+            self.baseFat = item.fat
+            self.baseFiber = item.fiber
+        } else {
+            self.baseCalories = loggedEntry.calories / multiplier
+            self.baseProtein = loggedEntry.protein / multiplier
+            self.baseCarbs = loggedEntry.carbs / multiplier
+            self.baseFat = loggedEntry.fat / multiplier
+            self.baseFiber = loggedEntry.fiber / multiplier
+        }
+
+        self.icon = item?.type.appSymbol.rawValue
+        self.ingredientItem = item
+    }
+
+    static func makeDrafts(for entry: LoggedEntry) -> [LogRecipeIngredient] {
+        let multiplier = EntryHelper.loggedRecipeMultiplier(for: entry)
+        return (entry.childEntries ?? [])
+            .sorted { $0.displayOrder < $1.displayOrder }
+            .map {
+                LogRecipeIngredient(
+                    loggedEntry: $0,
+                    recipeMultiplier: multiplier
+                )
+            }
+    }
+
     var activeMultiplier: Double {
         guard let qty = Double(quantity) else { return 0 }
 
