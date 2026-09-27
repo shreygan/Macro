@@ -68,6 +68,9 @@ struct LibraryView<Header: View>: View {
             ? savedMeals
             : savedMeals.filter { food in
                 food.name.localizedStandardContains(searchText)
+                    || (food.source?.source.localizedStandardContains(
+                        searchText
+                    ) ?? false)
             }
 
         // 2. Type filter
