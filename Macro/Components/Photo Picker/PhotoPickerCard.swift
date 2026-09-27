@@ -220,16 +220,40 @@ struct PhotoPickerCard: View {
 
     @ViewBuilder
     private var emptyStateMenu: some View {
-        Menu {
-            photoMenuOptions
-        } label: {
-            ButtonRow(
-                icon: .customSymbol("camera", tint: .primary),
-                title: "Add Photos",
-                topPadding: 16,
-                action: {}
-            )
+        GeometryReader { proxy in
+            Menu {
+                photoMenuOptions
+            } label: {
+                addPhotosLabel(rowWidth: proxy.size.width)
+            }
         }
+        .frame(height: 36)
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 16)
+        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+    }
+    
+    @ViewBuilder
+    private func addPhotosLabel(rowWidth: CGFloat) -> some View {
+        ZStack {
+            Text("Add Photos")
+                .font(.system(size: 14, design: .rounded))
+                .frame(width: rowWidth, alignment: .center)
+            
+            Image(systemName: "camera")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.primary)
+                .frame(width: 15)
+                .padding(.leading, 12)
+                .frame(width: rowWidth, alignment: .leading)
+        }
+        .frame(height: 20)
+        .padding(.vertical, 8)
+        .background(Color.gray.opacity(0.1))
+        .foregroundStyle(Color.primary)
+        .clipShape(Capsule())
     }
 
     @ViewBuilder
