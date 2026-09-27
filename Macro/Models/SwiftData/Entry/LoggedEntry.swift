@@ -43,6 +43,8 @@ class LoggedEntry {
 
     var logNote: String?
 
+    var displayOrder: Int = 0
+
     @Relationship(deleteRule: .cascade, inverse: \EntryPhoto.parentEntry)
     var photos: [EntryPhoto]? = []
 
@@ -66,6 +68,7 @@ class LoggedEntry {
         fiber: Double,
         isManualOverride: Bool = false,
         logNote: String? = nil,
+        displayOrder: Int = 0,
         photos: [EntryPhoto]? = nil
     ) {
         self.id = id
@@ -87,6 +90,7 @@ class LoggedEntry {
         self.fiber = fiber
         self.isManualOverride = isManualOverride
         self.logNote = logNote
+        self.displayOrder = displayOrder
         self.photos = photos
     }
 

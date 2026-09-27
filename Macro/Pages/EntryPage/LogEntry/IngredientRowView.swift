@@ -11,6 +11,7 @@ struct IngredientRowView: View {
     @Binding var draft: LogRecipeIngredient
     let portionUnitOptions: [ServingSizeUnit]
     let shouldShowIngredientIcons: Bool
+    var isEnabled: Bool = true
     let onDelete: () -> Void
 
     var body: some View {
@@ -48,26 +49,26 @@ struct IngredientRowView: View {
             return AppSymbols(rawValue: iconString)
         }()
 
-        CustomSwipeRow {
-            MealRow(
-                name: draft.name,
-                source: "",
-                isCustomDefaultServing: false,
-                customServingSize: "",
-                servingSize: EntryHelper.format(
-                    draft.activeMultiplier * draft.baseServingSize
-                ),
-                servingSizeUnit: baseUnit,
-                servingWeight: EntryHelper.format(draft.activeWeight),
-                servingWeightUnit: draft.baseServingWeightUnit,
-                servingUnits: portionUnitOptions,
-                calorie: EntryHelper.format(draft.activeCalories),
-                protein: EntryHelper.format(draft.activeProtein),
-                carbs: EntryHelper.format(draft.activeCarbs),
-                fat: EntryHelper.format(draft.activeFat),
-                fiber: EntryHelper.format(draft.activeFiber),
-                icon: rowIcon
-            ) {
+        let mealRow = MealRow(
+            name: draft.name,
+            source: "",
+            isCustomDefaultServing: false,
+            customServingSize: "",
+            servingSize: EntryHelper.format(
+                draft.activeMultiplier * draft.baseServingSize
+            ),
+            servingSizeUnit: baseUnit,
+            servingWeight: EntryHelper.format(draft.activeWeight),
+            servingWeightUnit: draft.baseServingWeightUnit,
+            servingUnits: portionUnitOptions,
+            calorie: EntryHelper.format(draft.activeCalories),
+            protein: EntryHelper.format(draft.activeProtein),
+            carbs: EntryHelper.format(draft.activeCarbs),
+            fat: EntryHelper.format(draft.activeFat),
+            fiber: EntryHelper.format(draft.activeFiber),
+            icon: rowIcon
+        ) {
+            if isEnabled {
                 HStack(spacing: 8) {
                     InputPill(
                         text: $draft.quantity,
@@ -82,10 +83,23 @@ struct IngredientRowView: View {
                         selection: unitConversionBinding
                     )
                 }
+                .transition(.opacity)
             }
-        } onDelete: {
-            onDelete()
         }
+
+        // Swipe-to-delete is only available when editable
+        Group {
+            if isEnabled {
+                CustomSwipeRow {
+                    mealRow
+                } onDelete: {
+                    onDelete()
+                }
+            } else {
+                mealRow
+            }
+        }
+        .animation(.snappy(duration: 0.3), value: isEnabled)
         .transition(
             .asymmetric(
                 insertion: .identity,
