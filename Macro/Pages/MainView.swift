@@ -40,7 +40,7 @@ struct MainView: View {
                     Text("Library View")
                 }
 
-                Tab("Add", systemImage: "plus", value: .add, role: .search) {
+                Tab("Add", systemImage: "plus", value: .add, role: .prominent) {
                     Color.accentColor
                 }
             }
