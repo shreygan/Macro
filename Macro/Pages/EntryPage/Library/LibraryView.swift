@@ -54,6 +54,18 @@ struct LibraryView<Header: View>: View {
     @State private var showEditSheet = false
     @State private var foodToEdit: FoodItem?
 
+    @State private var entryTypeToAdd: EntryType?
+
+    private var addableEntryType: EntryType {
+        guard selectedTypes.count == 1,
+            let singleType = selectedTypes.first,
+            let type = EntryType(rawValue: singleType.lowercased())
+        else {
+            return .food
+        }
+        return type
+    }
+
     private var dynamicTitle: String {
         if selectedTypes.count == 1, let singleType = selectedTypes.first {
             return "\(singleType)s"
@@ -155,11 +167,7 @@ struct LibraryView<Header: View>: View {
                     headerContent
                         .padding([.horizontal, .bottom])
 
-                    Spacer()
-
                     emptyStateView
-
-                    Spacer()
                 }
                 .transition(.opacity)
                 .zIndex(1)
@@ -240,6 +248,16 @@ struct LibraryView<Header: View>: View {
                 EditRecipeView(recipe: food)
             } else {
                 EditEntryView(foodItem: food)
+            }
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { entryTypeToAdd != nil },
+                set: { if !$0 { entryTypeToAdd = nil } }
+            )
+        ) {
+            if let type = entryTypeToAdd {
+                addEntrySheet(for: type)
             }
         }
         .sheet(isPresented: $showFilterSheet) {
@@ -333,70 +351,66 @@ struct LibraryView<Header: View>: View {
 
     @ViewBuilder
     private var emptyStateView: some View {
-        VStack(spacing: 12) {
-            let singleType =
-                selectedTypes.count == 1 ? selectedTypes.first : nil
-            let itemName = singleType?.lowercased() ?? "item"
+        let singleType = selectedTypes.count == 1 ? selectedTypes.first : nil
+        let itemName = singleType?.lowercased() ?? "item"
+        let symbolName =
+            singleType.flatMap { AppSymbols.from($0)?.rawValue }
+            ?? "magnifyingglass"
 
-            if let type = singleType, let symbol = AppSymbols.from(type) {
-                Image(systemName: symbol.rawValue).font(.largeTitle)
-                    .foregroundColor(.gray)
+        ContentUnavailableView {
+            if !searchText.isEmpty {
+                Label(
+                    singleType.map { "No \($0)s match \"\(searchText)\"" }
+                        ?? "No Results for \"\(searchText)\"",
+                    systemImage: symbolName
+                )
+            } else if let type = singleType {
+                Label("No \(type)s", systemImage: symbolName)
             } else {
-                Image(systemName: "magnifyingglass").font(.largeTitle)
-                    .foregroundColor(.gray)
+                Label("Library is Empty", systemImage: symbolName)
             }
-
-            if searchText.isEmpty {
-                if let type = singleType {
-                    Text("No \(type)s").font(.title3.bold())
-                    Text(
-                        LocalizedStringKey(
-                            "\(type.lowercased())" + "_description"
-                        )
-                    )
-                    .font(.subheadline).foregroundColor(.secondary)
-                    .multilineTextAlignment(.center).padding(
-                        .horizontal,
-                        32
-                    )
-                    Button("Add \(type)") { /* TODO: Implement */  }
-                        .font(.subheadline).foregroundColor(.accentColor)
-                        .padding(.top, 8)
+        } description: {
+            Group {
+                if !searchText.isEmpty {
+                    Text("Try a new search or create a new \(itemName).")
+                } else if let type = singleType {
+                    let descriptionKey = type.lowercased() + "_description"
+                    Text(LocalizedStringKey(descriptionKey))
                 } else {
-                    Text("Library is Empty").font(.title3.bold())
                     Text("Add some items to your library to get started.")
-                        .font(.subheadline).foregroundColor(.secondary)
-                    Button("Add Item") { /* TODO: Implement */  }
-                        .font(.subheadline).foregroundColor(.accentColor)
-                        .padding(.top, 8)
                 }
-            } else {
-                if let type = singleType {
-                    Text("No \(type)s match \"\(searchText)\"").font(
-                        .title3.bold()
-                    )
-                } else {
-                    Text("No Results for \"\(searchText)\"").font(
-                        .title3.bold()
-                    )
-                }
-                Text(
-                    "Try a new search or [create a new \(itemName)](action:create)"
-                )
-                .font(.subheadline).foregroundColor(.secondary)
-                .multilineTextAlignment(.center).padding(.horizontal, 32).tint(
-                    .blue
-                )
-                .environment(
-                    \.openURL,
-                    OpenURLAction { url in
-                        if url.absoluteString == "action:create" {
-                            return .handled
-                        }
-                        return .discarded
-                    }
-                )
             }
+            .font(.subheadline)
+        } actions: {
+            if !searchText.isEmpty {
+                Button("Create New \(singleType ?? "Food")") {
+                    entryTypeToAdd = addableEntryType
+                }
+                .tint(.blue)
+            } else if let type = singleType {
+                Button("Add \(type)") { entryTypeToAdd = addableEntryType }
+                    .tint(.blue)
+            } else {
+                Button("Add Food") { entryTypeToAdd = .food }
+                    .tint(.blue)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func addEntrySheet(for type: EntryType) -> some View {
+        if type == .recipe {
+            AddRecipeView()
+        } else {
+            AddEntryView(
+                entryType: type,
+                onSelectInstantly: onSelect.map { select in
+                    { food in
+                        entryTypeToAdd = nil
+                        select(food)
+                    }
+                }
+            )
         }
     }
 
