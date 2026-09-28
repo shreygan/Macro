@@ -284,7 +284,7 @@ struct HomeView: View {
 
                         ScrollView {
                             VStack {
-                                if let userGoals = users.first?.goals {
+                                if let userGoals = users.first?.currentGoals {
                                     ProgressCard(
                                         goals: userGoals,
                                         date: effectiveDate
@@ -343,7 +343,7 @@ struct HomeView: View {
                                 .padding(.bottom, 24)
                                 .padding(
                                     .top,
-                                    users.first?.goals == nil ? nil : 0
+                                    users.first?.currentGoals == nil ? nil : 0
                                 )
                             }
                             .background(

@@ -10,6 +10,10 @@ import SwiftData
 
 @Model
 class UserGoals {
+    @Attribute(.unique) var id: UUID
+
+    var date: Date
+
     var calories: Double
     var calorieMode: GoalLimitMode
 
@@ -28,6 +32,8 @@ class UserGoals {
     var owner: User?
 
     init(
+        id: UUID = UUID(),
+        date: Date = .now,
         calories: Double,
         calorieMode: GoalLimitMode,
         protein: Double,
@@ -40,6 +46,8 @@ class UserGoals {
         fiberMode: GoalLimitMode,
         owner: User? = nil
     ) {
+        self.id = id
+        self.date = date
         self.calories = calories
         self.calorieMode = calorieMode
         self.protein = protein

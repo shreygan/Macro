@@ -220,6 +220,7 @@ struct NewEntryView: View {
                                     ) {
                                         showAddIngredientSheet = true
                                     }
+
                                     ButtonRow(
                                         icon: .appSymbol(.food),
                                         title: "Add Food",
@@ -227,6 +228,7 @@ struct NewEntryView: View {
                                     ) {
                                         showAddFoodSheet = true
                                     }
+
                                     ButtonRow(
                                         icon: .appSymbol(.recipe),
                                         title: "Add Recipe",
@@ -393,9 +395,18 @@ struct NewEntryView: View {
 
                         Spacer()
                     }
-                    .animation(.easeInOut(duration: 0.25), value: hasActiveFilters)
-                    .animation(.easeInOut(duration: 0.25), value: filteredFoods.isEmpty)
-                    .animation(.easeInOut(duration: 0.25), value: favoritedFoods.isEmpty)
+                    .animation(
+                        .easeInOut(duration: 0.25),
+                        value: hasActiveFilters
+                    )
+                    .animation(
+                        .easeInOut(duration: 0.25),
+                        value: filteredFoods.isEmpty
+                    )
+                    .animation(
+                        .easeInOut(duration: 0.25),
+                        value: favoritedFoods.isEmpty
+                    )
                     .animation(
                         .spring(response: 0.4, dampingFraction: 0.8),
                         value: favoritedFoods
@@ -422,7 +433,7 @@ struct NewEntryView: View {
                                 .foregroundStyle(.primary)
                         }
                     }
-                    
+
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         filterButton
                         sortMenu
