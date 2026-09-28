@@ -53,25 +53,28 @@ struct ImportReviewView: View {
                             systemImage: "doc.text.magnifyingglass"
                         )
                     } description: {
-                        if duplicateCount == 0 && errorCount == 0 {
-                            Text("We couldn't parse any entries from your CSV.")
-                        } else {
-                            let dupes =
-                                duplicateCount > 0
-                                ? "\(duplicateCount) duplicate\(duplicateCount > 1 ? "s" : "")"
-                                : nil
-                            let errs =
-                                errorCount > 0
-                                ? "\(errorCount) invalid row\(errorCount > 1 ? "s" : "")"
-                                : nil
-                            let reason = [dupes, errs].compactMap { $0 }.joined(
-                                separator: " and "
-                            )
+                        Group {
+                            if duplicateCount == 0 && errorCount == 0 {
+                                Text("We couldn't parse any entries from your CSV.")
+                            } else {
+                                let dupes =
+                                    duplicateCount > 0
+                                    ? "\(duplicateCount) duplicate\(duplicateCount > 1 ? "s" : "")"
+                                    : nil
+                                let errs =
+                                    errorCount > 0
+                                    ? "\(errorCount) invalid row\(errorCount > 1 ? "s" : "")"
+                                    : nil
+                                let reason = [dupes, errs].compactMap { $0 }.joined(
+                                    separator: " and "
+                                )
 
-                            Text(
-                                "We skipped \(reason). There are no new entries to import."
-                            )
+                                Text(
+                                    "We skipped \(reason). There are no new entries to import."
+                                )
+                            }
                         }
+                        .font(.subheadline)
                     } actions: {
                         Button("Select Another CSV") {
                             isShowingFilePicker = true
