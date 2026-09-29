@@ -33,6 +33,14 @@ struct GoalSetupView: View {
     @State private var fiberMode: GoalLimitMode = .ceiling
 
     @State private var showInfoSheet = false
+    @State private var showHistorySheet = false
+
+    /// The goal setup screen is shown both during onboarding (before a user
+    /// exists) and later for editing via HomeView. Only the latter should
+    /// expose the history button, since onboarding has no history yet.
+    private var isEditingExistingUser: Bool {
+        users.first?.onboardingComplete ?? false
+    }
 
     var body: some View {
         VStack {
@@ -50,6 +58,15 @@ struct GoalSetupView: View {
                 }
 
                 Spacer()
+
+                if isEditingExistingUser {
+                    Button {
+                        showHistorySheet = true
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+                    .buttonStyle(.glass)
+                }
             }
             .padding(.top, 20)
             .padding(.horizontal, 30)
@@ -132,41 +149,60 @@ struct GoalSetupView: View {
             Spacer()
 
             Button {
-                let goals = UserGoals(
-                    calories: calorieValue,
-                    calorieMode: calorieMode,
-                    protein: proteinValue,
-                    proteinMode: proteinMode,
-                    carbs: carbsValue,
-                    carbsMode: carbsMode,
-                    fat: fatValue,
-                    fatMode: fatMode,
-                    fiber: fiberValue,
-                    fiberMode: fiberMode
-                )
-
                 if let existingUser = users.first {
                     existingUser.onboardingComplete = true
 
-                    if let existingGoals = existingUser.goals {
-                        existingGoals.calories = calorieValue
-                        existingGoals.calorieMode = calorieMode
-                        existingGoals.protein = proteinValue
-                        existingGoals.proteinMode = proteinMode
-                        existingGoals.carbs = carbsValue
-                        existingGoals.carbsMode = carbsMode
-                        existingGoals.fat = fatValue
-                        existingGoals.fatMode = fatMode
-                        existingGoals.fiber = fiberValue
-                        existingGoals.fiberMode = fiberMode
+                    let goalsChanged: Bool
+                    if let existingGoals = existingUser.currentGoals {
+                        goalsChanged =
+                            existingGoals.calories != calorieValue
+                            || existingGoals.calorieMode != calorieMode
+                            || existingGoals.protein != proteinValue
+                            || existingGoals.proteinMode != proteinMode
+                            || existingGoals.carbs != carbsValue
+                            || existingGoals.carbsMode != carbsMode
+                            || existingGoals.fat != fatValue
+                            || existingGoals.fatMode != fatMode
+                            || existingGoals.fiber != fiberValue
+                            || existingGoals.fiberMode != fiberMode
                     } else {
-                        existingUser.goals = goals
+                        goalsChanged = true
+                    }
+
+                    if goalsChanged {
+                        let newGoals = UserGoals(
+                            calories: calorieValue,
+                            calorieMode: calorieMode,
+                            protein: proteinValue,
+                            proteinMode: proteinMode,
+                            carbs: carbsValue,
+                            carbsMode: carbsMode,
+                            fat: fatValue,
+                            fatMode: fatMode,
+                            fiber: fiberValue,
+                            fiberMode: fiberMode,
+                            owner: existingUser
+                        )
+                        context.insert(newGoals)
                     }
                 } else {
                     let newUser = User(onboardingComplete: true)
-                    newUser.goals = goals
-
                     context.insert(newUser)
+
+                    let newGoals = UserGoals(
+                        calories: calorieValue,
+                        calorieMode: calorieMode,
+                        protein: proteinValue,
+                        proteinMode: proteinMode,
+                        carbs: carbsValue,
+                        carbsMode: carbsMode,
+                        fat: fatValue,
+                        fatMode: fatMode,
+                        fiber: fiberValue,
+                        fiberMode: fiberMode,
+                        owner: newUser
+                    )
+                    context.insert(newGoals)
                 }
 
                 try? context.save()
@@ -174,18 +210,15 @@ struct GoalSetupView: View {
                 dismiss()
 
             } label: {
-                Text(
-                    (users.first?.onboardingComplete ?? false)
-                        ? "Save" : "Start"
-                )
-                .font(.system(.caption, design: .rounded))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(Color.accentColor)
-                .foregroundStyle(.white)
-                .clipShape(
-                    Capsule()
-                )
+                Text(isEditingExistingUser ? "Save" : "Start")
+                    .font(.system(.caption, design: .rounded))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(Color.accentColor)
+                    .foregroundStyle(.white)
+                    .clipShape(
+                        Capsule()
+                    )
             }
             .padding(.horizontal, 40)
             .padding(.top, 8)
@@ -221,10 +254,15 @@ struct GoalSetupView: View {
             .presentationDetents([.height(200)])
             .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showHistorySheet) {
+            if let user = users.first {
+                NavigationStack {
+                    GoalHistoryView(user: user)
+                }
+            }
+        }
         .onAppear {
-            if let currentUser = users.first,
-                let savedGoals = currentUser.goals
-            {
+            if let savedGoals = users.first?.currentGoals {
                 calorieValue = savedGoals.calories
                 calorieMode = savedGoals.calorieMode
                 proteinValue = savedGoals.protein
