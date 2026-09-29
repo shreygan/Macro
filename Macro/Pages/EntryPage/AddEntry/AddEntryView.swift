@@ -11,6 +11,7 @@ import SwiftUI
 struct AddEntryView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
 
     let entryType: EntryType
     var isPushedView: Bool = false
@@ -52,6 +53,105 @@ struct AddEntryView: View {
     @State private var customServingSize: String = "1"
 
     @State private var stickyNote: String = ""
+
+    @State private var draftID: UUID
+    private let isResumedDraft: Bool
+    @State private var didFinishAdding = false
+
+    init(
+        entryType: EntryType,
+        isPushedView: Bool = false,
+        onSelectInstantly: ((FoodItem) -> Void)? = nil,
+        onLogInstantly: ((FoodItem) -> Void)? = nil,
+        draft: EntryDraft? = nil
+    ) {
+        self.entryType = entryType
+        self.isPushedView = isPushedView
+        self.onSelectInstantly = onSelectInstantly
+        self.onLogInstantly = onLogInstantly
+
+        _draftID = State(initialValue: draft?.id ?? UUID())
+        self.isResumedDraft = draft != nil
+
+        if let state = draft?.decodeState(AddEntryDraftState.self) {
+            _name = State(initialValue: state.name)
+            _source = State(initialValue: state.source)
+            _category = State(initialValue: state.category)
+            _foodGroup = State(initialValue: state.foodGroup)
+            _servingSize = State(initialValue: state.servingSize)
+            _servingSizeUnit = State(initialValue: state.servingSizeUnit)
+            _servingWeight = State(initialValue: state.servingWeight)
+            _servingWeightUnit = State(initialValue: state.servingWeightUnit)
+            _isAIEstimated = State(initialValue: state.isAIEstimated)
+            _calorieValue = State(initialValue: state.macros.calories)
+            _proteinValue = State(initialValue: state.macros.protein)
+            _carbsValue = State(initialValue: state.macros.carbs)
+            _fatValue = State(initialValue: state.macros.fat)
+            _fiberValue = State(initialValue: state.macros.fiber)
+            _isCustomDefaultServing = State(
+                initialValue: state.isCustomDefaultServing
+            )
+            _customServingSize = State(initialValue: state.customServingSize)
+            _stickyNote = State(initialValue: state.stickyNote)
+        }
+    }
+
+    private var isDraftEnabled: Bool {
+        onSelectInstantly == nil
+    }
+
+    private var draftState: AddEntryDraftState {
+        AddEntryDraftState(
+            name: name,
+            source: source,
+            category: category,
+            foodGroup: foodGroup,
+            servingSize: servingSize,
+            servingSizeUnit: servingSizeUnit,
+            servingWeight: servingWeight,
+            servingWeightUnit: servingWeightUnit,
+            isAIEstimated: isAIEstimated,
+            macros: DraftMacroValues(
+                calories: calorieValue,
+                protein: proteinValue,
+                carbs: carbsValue,
+                fat: fatValue,
+                fiber: fiberValue
+            ),
+            isCustomDefaultServing: isCustomDefaultServing,
+            customServingSize: customServingSize,
+            stickyNote: stickyNote
+        )
+    }
+
+    private func saveDraft() {
+        let state = draftState
+        guard state != .empty else {
+            DraftStore.delete(id: draftID, in: modelContext)
+            return
+        }
+
+        DraftStore.upsert(
+            id: draftID,
+            kind: .addFood,
+            type: entryType,
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            state: state,
+            in: modelContext
+        )
+    }
+
+    private func saveDraftAndClose() {
+        saveDraft()
+        didFinishAdding = true
+        dismiss()
+    }
+
+    private func discardAndClose() {
+        DraftStore.delete(id: draftID, in: modelContext)
+        didFinishAdding = true
+        dismiss()
+    }
 
     var formattedSubtitle: String {
         let activeSize =
@@ -241,8 +341,11 @@ struct AddEntryView: View {
 
         modelContext.insert(newEntry)
 
+        DraftStore.delete(id: draftID, in: modelContext, save: false)
+
         do {
             try modelContext.save()
+            didFinishAdding = true
 
             newlySavedEntry = newEntry
             if onLogInstantly != nil {
@@ -442,11 +545,21 @@ struct AddEntryView: View {
             .toolbar {
                 if !isPushedView {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .foregroundStyle(.primary)
+                        if isDraftEnabled {
+                            DraftCloseButton(
+                                isResumedDraft: isResumedDraft,
+                                canSaveDraft: draftState != .empty,
+                                onClose: { dismiss() },
+                                onSaveDraft: saveDraftAndClose,
+                                onDiscard: discardAndClose
+                            )
+                        } else {
+                            Button {
+                                dismiss()
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .foregroundStyle(.primary)
+                            }
                         }
                     }
                 }
@@ -534,6 +647,20 @@ struct AddEntryView: View {
                 dismiss()
             }
 
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background && isDraftEnabled && !didFinishAdding {
+                saveDraft()
+            }
+        }
+        .onDisappear {
+            guard isDraftEnabled && !didFinishAdding else { return }
+
+            if isResumedDraft {
+                saveDraft()
+            } else {
+                DraftStore.delete(id: draftID, in: modelContext)
+            }
         }
     }
 

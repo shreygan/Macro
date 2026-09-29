@@ -11,6 +11,7 @@ import SwiftUI
 struct AddRecipeView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
 
     var onLogInstantly: ((FoodItem) -> Void)?
     @State private var showSuccessAlert: Bool = false
@@ -41,6 +42,92 @@ struct AddRecipeView: View {
     @State private var stickyNote: String = ""
 
     @State private var focusManager = SwipeFocusManager()
+
+    @State private var draftID: UUID
+    private let isResumedDraft: Bool
+    @State private var didFinishAdding = false
+
+    init(
+        onLogInstantly: ((FoodItem) -> Void)? = nil,
+        draft: EntryDraft? = nil
+    ) {
+        self.onLogInstantly = onLogInstantly
+
+        _draftID = State(initialValue: draft?.id ?? UUID())
+        self.isResumedDraft = draft != nil
+
+        if let draft, let state = draft.decodeState(AddRecipeDraftState.self) {
+            _name = State(initialValue: state.name)
+            _source = State(initialValue: state.source)
+            _category = State(initialValue: state.category)
+            _servingSize = State(initialValue: state.servingSize)
+            _servingSizeUnit = State(initialValue: state.servingSizeUnit)
+            _servingWeight = State(initialValue: state.servingWeight)
+            _servingWeightUnit = State(initialValue: state.servingWeightUnit)
+            _isCustomDefaultServing = State(
+                initialValue: state.isCustomDefaultServing
+            )
+            _customServingSize = State(initialValue: state.customServingSize)
+            _stickyNote = State(initialValue: state.stickyNote)
+
+            let items = DraftStore.foodItems(
+                for: state.ingredients,
+                in: draft.modelContext
+            )
+            _draftIngredients = State(
+                initialValue: state.ingredients.compactMap { snapshot in
+                    guard let id = snapshot.foodItemID, let item = items[id]
+                    else { return nil }
+                    return DraftRecipeIngredient(snapshot: snapshot, item: item)
+                }
+            )
+        }
+    }
+
+    private var draftState: AddRecipeDraftState {
+        AddRecipeDraftState(
+            name: name,
+            source: source,
+            category: category,
+            servingSize: servingSize,
+            servingSizeUnit: servingSizeUnit,
+            servingWeight: servingWeight,
+            servingWeightUnit: servingWeightUnit,
+            isCustomDefaultServing: isCustomDefaultServing,
+            customServingSize: customServingSize,
+            ingredients: draftIngredients.map(DraftIngredientSnapshot.init),
+            stickyNote: stickyNote
+        )
+    }
+
+    private func saveDraft() {
+        let state = draftState
+        guard state != .empty else {
+            DraftStore.delete(id: draftID, in: modelContext)
+            return
+        }
+
+        DraftStore.upsert(
+            id: draftID,
+            kind: .addRecipe,
+            type: .recipe,
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            state: state,
+            in: modelContext
+        )
+    }
+
+    private func saveDraftAndClose() {
+        saveDraft()
+        didFinishAdding = true
+        dismiss()
+    }
+
+    private func discardAndClose() {
+        DraftStore.delete(id: draftID, in: modelContext)
+        didFinishAdding = true
+        dismiss()
+    }
 
     var totalCalories: Double {
         draftIngredients.reduce(0) { $0 + $1.activeCalories }
@@ -262,8 +349,11 @@ struct AddRecipeView: View {
             newRecipe.recipeIngredients?.append(newIngredient)
         }
 
+        DraftStore.delete(id: draftID, in: modelContext, save: false)
+
         do {
             try modelContext.save()
+            didFinishAdding = true
 
             newlySavedEntry = newRecipe
             if onLogInstantly != nil {
@@ -550,12 +640,13 @@ struct AddRecipeView: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .foregroundStyle(.primary)
-                        }
+                        DraftCloseButton(
+                            isResumedDraft: isResumedDraft,
+                            canSaveDraft: draftState != .empty,
+                            onClose: { dismiss() },
+                            onSaveDraft: saveDraftAndClose,
+                            onDiscard: discardAndClose
+                        )
                     }
 
                     ToolbarItem(placement: .confirmationAction) {
@@ -631,6 +722,20 @@ struct AddRecipeView: View {
                 dismiss()
             }
 
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background && !didFinishAdding {
+                saveDraft()
+            }
+        }
+        .onDisappear {
+            guard !didFinishAdding else { return }
+
+            if isResumedDraft {
+                saveDraft()
+            } else {
+                DraftStore.delete(id: draftID, in: modelContext)
+            }
         }
     }
 }
