@@ -20,6 +20,7 @@ struct NewEntryView: View {
         [FoodItem]
     @Query(sort: \EntryDraft.updatedAt, order: .reverse) private var drafts:
         [EntryDraft]
+    @Query private var loggedEntries: [LoggedEntry]
 
     @State private var draftToResume: EntryDraft? = nil
     @State private var draftToDelete: EntryDraft? = nil
@@ -48,7 +49,7 @@ struct NewEntryView: View {
 
     @State private var showReorderFavoritesSheet = false
 
-    @State private var sortOption: FoodSortOption = .dateAdded
+    @State private var sortOption: FoodSortOption = .lastLogged
     @State private var sortDescending: Bool = true
 
     @State private var showFilterSheet = false
@@ -59,6 +60,18 @@ struct NewEntryView: View {
     private var hasActiveFilters: Bool {
         !searchText.isEmpty || !selectedTypes.isEmpty
             || !selectedSources.isEmpty || !selectedCategories.isEmpty
+    }
+
+    private var lastLoggedDates: [UUID: Date] {
+        var result: [UUID: Date] = [:]
+        for entry in loggedEntries {
+            guard let id = entry.originalFoodItem?.id else { continue }
+            if let existing = result[id], existing > entry.timestamp {
+                continue
+            }
+            result[id] = entry.timestamp
+        }
+        return result
     }
 
     private var filteredAllFoods: [FoodItem] {
@@ -96,6 +109,7 @@ struct NewEntryView: View {
             }
         }
 
+        let lastLoggedDates = lastLoggedDates
         return result.sorted { lhs, rhs in
             switch sortOption {
             case .name:
@@ -105,6 +119,11 @@ struct NewEntryView: View {
                 return sortDescending
                     ? lhs.dateAdded > rhs.dateAdded
                     : lhs.dateAdded < rhs.dateAdded
+            case .lastLogged:
+                let lhsDate = lastLoggedDates[lhs.id] ?? .distantPast
+                let rhsDate = lastLoggedDates[rhs.id] ?? .distantPast
+                return sortDescending
+                    ? lhsDate > rhsDate : lhsDate < rhsDate
             case .calories:
                 return sortDescending
                     ? lhs.calories > rhs.calories : lhs.calories < rhs.calories
@@ -141,6 +160,7 @@ struct NewEntryView: View {
             Picker("Sort By", selection: $sortOption) {
                 Text("Name").tag(FoodSortOption.name)
                 Text("Date Added").tag(FoodSortOption.dateAdded)
+                Text("Recently Logged").tag(FoodSortOption.lastLogged)
                 Text("Calories").tag(FoodSortOption.calories)
                 Text("Protein").tag(FoodSortOption.protein)
                 Text("Carbohydrates").tag(FoodSortOption.carbs)
@@ -150,7 +170,7 @@ struct NewEntryView: View {
             if sortOption != .name {
                 Divider()
                 Picker("Order", selection: $sortDescending) {
-                    if sortOption == .dateAdded {
+                    if sortOption == .dateAdded || sortOption == .lastLogged {
                         Text("Newest First").tag(true)
                         Text("Oldest First").tag(false)
                     } else {

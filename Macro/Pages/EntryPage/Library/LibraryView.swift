@@ -11,6 +11,7 @@ import SwiftUI
 enum FoodSortOption {
     case name
     case dateAdded
+    case lastLogged
     case calories
     case protein
     case carbs
@@ -117,6 +118,10 @@ struct LibraryView<Header: View>: View {
                 return lhs.name.localizedStandardCompare(rhs.name)
                     == .orderedAscending
             case .dateAdded:
+                return sortDescending
+                    ? lhs.dateAdded > rhs.dateAdded
+                    : lhs.dateAdded < rhs.dateAdded
+            case .lastLogged:
                 return sortDescending
                     ? lhs.dateAdded > rhs.dateAdded
                     : lhs.dateAdded < rhs.dateAdded
