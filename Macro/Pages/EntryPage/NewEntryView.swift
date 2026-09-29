@@ -18,6 +18,20 @@ struct NewEntryView: View {
         [ServingSizeUnit]
     @Query(sort: \FoodItem.dateAdded, order: .reverse) private var allFoods:
         [FoodItem]
+    @Query(sort: \EntryDraft.updatedAt, order: .reverse) private var drafts:
+        [EntryDraft]
+
+    @State private var draftToResume: EntryDraft? = nil
+    @State private var draftToDelete: EntryDraft? = nil
+    @State private var showDraftDeleteAlert = false
+
+    private var sortedDrafts: [EntryDraft] {
+        func sortDate(_ draft: EntryDraft) -> Date {
+            draft.kind?.isLog == true
+                ? (draft.timestamp ?? draft.updatedAt) : draft.updatedAt
+        }
+        return drafts.sorted { sortDate($0) > sortDate($1) }
+    }
 
     @State private var searchText = ""
 
@@ -331,6 +345,32 @@ struct NewEntryView: View {
                                     }
                                 }
                                 .padding([.top, .leading, .trailing])
+
+                                if !drafts.isEmpty {
+                                    Card("Drafts", titleBottomPadding: -4) {
+                                        EntryList(
+                                            items: sortedDrafts,
+                                            allowSwipeActions: true,
+                                            showCard: false,
+                                            rowContent: { draft in
+                                                DraftRow(
+                                                    draft: draft,
+                                                    servingUnits:
+                                                        portionUnitOptions,
+                                                    showsLogDate: true
+                                                ) {
+                                                    draftToResume = draft
+                                                }
+                                            },
+                                            onDelete: { draft in
+                                                draftToDelete = draft
+                                                showDraftDeleteAlert = true
+                                            }
+                                        )
+                                    }
+                                    .padding([.top, .leading, .trailing])
+                                    .transition(.opacity)
+                                }
                             }
                             .transition(.opacity)
                         }
@@ -408,6 +448,10 @@ struct NewEntryView: View {
                         value: favoritedFoods.isEmpty
                     )
                     .animation(
+                        .easeInOut(duration: 0.25),
+                        value: drafts.isEmpty
+                    )
+                    .animation(
                         .spring(response: 0.4, dampingFraction: 0.8),
                         value: favoritedFoods
                     )
@@ -464,6 +508,48 @@ struct NewEntryView: View {
 
             })
         }
+        .sheet(item: $draftToResume) { draft in
+            if draft.isAvailable {
+                switch draft.kind {
+                case .logFood, .logRecipe:
+                    if let food = draft.foodItem {
+                        Group {
+                            if draft.kind == .logRecipe {
+                                LogRecipeView(
+                                    recipe: food,
+                                    draft: draft,
+                                    isPushedView: false
+                                )
+                            } else {
+                                LogEntryView(
+                                    food: food,
+                                    draft: draft,
+                                    isPushedView: false
+                                )
+                            }
+                        }
+                        .environment(\.rootDismiss) {
+                            dismiss()
+                        }
+                    }
+                case .addRecipe:
+                    AddRecipeView(
+                        onLogInstantly: { savedRecipe in
+                            self.recipeToLog = savedRecipe
+                        },
+                        draft: draft
+                    )
+                case .addFood, nil:
+                    AddEntryView(
+                        entryType: draft.entryType ?? .food,
+                        onLogInstantly: { savedFood in
+                            self.foodToLog = savedFood
+                        },
+                        draft: draft
+                    )
+                }
+            }
+        }
         .sheet(item: $foodToLog) { food in
             LogEntryView(food: food, isPushedView: false)
                 .environment(\.rootDismiss) {
@@ -512,6 +598,26 @@ struct NewEntryView: View {
             }
         } message: { food in
             Text("Are you sure you want to delete \(food.name)?")
+        }
+        .alert(
+            "Delete Draft?",
+            isPresented: $showDraftDeleteAlert,
+            presenting: draftToDelete
+        ) { draft in
+            Button("Cancel", role: .cancel) { draftToDelete = nil }
+            Button("Delete", role: .destructive) {
+                let id = draft.id
+                draftToDelete = nil
+                DispatchQueue.main.async {
+                    withAnimation {
+                        DraftStore.delete(id: id, in: modelContext)
+                    }
+                }
+            }
+        } message: { _ in
+            Text(
+                "This unfinished entry will be permanently deleted. This action cannot be undone."
+            )
         }
     }
 }
