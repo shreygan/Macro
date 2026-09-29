@@ -19,6 +19,7 @@ class EntryPhoto {
     var displayOrder: Int
 
     var parentEntry: LoggedEntry?
+    var parentDraft: EntryDraft?
 
     init(
         imageData: Data,
