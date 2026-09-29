@@ -8,15 +8,53 @@
 import SwiftData
 import SwiftUI
 
+private enum TimelineItem: Identifiable {
+    case entry(LoggedEntry)
+    case draft(EntryDraft)
+
+    var id: UUID {
+        switch self {
+        case .entry(let entry): entry.id
+        case .draft(let draft): draft.id
+        }
+    }
+
+    var timestamp: Date {
+        switch self {
+        case .entry(let entry): entry.timestamp
+        case .draft(let draft): draft.timestamp ?? draft.createdAt
+        }
+    }
+
+    var entry: LoggedEntry? {
+        if case .entry(let entry) = self { return entry }
+        return nil
+    }
+
+    var draft: EntryDraft? {
+        if case .draft(let draft) = self { return draft }
+        return nil
+    }
+
+    var isDraft: Bool { draft != nil }
+}
+
 struct TimelineCard<MenuContent: View>: View {
     @Query private var entries: [LoggedEntry]
+    @Query private var drafts: [EntryDraft]
+    @Query(sort: \ServingSizeUnit.displayOrder) private var servingUnits:
+        [ServingSizeUnit]
     @Binding var clickedEntry: LoggedEntry?
+    @Binding var clickedDraft: EntryDraft?
 
     let menuItems: (LoggedEntry) -> MenuContent
+    var onDeleteDraft: ((EntryDraft) -> Void)?
 
     init(
         date: Date,
         clickedEntry: Binding<LoggedEntry?> = .constant(nil),
+        clickedDraft: Binding<EntryDraft?> = .constant(nil),
+        onDeleteDraft: ((EntryDraft) -> Void)? = nil,
         @ViewBuilder menuItems: @escaping (LoggedEntry) -> MenuContent
     ) {
         let calendar = Calendar.current
@@ -30,14 +68,129 @@ struct TimelineCard<MenuContent: View>: View {
 
         _entries = Query(filter: predicate, sort: \.timestamp)
 
+        let logFood = DraftKind.logFood.rawValue
+        let logRecipe = DraftKind.logRecipe.rawValue
+        let distantPast = Date.distantPast
+        let draftPredicate = #Predicate<EntryDraft> { draft in
+            (draft.kindRawValue == logFood || draft.kindRawValue == logRecipe)
+                && (draft.timestamp ?? distantPast) >= startOfDay
+                && (draft.timestamp ?? distantPast) < endOfDay
+        }
+
+        _drafts = Query(filter: draftPredicate)
+
         self._clickedEntry = clickedEntry
+        self._clickedDraft = clickedDraft
+        self.onDeleteDraft = onDeleteDraft
         self.menuItems = menuItems
     }
 
+    private var items: [TimelineItem] {
+        (entries.map(TimelineItem.entry) + drafts.map(TimelineItem.draft))
+            .sorted { $0.timestamp < $1.timestamp }
+    }
+
+    @ViewBuilder
+    private func entryRow(_ entry: LoggedEntry) -> some View {
+        let mealRow = MealRow(
+            name: entry.name,
+            source: entry.source?.source ?? "None",
+            isCustomDefaultServing: false,
+            customServingSize: "",
+            servingSize: EntryHelper.format(
+                entry.loggedQuantity
+            ),
+            servingSizeUnit: entry.loggedUnit,
+            servingWeight: "",
+            servingWeightUnit: "",
+            servingUnits: servingUnits,
+            calorie: String(entry.calories),
+            protein: String(entry.protein),
+            carbs: String(entry.carbs),
+            fat: String(entry.fat),
+            fiber: String(entry.fiber),
+            action: {
+                clickedEntry = entry
+            }
+        )
+
+        if MenuContent.self != EmptyView.self {
+            Menu {
+                menuItems(entry)
+            } label: {
+                mealRow
+                    .allowsHitTesting(false)
+                    .contentShape(Rectangle())
+            } primaryAction: {
+                clickedEntry = entry
+            }
+            .buttonStyle(.plain)
+            .padding(.top, -8)
+
+        } else {
+            mealRow
+                .padding(.top, -8)
+        }
+    }
+
+    @ViewBuilder
+    private func draftRow(_ draft: EntryDraft) -> some View {
+        let row = DraftRow(draft: draft, servingUnits: servingUnits) {
+            clickedDraft = draft
+        }
+
+        if let onDeleteDraft {
+            Menu {
+                Button {
+                    clickedDraft = draft
+                } label: {
+                    Label("Finish Logging", systemImage: "checkmark.circle")
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    onDeleteDraft(draft)
+                } label: {
+                    Label("Delete Draft", systemImage: "trash")
+                }
+            } label: {
+                row
+                    .allowsHitTesting(false)
+                    .contentShape(Rectangle())
+            } primaryAction: {
+                clickedDraft = draft
+            }
+            .buttonStyle(.plain)
+            .padding(.top, -8)
+        } else {
+            row
+                .padding(.top, -8)
+        }
+    }
+
+    @ViewBuilder
+    private func timelineDot(isDraft: Bool) -> some View {
+        if isDraft {
+            Circle()
+                .fill(Color.white)
+                .overlay(
+                    Circle().strokeBorder(Color.gray, lineWidth: 1.5)
+                )
+                .frame(width: 8, height: 8)
+        } else {
+            Circle()
+                .fill(Color.black)
+                .frame(width: 8, height: 8)
+        }
+    }
+
     var body: some View {
+        let items = items
+
         Card("Timeline") {
             VStack(spacing: 0) {
-                if entries.isEmpty {
+                if items.isEmpty {
                     VStack(spacing: 16) {
                         Text("No entries logged today.")
                             .font(.subheadline)
@@ -47,74 +200,51 @@ struct TimelineCard<MenuContent: View>: View {
                     .padding(.top, 8)
                     .padding(.bottom, 16)
                 } else {
-                    ForEach(Array(entries.enumerated()), id: \.element.id) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) {
                         index,
-                        entry in
+                        item in
                         let isFirst = index == 0
-                        let isLast = index == entries.count - 1
+                        let isLast = index == items.count - 1
 
                         VStack(alignment: .leading, spacing: 0) {
 
                             HStack(spacing: 0) {
-                                Text(formatTime(entry.timestamp))
+                                Text(formatTime(item.timestamp))
                                     .fontWeight(.semibold)
                                     .foregroundColor(.primary)
 
-                                if let categoryName = entry.category?.category,
+                                if let categoryName = item.entry?.category?
+                                    .category,
                                     !categoryName.isEmpty
                                 {
                                     Text(", \(categoryName)")
                                         .foregroundColor(.secondary)
+                                }
+
+                                if item.isDraft {
+                                    Text("Draft")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(.secondary)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 1)
+                                        .background(
+                                            Capsule()
+                                                .strokeBorder(
+                                                    Color.secondary,
+                                                    lineWidth: 1
+                                                )
+                                        )
+                                        .padding(.leading, 6)
                                 }
                             }
                             .font(.system(size: 13))
                             .padding(.leading, 4)
                             .padding(.bottom, 6)
 
-                            let mealRow = MealRow(
-                                name: entry.name,
-                                source: entry.source?.source ?? "None",
-                                isCustomDefaultServing: entry.originalFoodItem?
-                                    .isCustomDefaultServing ?? false,
-                                customServingSize: EntryHelper.format(
-                                    entry.originalFoodItem?.customServingSize
-                                        ?? 0
-                                ),
-                                servingSize: EntryHelper.format(
-                                    entry.loggedQuantity
-                                ),
-                                servingSizeUnit: entry.loggedUnit,
-                                servingWeight: "",
-                                servingWeightUnit: "",
-                                servingUnits: [],
-                                calorie: String(entry.calories),
-                                protein: String(entry.protein),
-                                carbs: String(entry.carbs),
-                                fat: String(entry.fat),
-                                fiber: String(entry.fiber),
-                                action: {
-                                    clickedEntry = entry
-                                }
-                            )
-
-                            Group {
-                                if MenuContent.self != EmptyView.self {
-                                    Menu {
-                                        menuItems(entry)
-                                    } label: {
-                                        mealRow
-                                            .allowsHitTesting(false)
-                                            .contentShape(Rectangle())
-                                    } primaryAction: {
-                                        clickedEntry = entry
-                                    }
-                                    .buttonStyle(.plain)
-                                    .padding(.top, -8)
-
-                                } else {
-                                    mealRow
-                                        .padding(.top, -8)
-                                }
+                            if let entry = item.entry {
+                                entryRow(entry)
+                            } else if let draft = item.draft {
+                                draftRow(draft)
                             }
                         }
                         .clipped()
@@ -149,9 +279,7 @@ struct TimelineCard<MenuContent: View>: View {
                                         .frame(width: 2)
                                 }
 
-                                Circle()
-                                    .fill(Color.black)
-                                    .frame(width: 8, height: 8)
+                                timelineDot(isDraft: item.isDraft)
                                     .padding(.top, 4)
                             }
                             .frame(width: 32)
@@ -283,6 +411,29 @@ extension TimelineCard where MenuContent == EmptyView {
     )
     context.insert(barEntry)
 
+    // Unfinished log
+    let bagelFood = FoodItem(
+        name: "Everything Bagel",
+        servingSize: 1,
+        servingWeightUnit: "g",
+        isAIEstimated: false,
+        calories: 290,
+        protein: 11,
+        carbs: 56,
+        fat: 2,
+        fiber: 2,
+        isCustomDefaultServing: false
+    )
+    context.insert(bagelFood)
+    let bagelDraft = EntryDraft(
+        kind: .logFood,
+        type: .food,
+        name: "Everything Bagel",
+        timestamp: makeTime(hour: 17, minute: 30),
+        foodItem: bagelFood
+    )
+    context.insert(bagelDraft)
+
     // 5. Lights Caramel Action
     let iceCreamEntry = LoggedEntry(
         name: "Lights Caramel Action",
@@ -313,7 +464,12 @@ extension TimelineCard where MenuContent == EmptyView {
     context.insert(iceCreamEntry)
 
     return ScrollView {
-        TimelineCard(date: today) { entry in
+        TimelineCard(
+            date: today,
+            onDeleteDraft: { draft in
+                print("Delete draft \(draft.name)")
+            }
+        ) { entry in
             Button {
                 print("Edit \(entry.name)")
             } label: {

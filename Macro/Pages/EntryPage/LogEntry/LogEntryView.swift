@@ -12,6 +12,7 @@ struct LogEntryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.rootDismiss) var rootDismiss
     @Environment(\.dismiss) var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var focusManager = SwipeFocusManager()
 
@@ -85,6 +86,13 @@ struct LogEntryView: View {
     @State private var saveOption: LogSaveOption = .logOnly
 
     @State private var isResettingPortion = false
+
+    @State private var draftID: UUID
+    private let isResumedDraft: Bool
+    @State private var didFinishLogging = false
+
+    @State private var initialDraftState: LogEntryDraftState?
+    @State private var initialPhotoData: [Data] = []
 
     var isEdited: Bool {
         sourceSelection != (food.source?.source ?? "")
@@ -357,8 +365,11 @@ struct LogEntryView: View {
             }
         }
 
+        DraftStore.delete(id: draftID, in: modelContext, save: false)
+
         do {
             try modelContext.save()
+            didFinishLogging = true
 
             if let rootDismiss {
                 rootDismiss()
@@ -370,9 +381,87 @@ struct LogEntryView: View {
         }
     }
 
+    private var draftState: LogEntryDraftState {
+        LogEntryDraftState(
+            name: name,
+            sourceSelection: sourceSelection,
+            categorySelection: categorySelection,
+            foodGroupSelection: foodGroupSelection,
+            date: date,
+            time: time,
+            location: location,
+            portionQuantity: portionQuantity,
+            portionUnitSelection: portionUnitSelection,
+            macros: DraftMacroValues(
+                calories: calorie,
+                protein: protein,
+                carbs: carbs,
+                fat: fat,
+                fiber: fiber
+            ),
+            dynamicMacros: DraftMacroValues(
+                calories: calorieDynamic,
+                protein: proteinDynamic,
+                carbs: carbsDynamic,
+                fat: fatDynamic,
+                fiber: fiberDynamic
+            ),
+            manualOverrideToggle: manualOverrideToggle,
+            notes: DraftNoteState(
+                stickyNote: stickyNote,
+                newNote: newNote,
+                isAddingNewNote: isAddingNewNote,
+                isNewNotePinned: isNewNotePinned,
+                isOriginalNotePinned: isOriginalNotePinned
+            ),
+            saveOptionRawValue: saveOption.rawValue
+        )
+    }
+
+    private func saveDraft() {
+        DraftStore.upsert(
+            id: draftID,
+            kind: .logFood,
+            type: food.type,
+            name: name.isEmpty ? food.name : name,
+            timestamp: combineDateAndTime(date: date, time: time),
+            foodItem: food,
+            state: draftState,
+            photos: selectedPhotos,
+            in: modelContext
+        )
+    }
+
+    private var hasDraftChanges: Bool {
+        guard let initialDraftState else { return false }
+        return draftState != initialDraftState
+            || selectedPhotos.map(\.originalData) != initialPhotoData
+    }
+
+    private func autoSaveDraft() {
+        if isResumedDraft || hasDraftChanges {
+            saveDraft()
+        } else {
+            DraftStore.delete(id: draftID, in: modelContext)
+        }
+    }
+
+    private func saveDraftAndClose() {
+        saveDraft()
+        didFinishLogging = true
+        dismiss()
+    }
+
+    private func discardAndClose() {
+        DraftStore.delete(id: draftID, in: modelContext)
+        didFinishLogging = true
+        dismiss()
+    }
+
     init(
         food: FoodItem,
         previousEntry: LoggedEntry? = nil,
+        draft: EntryDraft? = nil,
         isPushedView: Bool = true,
     ) {
         self.food = food
@@ -479,6 +568,84 @@ struct LogEntryView: View {
         )
 
         _dateAdded = State(initialValue: food.dateAdded)
+
+        _draftID = State(initialValue: draft?.id ?? UUID())
+        self.isResumedDraft = draft != nil
+
+        if let draft, let state = draft.decodeState(LogEntryDraftState.self) {
+            _name = State(initialValue: state.name)
+            _sourceSelection = State(initialValue: state.sourceSelection)
+            _categorySelection = State(initialValue: state.categorySelection)
+            _foodGroupSelection = State(initialValue: state.foodGroupSelection)
+
+            _date = State(initialValue: state.date)
+            _time = State(initialValue: state.time)
+            _location = State(initialValue: state.location)
+
+            _portionQuantity = State(initialValue: state.portionQuantity)
+            _portionUnitSelection = State(
+                initialValue: state.portionUnitSelection
+            )
+
+            _manualOverrideToggle = State(
+                initialValue: state.manualOverrideToggle
+            )
+
+            let macros: DraftMacroValues
+            let dynamicMacros: DraftMacroValues
+            if state.manualOverrideToggle {
+                macros = state.macros
+                dynamicMacros = state.dynamicMacros
+            } else {
+                let isWeightSelected =
+                    state.portionUnitSelection == food.servingWeightUnit
+                    && food.servingWeight != nil
+                let multiplier = EntryHelper.calculateMultiplier(
+                    targetPortion: Double(state.portionQuantity) ?? 0,
+                    basePortion: isWeightSelected
+                        ? (food.servingWeight ?? food.servingSize)
+                        : food.servingSize
+                )
+                macros = DraftMacroValues(
+                    calories: EntryHelper.scale(calStr, by: multiplier),
+                    protein: EntryHelper.scale(proStr, by: multiplier),
+                    carbs: EntryHelper.scale(carbStr, by: multiplier),
+                    fat: EntryHelper.scale(fatStr, by: multiplier),
+                    fiber: EntryHelper.scale(fibStr, by: multiplier)
+                )
+                dynamicMacros = macros
+            }
+
+            _calorie = State(initialValue: macros.calories)
+            _protein = State(initialValue: macros.protein)
+            _carbs = State(initialValue: macros.carbs)
+            _fat = State(initialValue: macros.fat)
+            _fiber = State(initialValue: macros.fiber)
+
+            _calorieDynamic = State(initialValue: dynamicMacros.calories)
+            _proteinDynamic = State(initialValue: dynamicMacros.protein)
+            _carbsDynamic = State(initialValue: dynamicMacros.carbs)
+            _fatDynamic = State(initialValue: dynamicMacros.fat)
+            _fiberDynamic = State(initialValue: dynamicMacros.fiber)
+
+            _stickyNote = State(initialValue: state.notes.stickyNote)
+            _newNote = State(initialValue: state.notes.newNote)
+            _isAddingNewNote = State(initialValue: state.notes.isAddingNewNote)
+            _isNewNotePinned = State(initialValue: state.notes.isNewNotePinned)
+            _isOriginalNotePinned = State(
+                initialValue: state.notes.isOriginalNotePinned
+            )
+
+            _selectedPhotos = State(
+                initialValue: EntryHelper.loggedPhotos(from: draft.photos)
+            )
+
+            _saveOption = State(
+                initialValue: LogSaveOption(
+                    rawValue: state.saveOptionRawValue
+                ) ?? .logOnly
+            )
+        }
     }
 
     var body: some View {
@@ -774,12 +941,12 @@ struct LogEntryView: View {
                 .toolbar {
                     if !isPushedView {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button {
-                                dismiss()
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .foregroundStyle(.primary)
-                            }
+                            DraftCloseButton(
+                                isResumedDraft: isResumedDraft,
+                                onClose: { dismiss() },
+                                onSaveDraft: saveDraftAndClose,
+                                onDiscard: discardAndClose
+                            )
                         }
                     }
 
@@ -800,6 +967,14 @@ struct LogEntryView: View {
                                 }
                                 .disabled(!isEdited && option != .logOnly)
                             }
+
+                            Divider()
+
+                            Button(
+                                "Save as Draft",
+                                systemImage: "square.and.arrow.down",
+                                action: saveDraftAndClose
+                            )
 
                             if hasChangedFromOriginal {
                                 Divider()
@@ -993,6 +1168,26 @@ struct LogEntryView: View {
             }
         }
         .environment(focusManager)
+        .onAppear {
+            if initialDraftState == nil {
+                initialDraftState = draftState
+                initialPhotoData = selectedPhotos.map(\.originalData)
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background && !didFinishLogging {
+                autoSaveDraft()
+            }
+        }
+        .onDisappear {
+            guard !didFinishLogging else { return }
+
+            if isResumedDraft {
+                saveDraft()
+            } else {
+                DraftStore.delete(id: draftID, in: modelContext)
+            }
+        }
         .sheet(isPresented: $showingAllNotes) {
             NavigationStack {
                 VStack(spacing: 20) {

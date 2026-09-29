@@ -46,6 +46,9 @@ class FoodItem {
     @Relationship(deleteRule: .cascade, inverse: \FavoriteEntry.foodItem)
     var favoriteEntry: FavoriteEntry?
 
+    @Relationship(deleteRule: .cascade, inverse: \EntryDraft.foodItem)
+    var drafts: [EntryDraft]? = []
+
     init(
         id: UUID = UUID(),
         name: String,

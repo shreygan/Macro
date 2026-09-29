@@ -12,6 +12,8 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
 
     @Query private var users: [User]
+    @Query(filter: EntryDraft.logDraftsPredicate) private var logDrafts:
+        [EntryDraft]
 
     @State private var showDatePicker = false
     @State private var showImportSheet = false
@@ -25,6 +27,10 @@ struct HomeView: View {
     @State private var showEntryDeleteConfirmation = false
 
     @State private var clickedEntry: LoggedEntry? = nil
+
+    @State private var clickedDraft: EntryDraft? = nil
+    @State private var draftToDelete: EntryDraft? = nil
+    @State private var showDraftDeleteConfirmation = false
 
     @State private var swapTargetDate: Date? = nil
     @State private var swapSubstituteDate: Date? = nil
@@ -88,6 +94,7 @@ struct HomeView: View {
             try modelContext.delete(model: ServingSizeUnit.self)
             try modelContext.delete(model: FavoriteEntry.self)
             try modelContext.delete(model: LoggedEntry.self)
+            try modelContext.delete(model: EntryDraft.self)
 
             try modelContext.save()
             print("All data successfully cleared.")
@@ -209,7 +216,17 @@ struct HomeView: View {
         }
     }
 
+    private var draftDays: Set<Date> {
+        Set(
+            logDrafts.compactMap { draft in
+                draft.timestamp.map { Calendar.current.startOfDay(for: $0) }
+            }
+        )
+    }
+
     var body: some View {
+        let draftDays = draftDays
+
         NavigationStack {
             VStack(spacing: 0) {
                 TabView(selection: $currentWeekStart) {
@@ -257,6 +274,29 @@ struct HomeView: View {
                                     Circle()
                                         .fill(Color(uiColor: .systemGray5))
                                         .frame(width: 40, height: 40)
+                                        .overlay(alignment: .bottom) {
+                                            if draftDays.contains(
+                                                Calendar.current.startOfDay(
+                                                    for: date
+                                                )
+                                            ) {
+                                                Circle()
+                                                    .fill(Color.white)
+                                                    .overlay(
+                                                        Circle().strokeBorder(
+                                                            Color.gray,
+                                                            lineWidth: 1.5
+                                                        )
+                                                    )
+                                                    .frame(width: 8, height: 8)
+                                                    .offset(y: 4)
+                                                    .transition(.opacity)
+                                            }
+                                        }
+                                        .animation(
+                                            .easeInOut(duration: 0.25),
+                                            value: draftDays
+                                        )
                                 }
                                 .onTapGesture {
                                     navigateToDate(to: date)
@@ -294,7 +334,12 @@ struct HomeView: View {
 
                                 TimelineCard(
                                     date: effectiveDate,
-                                    clickedEntry: $clickedEntry
+                                    clickedEntry: $clickedEntry,
+                                    clickedDraft: $clickedDraft,
+                                    onDeleteDraft: { draft in
+                                        draftToDelete = draft
+                                        showDraftDeleteConfirmation = true
+                                    }
                                 ) { entry in
                                     Button {
                                         if entry.originalFoodItem != nil {
@@ -549,6 +594,23 @@ struct HomeView: View {
                     LoggedEntryDetailView(entry: entry, isPushedView: false)
                 }
             }
+            .sheet(item: $clickedDraft) { draft in
+                if draft.isAvailable, let food = draft.foodItem {
+                    if draft.kind == .logRecipe {
+                        LogRecipeView(
+                            recipe: food,
+                            draft: draft,
+                            isPushedView: false
+                        )
+                    } else {
+                        LogEntryView(
+                            food: food,
+                            draft: draft,
+                            isPushedView: false
+                        )
+                    }
+                }
+            }
             .sheet(item: $entryToLogAgain) { previousEntry in
                 NavigationStack {
                     if let foodToLog = previousEntry.originalFoodItem {
@@ -586,6 +648,25 @@ struct HomeView: View {
             } message: { _ in
                 Text(
                     "Are you sure you want to delete this entry? This action cannot be undone."
+                )
+            }
+            .alert(
+                "Delete Draft?",
+                isPresented: $showDraftDeleteConfirmation,
+                presenting: draftToDelete
+            ) { draft in
+                Button("Cancel", role: .cancel) {
+                    draftToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    withAnimation {
+                        DraftStore.delete(id: draft.id, in: modelContext)
+                        draftToDelete = nil
+                    }
+                }
+            } message: { _ in
+                Text(
+                    "This unfinished entry will be permanently deleted. This action cannot be undone."
                 )
             }
             .alert("Delete All Data?", isPresented: $showDeleteConfirmation) {

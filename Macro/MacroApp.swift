@@ -20,6 +20,7 @@ struct MacroApp: App {
             ServingSizeUnit.self,
             FavoriteEntry.self,
             LoggedEntry.self,
+            EntryDraft.self,
         ])
 
         let modelConfiguration = ModelConfiguration(
