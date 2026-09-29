@@ -45,6 +45,7 @@ struct ProgressCard: View {
 
         let predicate = #Predicate<LoggedEntry> { entry in
             entry.timestamp >= startOfDay && entry.timestamp < endOfDay
+                && entry.parentEntry == nil
         }
 
         _entries = Query(filter: predicate)
