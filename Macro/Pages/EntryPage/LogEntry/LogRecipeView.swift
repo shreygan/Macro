@@ -8,10 +8,13 @@
 import SwiftData
 import SwiftUI
 
+// TODO: FIX BUG WHERE ADDING FOOD WITH 2 DEFAULT SERVING THEN CHANGING IN LOG FOOD, IF CHANGE SERVING TO 1 THEN 2 IT DOUBLES SERVING FIX THIS
+
 struct LogRecipeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.rootDismiss) var rootDismiss
     @Environment(\.dismiss) var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     @Query(sort: \EntrySource.displayOrder) var sourceOptions: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var categoryOptions:
@@ -49,6 +52,13 @@ struct LogRecipeView: View {
     @State private var saveOption: LogSaveOption = .logOnly
 
     @State private var isResettingPortion = false
+
+    @State private var draftID: UUID
+    private let isResumedDraft: Bool
+    @State private var didFinishLogging = false
+
+    @State private var initialDraftState: LogRecipeDraftState?
+    @State private var initialPhotoData: [Data] = []
 
     @State private var focusManager = SwipeFocusManager()
 
@@ -423,8 +433,11 @@ struct LogRecipeView: View {
             }
         }
 
+        DraftStore.delete(id: draftID, in: modelContext, save: false)
+
         do {
             try modelContext.save()
+            didFinishLogging = true
 
             if let rootDismiss {
                 rootDismiss()
@@ -436,9 +449,72 @@ struct LogRecipeView: View {
         }
     }
 
+    private var draftState: LogRecipeDraftState {
+        LogRecipeDraftState(
+            name: name,
+            sourceSelection: sourceSelection,
+            categorySelection: categorySelection,
+            date: date,
+            time: time,
+            location: location,
+            portionQuantity: portionQuantity,
+            portionUnitSelection: portionUnitSelection,
+            ingredients: draftIngredients.map(DraftIngredientSnapshot.init),
+            notes: DraftNoteState(
+                stickyNote: stickyNote,
+                newNote: newNote,
+                isAddingNewNote: isAddingNewNote,
+                isNewNotePinned: isNewNotePinned,
+                isOriginalNotePinned: isOriginalNotePinned
+            ),
+            saveOptionRawValue: saveOption.rawValue
+        )
+    }
+
+    private func saveDraft() {
+        DraftStore.upsert(
+            id: draftID,
+            kind: .logRecipe,
+            type: recipe.type,
+            name: name.isEmpty ? recipe.name : name,
+            timestamp: combineDateAndTime(date: date, time: time),
+            foodItem: recipe,
+            state: draftState,
+            photos: selectedPhotos,
+            in: modelContext
+        )
+    }
+
+    private var hasDraftChanges: Bool {
+        guard let initialDraftState else { return false }
+        return draftState != initialDraftState
+            || selectedPhotos.map(\.originalData) != initialPhotoData
+    }
+
+    private func autoSaveDraft() {
+        if isResumedDraft || hasDraftChanges {
+            saveDraft()
+        } else {
+            DraftStore.delete(id: draftID, in: modelContext)
+        }
+    }
+
+    private func saveDraftAndClose() {
+        saveDraft()
+        didFinishLogging = true
+        dismiss()
+    }
+
+    private func discardAndClose() {
+        DraftStore.delete(id: draftID, in: modelContext)
+        didFinishLogging = true
+        dismiss()
+    }
+
     init(
         recipe: FoodItem,
         previousEntry: LoggedEntry? = nil,
+        draft: EntryDraft? = nil,
         isPushedView: Bool = true,
     ) {
         self.recipe = recipe
@@ -522,6 +598,55 @@ struct LogRecipeView: View {
         _selectedPhotos = State(
             initialValue: EntryHelper.loggedPhotos(from: previousEntry?.photos)
         )
+
+        _draftID = State(initialValue: draft?.id ?? UUID())
+        self.isResumedDraft = draft != nil
+
+        if let draft, let state = draft.decodeState(LogRecipeDraftState.self) {
+            _name = State(initialValue: state.name)
+            _sourceSelection = State(initialValue: state.sourceSelection)
+            _categorySelection = State(initialValue: state.categorySelection)
+
+            _date = State(initialValue: state.date)
+            _time = State(initialValue: state.time)
+            _location = State(initialValue: state.location)
+
+            _portionQuantity = State(initialValue: state.portionQuantity)
+            _portionUnitSelection = State(
+                initialValue: state.portionUnitSelection
+            )
+
+            let items = DraftStore.foodItems(
+                for: state.ingredients,
+                in: draft.modelContext
+            )
+            _draftIngredients = State(
+                initialValue: state.ingredients.map { snapshot in
+                    LogRecipeIngredient(
+                        snapshot: snapshot,
+                        item: snapshot.foodItemID.flatMap { items[$0] }
+                    )
+                }
+            )
+
+            _stickyNote = State(initialValue: state.notes.stickyNote)
+            _newNote = State(initialValue: state.notes.newNote)
+            _isAddingNewNote = State(initialValue: state.notes.isAddingNewNote)
+            _isNewNotePinned = State(initialValue: state.notes.isNewNotePinned)
+            _isOriginalNotePinned = State(
+                initialValue: state.notes.isOriginalNotePinned
+            )
+
+            _selectedPhotos = State(
+                initialValue: EntryHelper.loggedPhotos(from: draft.photos)
+            )
+
+            _saveOption = State(
+                initialValue: LogSaveOption(
+                    rawValue: state.saveOptionRawValue
+                ) ?? .logOnly
+            )
+        }
     }
 
     var body: some View {
@@ -739,12 +864,12 @@ struct LogRecipeView: View {
                 .toolbar {
                     ToolbarItemGroup(placement: .cancellationAction) {
                         if !isPushedView {
-                            Button {
-                                dismiss()
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .foregroundStyle(.primary)
-                            }
+                            DraftCloseButton(
+                                isResumedDraft: isResumedDraft,
+                                onClose: { dismiss() },
+                                onSaveDraft: saveDraftAndClose,
+                                onDiscard: discardAndClose
+                            )
                         }
                     }
 
@@ -765,6 +890,14 @@ struct LogRecipeView: View {
                                 }
                                 .disabled(!isEdited && option != .logOnly)
                             }
+
+                            Divider()
+
+                            Button(
+                                "Save as Draft",
+                                systemImage: "square.and.arrow.down",
+                                action: saveDraftAndClose
+                            )
 
                             if hasChangedFromOriginal {
                                 Divider()
@@ -849,6 +982,26 @@ struct LogRecipeView: View {
                 }
             }
             .environment(focusManager)
+            .onAppear {
+                if initialDraftState == nil {
+                    initialDraftState = draftState
+                    initialPhotoData = selectedPhotos.map(\.originalData)
+                }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .background && !didFinishLogging {
+                    autoSaveDraft()
+                }
+            }
+            .onDisappear {
+                guard !didFinishLogging else { return }
+
+                if isResumedDraft {
+                    saveDraft()
+                } else {
+                    DraftStore.delete(id: draftID, in: modelContext)
+                }
+            }
             .sheet(isPresented: $showingAllNotes) {
                 NavigationStack {
                     VStack(spacing: 20) {
