@@ -9,12 +9,28 @@ import SwiftData
 import SwiftUI
 
 struct MainView: View {
-    enum TabSelection {
-        case home, stats, library, add
+    enum TabSelection: ProminentTabItem {
+        case home, stats, library
+
+        var symbol: String {
+            switch self {
+            case .home: return "house"
+            case .stats: return "chart.bar.xaxis"
+            case .library: return "book.pages"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .home: return String(localized: "Home")
+            case .stats: return String(localized: "Statistics")
+            case .library: return String(localized: "Library")
+            }
+        }
     }
 
     @State private var selection: TabSelection = .home
-    @State private var showLogSheet = false
+    @State private var foodToLog: FoodItem? = nil
 
     @Query private var users: [User]
 
@@ -27,31 +43,36 @@ struct MainView: View {
             Color.background.ignoresSafeArea()
 
             TabView(selection: $selection) {
-                Tab("Home", systemImage: "house.fill", value: .home) {
+                Tab(value: .home) {
                     HomeView()
+                        .toolbarVisibility(.hidden, for: .tabBar)
                 }
 
-                Tab("Statistics", systemImage: "chart.bar.xaxis", value: .stats)
-                {
+                Tab(value: .stats) {
                     Text("Statistics View")
+                        .toolbarVisibility(.hidden, for: .tabBar)
                 }
 
-                Tab("Library", systemImage: "book.pages", value: .library) {
+                Tab(value: .library) {
                     Text("Library View")
-                }
-
-                Tab("Add", systemImage: "plus", value: .add, role: .prominent) {
-                    Color.accentColor
+                        .toolbarVisibility(.hidden, for: .tabBar)
                 }
             }
-            .onChange(of: selection) { oldValue, newValue in
-                if newValue == .add {
-                    selection = oldValue
-                    showLogSheet = true
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                ProminentTabBar(selection: $selection, prominentSymbol: "plus") {
+                    NewEntryView()
+                } popover: {
+                    QuickLogPopover { food in
+                        foodToLog = food
+                    }
                 }
             }
-            .sheet(isPresented: $showLogSheet) {
-                NewEntryView()
+            .sheet(item: $foodToLog) { food in
+                if food.type == .recipe {
+                    LogRecipeView(recipe: food, isPushedView: false)
+                } else {
+                    LogEntryView(food: food, isPushedView: false)
+                }
             }
 
             if !isOnboardingComplete {

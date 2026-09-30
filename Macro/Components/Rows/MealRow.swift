@@ -227,31 +227,23 @@ struct MealRow<Content: View>: View {
         text: String,
         isFirst: Bool = false
     ) -> Text {
-        let prefix = isFirst ? Text("") : Text("  ")
+        guard case .appSymbol = icon else { return Text("") }
 
-        if case .appSymbol(let symbol, let tint) = icon {
-            let imageText = Text(Image(systemName: symbol.rawValue))
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(tint)
+        let macro = icon.macroText(
+            text,
+            iconSize: 12,
+            valueSize: 12,
+            valueColor: .primary,
+            isFirst: isFirst
+        )
+        let strut = Text("\u{200B}")
+            .font(.system(size: 16))
 
-            let valueText = Text("\u{00A0}\(text)")
-                .font(.system(size: 12, design: .rounded))
-                .foregroundColor(.primary)
-
-            let strut = Text("\u{200B}")
-                .font(.system(size: 16))
-
-            return Text("\(prefix)\(imageText)\(valueText)\(strut)")
-        }
-
-        return Text("")
+        return Text("\(macro)\(strut)")
     }
 
     private func buildAllMacrosText() -> Text {
-        let formattedCalorie =
-            Double(calorie).map {
-                $0.formatted(.number.precision(.fractionLength(0...1)))
-            } ?? calorie
+        let formattedCalorie = Double(calorie).map(EntryHelper.formatMacro) ?? calorie
 
         var resultText = buildMacroText(
             .calorie,
@@ -262,7 +254,7 @@ struct MealRow<Content: View>: View {
         if let protein, let val = Double(protein), val > 0 {
             let pText = buildMacroText(
                 .protein,
-                text: val.formatted(.number.precision(.fractionLength(0...1)))
+                text: EntryHelper.formatMacro(val)
             )
             resultText = Text("\(resultText)\(pText)")
         }
@@ -270,7 +262,7 @@ struct MealRow<Content: View>: View {
         if let carbs, let val = Double(carbs), val > 0 {
             let cText = buildMacroText(
                 .carbs,
-                text: val.formatted(.number.precision(.fractionLength(0...1)))
+                text: EntryHelper.formatMacro(val)
             )
             resultText = Text("\(resultText)\(cText)")
         }
@@ -278,7 +270,7 @@ struct MealRow<Content: View>: View {
         if let fat, let val = Double(fat), val > 0 {
             let fText = buildMacroText(
                 .fat,
-                text: val.formatted(.number.precision(.fractionLength(0...1)))
+                text: EntryHelper.formatMacro(val)
             )
             resultText = Text("\(resultText)\(fText)")
         }
@@ -286,7 +278,7 @@ struct MealRow<Content: View>: View {
         if let fiber, let val = Double(fiber), val > 0 {
             let fibText = buildMacroText(
                 .fiber,
-                text: val.formatted(.number.precision(.fractionLength(0...1)))
+                text: EntryHelper.formatMacro(val)
             )
             resultText = Text("\(resultText)\(fibText)")
         }

@@ -24,6 +24,18 @@ enum EntryHelper {
         return targetPortion / basePortion
     }
 
+    static func defaultPortion(for food: FoodItem) -> Double {
+        (food.isCustomDefaultServing ? food.customServingSize : nil) ?? food.servingSize
+    }
+
+    static func defaultPortionMultiplier(for food: FoodItem) -> Double {
+        calculateMultiplier(targetPortion: defaultPortion(for: food), basePortion: food.servingSize)
+    }
+
+    static func formatMacro(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...1)))
+    }
+
     /// Scales a macro string by a given multiplier
     static func scale(_ valueString: String, by multiplier: Double) -> String {
         guard !valueString.isEmpty, let value = Double(valueString) else {
