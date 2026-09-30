@@ -186,13 +186,8 @@ struct NewEntryView: View {
 
     @ViewBuilder
     private func foodRow(for food: FoodItem) -> some View {
-        let displayPortion =
-            (food.isCustomDefaultServing && food.customServingSize != nil)
-            ? food.customServingSize! : food.servingSize
-        let multiplier = EntryHelper.calculateMultiplier(
-            targetPortion: displayPortion,
-            basePortion: food.servingSize
-        )
+        let displayPortion = EntryHelper.defaultPortion(for: food)
+        let multiplier = EntryHelper.defaultPortionMultiplier(for: food)
 
         MealRow(
             name: food.name,

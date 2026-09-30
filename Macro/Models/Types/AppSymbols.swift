@@ -51,4 +51,24 @@ extension RowIcon {
     static let carbs = RowIcon.appSymbol(.carbs, tint: .carbs)
     static let fat = RowIcon.appSymbol(.fatfiber, tint: .fat)
     static let fiber = RowIcon.appSymbol(.fatfiber, tint: .fiber)
+
+    func macroText(
+        _ value: String,
+        iconSize: CGFloat,
+        valueSize: CGFloat,
+        valueColor: Color,
+        isFirst: Bool
+    ) -> Text {
+        guard case .appSymbol(let symbol, let tint) = self else { return Text("") }
+
+        let prefix = isFirst ? Text("") : Text("  ")
+        let imageText = Text(Image(systemName: symbol.rawValue))
+            .font(.system(size: iconSize, weight: .bold))
+            .foregroundColor(tint)
+        let valueText = Text("\u{00A0}\(value)")
+            .font(.system(size: valueSize, design: .rounded))
+            .foregroundColor(valueColor)
+
+        return Text("\(prefix)\(imageText)\(valueText)")
+    }
 }
