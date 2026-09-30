@@ -10,6 +10,25 @@ import SwiftUI
 struct DateTimePill: View {
     @Binding var selection: Date
     var components: DatePickerComponents
+    var range: ClosedRange<Date>? = nil
+
+    @ViewBuilder
+    private var picker: some View {
+        if let range {
+            DatePicker(
+                "",
+                selection: $selection,
+                in: range,
+                displayedComponents: components
+            )
+        } else {
+            DatePicker(
+                "",
+                selection: $selection,
+                displayedComponents: components
+            )
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -27,12 +46,8 @@ struct DateTimePill: View {
             )
             .allowsHitTesting(false)
 
-            DatePicker(
-                "",
-                selection: $selection,
-                displayedComponents: components
-            )
-            .labelsHidden()
+            picker
+                .labelsHidden()
             .opacity(0.011)
             .clipped()
         }

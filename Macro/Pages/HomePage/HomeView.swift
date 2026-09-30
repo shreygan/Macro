@@ -81,6 +81,37 @@ struct HomeView: View {
     }()
 
     @State private var swipeDirection: Edge = .trailing
+    @State private var hasAlignedToday = false
+
+    private var dayStartMinutes: Int {
+        users.first?.dayStartMinutes ?? 0
+    }
+
+    private var logicalToday: Date {
+        Calendar.current.logicalDay(for: Date(), dayStartMinutes: dayStartMinutes)
+    }
+
+    private func alignToLogicalToday() {
+        guard !hasAlignedToday else { return }
+        hasAlignedToday = true
+        jumpToLogicalToday()
+    }
+
+    private func jumpToLogicalToday() {
+        let calendar = Calendar.current
+        let today = logicalToday
+        guard selectedDate != today else { return }
+
+        currentWeekStart =
+            calendar.date(
+                from: calendar.dateComponents(
+                    [.yearForWeekOfYear, .weekOfYear],
+                    from: today
+                )
+            ) ?? currentWeekStart
+        selectedDate = today
+        displayDate = today
+    }
 
     private func isFavorited(_ entry: LoggedEntry) -> Bool {
         entry.originalFoodItem?.favoriteEntry != nil
@@ -191,15 +222,22 @@ struct HomeView: View {
     }
 
     private var draftDays: Set<Date> {
-        Set(
+        let dayStartMinutes = dayStartMinutes
+        return Set(
             logDrafts.compactMap { draft in
-                draft.timestamp.map { Calendar.current.startOfDay(for: $0) }
+                draft.timestamp.map {
+                    Calendar.current.logicalDay(
+                        for: $0,
+                        dayStartMinutes: dayStartMinutes
+                    )
+                }
             }
         )
     }
 
     var body: some View {
         let draftDays = draftDays
+        let logicalToday = logicalToday
 
         NavigationStack {
             VStack(spacing: 0) {
@@ -220,8 +258,9 @@ struct HomeView: View {
                                     date,
                                     inSameDayAs: displayDate
                                 )
-                                let isToday = Calendar.current.isDateInToday(
-                                    date
+                                let isToday = Calendar.current.isDate(
+                                    date,
+                                    inSameDayAs: logicalToday
                                 )
 
                                 VStack(spacing: 12) {
@@ -301,13 +340,15 @@ struct HomeView: View {
                                 if let userGoals = users.first?.currentGoals {
                                     ProgressCard(
                                         goals: userGoals,
-                                        date: effectiveDate
+                                        date: effectiveDate,
+                                        dayStartMinutes: dayStartMinutes
                                     )
                                     .padding()
                                 }
 
                                 TimelineCard(
                                     date: effectiveDate,
+                                    dayStartMinutes: dayStartMinutes,
                                     clickedEntry: $clickedEntry,
                                     clickedDraft: $clickedDraft,
                                     onDeleteDraft: { draft in
@@ -409,6 +450,17 @@ struct HomeView: View {
             .navigationTitle("Home")
             .navigationSubtitle(currDate(for: displayDate))
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                alignToLogicalToday()
+            }
+            .onChange(of: dayStartMinutes) { oldMinutes, _ in
+                let previousToday = Calendar.current.logicalDay(
+                    for: Date(),
+                    dayStartMinutes: oldMinutes
+                )
+                guard selectedDate == previousToday else { return }
+                jumpToLogicalToday()
+            }
             .onChange(of: selectedDate) { oldDate, newDate in
                 swipeDirection = newDate > oldDate ? .trailing : .leading
 
@@ -503,10 +555,8 @@ struct HomeView: View {
                                             .datePickerStyle(.graphical)
 
                                             Button("Today") {
-                                                let today = Calendar.current
-                                                    .startOfDay(for: Date())
                                                 showDatePicker = false
-                                                navigateToDate(to: today)
+                                                navigateToDate(to: logicalToday)
                                             }
                                             .padding(.top, 8)
                                             .padding(.bottom, 24)

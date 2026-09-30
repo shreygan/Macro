@@ -16,6 +16,43 @@ struct SettingsView: View {
 
     @State private var showDeleteConfirmation = false
 
+    private let maxDayStartMinutes = 12 * 60
+
+    private var dayStartRange: ClosedRange<Date> {
+        let midnight = Calendar.current.startOfDay(for: Date())
+        let latest =
+            Calendar.current.date(
+                byAdding: .minute,
+                value: maxDayStartMinutes,
+                to: midnight
+            ) ?? midnight
+        return midnight...latest
+    }
+
+    private var dayStartSelection: Binding<Date> {
+        Binding(
+            get: {
+                let midnight = dayStartRange.lowerBound
+                return Calendar.current.date(
+                    byAdding: .minute,
+                    value: users.first?.dayStartMinutes ?? 0,
+                    to: midnight
+                ) ?? midnight
+            },
+            set: { newValue in
+                guard let user = users.first else { return }
+                let components = Calendar.current.dateComponents(
+                    [.hour, .minute],
+                    from: newValue
+                )
+                let minutes =
+                    (components.hour ?? 0) * 60 + (components.minute ?? 0)
+                user.dayStartMinutes = min(minutes, maxDayStartMinutes)
+                try? modelContext.save()
+            }
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -59,6 +96,26 @@ struct SettingsView: View {
                             }
                         }
                         .padding(.horizontal)
+
+                        if users.first != nil {
+                            Card("Tracking") {
+                                BaseRowLayout(
+                                    icon: .customSymbol("sunrise"),
+                                    title: "Day Starts At",
+                                    info:
+                                        "Meals logged before this time count toward the previous day."
+                                ) {
+                                    DateTimePill(
+                                        selection: dayStartSelection,
+                                        components: .hourAndMinute,
+                                        range: dayStartRange
+                                    )
+                                    .padding(.trailing, -5)
+                                    .padding(.vertical, -2)
+                                }
+                            }
+                            .padding([.top, .leading, .trailing])
+                        }
 
                         Card("Data") {
                             NavigationLink {
