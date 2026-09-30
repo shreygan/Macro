@@ -20,8 +20,6 @@ struct GoalSetupView: View {
     @Binding var isFatActive: Bool
     @Binding var isFiberActive: Bool
 
-    var isOnboarding: Bool = false
-
     @State private var calorieValue = 3000.0
     @State private var proteinValue = 150.0
     @State private var carbsValue = 150.0
@@ -37,27 +35,41 @@ struct GoalSetupView: View {
     @State private var showInfoSheet = false
     @State private var showHistorySheet = false
 
+    /// The goal setup screen is shown both during onboarding (before a user
+    /// exists) and later for editing via HomeView. Only the latter should
+    /// expose the history button, since onboarding has no history yet.
+    private var isEditingExistingUser: Bool {
+        users.first?.onboardingComplete ?? false
+    }
+
     var body: some View {
         VStack {
-            if isOnboarding {
-                HStack(spacing: 8) {
-                    Text("Set Your Macro Goals")
-                        .font(.system(.title2, design: .rounded))
-                        .fontWeight(.bold)
+            HStack(spacing: 8) {
+                Text("Set Your Macro Goals")
+                    .font(.system(.title2, design: .rounded))
+                    .fontWeight(.bold)
 
-                    Button {
-                        showInfoSheet = true
-                    } label: {
-                        Image(systemName: "info.circle")
-                            .font(.system(.footnote))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
+                Button {
+                    showInfoSheet = true
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.system(.footnote))
+                        .foregroundStyle(.secondary)
                 }
-                .padding(.top, 20)
-                .padding(.horizontal, 30)
+
+                Spacer()
+
+                if isEditingExistingUser {
+                    Button {
+                        showHistorySheet = true
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+                    .buttonStyle(.glass)
+                }
             }
+            .padding(.top, 20)
+            .padding(.horizontal, 30)
 
             Spacer()
 
@@ -198,7 +210,7 @@ struct GoalSetupView: View {
                 dismiss()
 
             } label: {
-                Text(isOnboarding ? "Start" : "Save")
+                Text(isEditingExistingUser ? "Save" : "Start")
                     .font(.system(.caption, design: .rounded))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
@@ -211,25 +223,6 @@ struct GoalSetupView: View {
             .padding(.horizontal, 40)
             .padding(.top, 8)
             .padding(.bottom, 16)
-        }
-        .navigationTitle("Macro Goals")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if !isOnboarding {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        showInfoSheet = true
-                    } label: {
-                        Image(systemName: "info.circle")
-                    }
-
-                    Button {
-                        showHistorySheet = true
-                    } label: {
-                        Image(systemName: "clock.arrow.circlepath")
-                    }
-                }
-            }
         }
         .sheet(isPresented: $showInfoSheet) {
             VStack(alignment: .leading, spacing: 16) {
@@ -265,16 +258,6 @@ struct GoalSetupView: View {
             if let user = users.first {
                 NavigationStack {
                     GoalHistoryView(user: user)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button {
-                                    showHistorySheet = false
-                                } label: {
-                                    Image(systemName: "xmark")
-                                        .foregroundStyle(.primary)
-                                }
-                            }
-                        }
                 }
             }
         }
@@ -302,6 +285,5 @@ struct GoalSetupView: View {
         isCarbsActive: .constant(false),
         isFatActive: .constant(false),
         isFiberActive: .constant(false),
-        isOnboarding: true
     )
 }

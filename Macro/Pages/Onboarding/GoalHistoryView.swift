@@ -9,6 +9,8 @@ import SwiftData
 import SwiftUI
 
 struct GoalHistoryView: View {
+    @Environment(\.dismiss) private var dismiss
+
     let user: User
 
     private var sortedHistory: [UserGoals] {
@@ -41,6 +43,13 @@ struct GoalHistoryView: View {
         }
         .navigationTitle("Goal History")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Done") {
+                    dismiss()
+                }
+            }
+        }
     }
 
     private var emptyState: some View {
