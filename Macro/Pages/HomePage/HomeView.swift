@@ -16,10 +16,8 @@ struct HomeView: View {
         [EntryDraft]
 
     @State private var showDatePicker = false
-    @State private var showImportSheet = false
     @State private var showSharePopover = false
-    @State private var showGoalSetupSheet = false
-    @State private var showDeleteConfirmation = false
+    @State private var showSettingsSheet = false
 
     @State private var entryToLogAgain: LoggedEntry? = nil
 
@@ -83,30 +81,6 @@ struct HomeView: View {
     }()
 
     @State private var swipeDirection: Edge = .trailing
-
-    private func deleteAllData() {
-        do {
-            try modelContext.delete(model: User.self)
-            try modelContext.delete(model: FoodItem.self)
-            try modelContext.delete(model: EntrySource.self)
-            try modelContext.delete(model: CategorySource.self)
-            try modelContext.delete(model: FoodGroupSource.self)
-            try modelContext.delete(model: ServingSizeUnit.self)
-            try modelContext.delete(model: FavoriteEntry.self)
-            try modelContext.delete(model: LoggedEntry.self)
-            try modelContext.delete(model: EntryDraft.self)
-
-            try modelContext.save()
-            print("All data successfully cleared.")
-
-            try AppSeeder.seedDefaults(into: modelContext)
-            print("Default data successfully reseeded.")
-        } catch {
-            print(
-                "Failed to clear or reseed data: \(error.localizedDescription)"
-            )
-        }
-    }
 
     private func isFavorited(_ entry: LoggedEntry) -> Bool {
         entry.originalFoodItem?.favoriteEntry != nil
@@ -549,45 +523,15 @@ struct HomeView: View {
                             )
                     }
 
-                    Menu {
-                        Button {
-                            showImportSheet = true
-                        } label: {
-                            Label(
-                                "Import...",
-                                systemImage: "square.and.arrow.down"
-                            )
-                        }
-
-                        Button {
-                            showGoalSetupSheet = true
-                        } label: {
-                            Label("Update Goals", systemImage: "target")
-                        }
-
-                        Divider()
-
-                        Button(role: .destructive) {
-                            showDeleteConfirmation = true
-                        } label: {
-                            Label("Delete All", systemImage: "trash")
-                        }
+                    Button {
+                        showSettingsSheet = true
                     } label: {
                         Image(systemName: "gear")
                     }
                 }
             }
-            .sheet(isPresented: $showImportSheet) {
-                ImportView()
-            }
-            .sheet(isPresented: $showGoalSetupSheet) {
-                GoalSetupView(
-                    isCalorieActive: .constant(false),
-                    isProteinActive: .constant(false),
-                    isCarbsActive: .constant(false),
-                    isFatActive: .constant(false),
-                    isFiberActive: .constant(false)
-                )
+            .sheet(isPresented: $showSettingsSheet) {
+                SettingsView()
             }
             .sheet(item: $clickedEntry) { entry in
                 NavigationStack {
@@ -667,16 +611,6 @@ struct HomeView: View {
             } message: { _ in
                 Text(
                     "This unfinished entry will be permanently deleted. This action cannot be undone."
-                )
-            }
-            .alert("Delete All Data?", isPresented: $showDeleteConfirmation) {
-                Button("Cancel", role: .cancel) {}
-                Button("Delete", role: .destructive) {
-                    deleteAllData()
-                }
-            } message: {
-                Text(
-                    "This will permanently delete all your logged entries, saved foods, and personal data. This action cannot be undone."
                 )
             }
         }
