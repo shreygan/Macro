@@ -52,14 +52,18 @@ struct TimelineCard<MenuContent: View>: View {
 
     init(
         date: Date,
+        dayStartMinutes: Int = 0,
         clickedEntry: Binding<LoggedEntry?> = .constant(nil),
         clickedDraft: Binding<EntryDraft?> = .constant(nil),
         onDeleteDraft: ((EntryDraft) -> Void)? = nil,
         @ViewBuilder menuItems: @escaping (LoggedEntry) -> MenuContent
     ) {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: date)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        let dayRange = Calendar.current.logicalDayRange(
+            for: date,
+            dayStartMinutes: dayStartMinutes
+        )
+        let startOfDay = dayRange.lowerBound
+        let endOfDay = dayRange.upperBound
 
         let predicate = #Predicate<LoggedEntry> { entry in
             entry.timestamp >= startOfDay && entry.timestamp < endOfDay

@@ -42,8 +42,7 @@ struct WelcomeView: View {
                     isProteinActive: $isProteinActive,
                     isCarbsActive: $isCarbsActive,
                     isFatActive: $isFatActive,
-                    isFiberActive: $isFiberActive,
-                    isOnboarding: true
+                    isFiberActive: $isFiberActive
                 )
                 .offset(y: (1 - p) * height)
 

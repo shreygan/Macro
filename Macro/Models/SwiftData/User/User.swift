@@ -12,6 +12,7 @@ import SwiftData
 class User {
     var name: String?
     var onboardingComplete: Bool
+    var dayStartMinutes: Int = 0
 
     @Relationship(deleteRule: .cascade, inverse: \UserGoals.owner)
     var goalsHistory: [UserGoals]? = []

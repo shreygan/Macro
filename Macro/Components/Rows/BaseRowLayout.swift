@@ -12,12 +12,52 @@ struct BaseRowLayout<RightContent: View>: View {
     var title: String
     var titleExtension: String? = nil
     var subtitle: String? = nil
+    var info: String? = nil
 
     var titleFontSize: CGFloat = 16
 
     @ViewBuilder var rightContent: RightContent
 
+    @State private var isShowingInfo = false
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                if info != nil {
+                    leadingContent
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.snappy(duration: 0.3)) {
+                                isShowingInfo.toggle()
+                            }
+                        }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Shows more information")
+                } else {
+                    leadingContent
+                }
+
+                Spacer()
+
+                rightContent
+            }
+
+            if let info, isShowingInfo {
+                Text(info)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, icon != nil ? 23 : 0)
+                    .padding(.top, 6)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+    }
+
+    private var leadingContent: some View {
         HStack(spacing: 8) {
             if let icon = icon {
                 switch icon {
@@ -70,13 +110,7 @@ struct BaseRowLayout<RightContent: View>: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-
-            Spacer()
-
-            rightContent
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
     }
 }
 

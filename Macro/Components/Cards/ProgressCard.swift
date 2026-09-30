@@ -36,12 +36,15 @@ struct ProgressCard: View {
         )
     }
 
-    init(goals: UserGoals, date: Date) {
+    init(goals: UserGoals, date: Date, dayStartMinutes: Int = 0) {
         self.goals = goals
 
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: date)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        let dayRange = Calendar.current.logicalDayRange(
+            for: date,
+            dayStartMinutes: dayStartMinutes
+        )
+        let startOfDay = dayRange.lowerBound
+        let endOfDay = dayRange.upperBound
 
         let predicate = #Predicate<LoggedEntry> { entry in
             entry.timestamp >= startOfDay && entry.timestamp < endOfDay
