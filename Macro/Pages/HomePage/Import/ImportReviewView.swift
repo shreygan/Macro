@@ -31,138 +31,136 @@ struct ImportReviewView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.background.ignoresSafeArea()
+        ZStack {
+            Color.background.ignoresSafeArea()
 
-                if isLoading {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .tint(.blue)
-                        Text("Reading CSV...")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                    .id("loading_state")
-
-                } else if items.isEmpty {
-                    ContentUnavailableView {
-                        Label(
-                            "No Valid Data",
-                            systemImage: "doc.text.magnifyingglass"
-                        )
-                    } description: {
-                        Group {
-                            if duplicateCount == 0 && errorCount == 0 {
-                                Text("We couldn't parse any entries from your CSV.")
-                            } else {
-                                let dupes =
-                                    duplicateCount > 0
-                                    ? "\(duplicateCount) duplicate\(duplicateCount > 1 ? "s" : "")"
-                                    : nil
-                                let errs =
-                                    errorCount > 0
-                                    ? "\(errorCount) invalid row\(errorCount > 1 ? "s" : "")"
-                                    : nil
-                                let reason = [dupes, errs].compactMap { $0 }.joined(
-                                    separator: " and "
-                                )
-
-                                Text(
-                                    "We skipped \(reason). There are no new entries to import."
-                                )
-                            }
-                        }
-                        .font(.subheadline)
-                    } actions: {
-                        Button("Select Another CSV") {
-                            isShowingFilePicker = true
-                        }
+            if isLoading {
+                VStack(spacing: 12) {
+                    ProgressView()
                         .tint(.blue)
-                    }
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                    .id("empty_state")
-
-                } else {
-                    ScrollView {
-                        if duplicateCount > 0 || errorCount > 0 {
-                            importSummaryCard
-                                .padding([.horizontal, .bottom])
-                        }
-
-                        EntryList(
-                            title: duplicateCount > 0 || errorCount > 0
-                                ? "Entries" : nil,
-                            items: items,
-                            rowContent: { item in reviewRow(for: item) },
-                            onDelete: { item in
-                                items.removeAll(where: { $0.id == item.id })
-                            },
-                            onEdit: { item in itemToEdit = item }
-                        )
-                        .padding(.horizontal)
-                    }
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                    .id("list_state")
+                    Text("Reading CSV...")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
                 }
-            }
-            .animation(.snappy, value: viewState)
-            .withGlobalSwipeDismissal()
-            .navigationTitle("Review Import (\(items.count))")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        saveAllToDatabase()
-                    } label: {
-                        Image(systemName: "checkmark")
-                            .foregroundStyle(.primary)
-                    }
-                    .tint(Color.blue)
-                    .buttonStyle(.glassProminent)
-                    .disabled(items.isEmpty)
-                }
-            }
-            .sheet(item: $itemToEdit) { editingItem in
-                let dummy = FoodItem(
-                    name: "",
-                    servingSize: 1.0,
-                    servingWeightUnit: "",
-                    isAIEstimated: false,
-                    calories: 0,
-                    protein: 0,
-                    carbs: 0,
-                    fat: 0,
-                    fiber: 0,
-                    isCustomDefaultServing: false
-                )
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .id("loading_state")
 
-                EditEntryView(
-                    foodItem: dummy,
-                    draftItem: editingItem,
-                    isImportMode: true,
-                    onImportSave: { updatedDraft in
-                        if let index = items.firstIndex(where: {
-                            $0.id == editingItem.id
-                        }) {
-                            items[index] = updatedDraft
+            } else if items.isEmpty {
+                ContentUnavailableView {
+                    Label(
+                        "No Valid Data",
+                        systemImage: "doc.text.magnifyingglass"
+                    )
+                } description: {
+                    Group {
+                        if duplicateCount == 0 && errorCount == 0 {
+                            Text("We couldn't parse any entries from your CSV.")
+                        } else {
+                            let dupes =
+                                duplicateCount > 0
+                                ? "\(duplicateCount) duplicate\(duplicateCount > 1 ? "s" : "")"
+                                : nil
+                            let errs =
+                                errorCount > 0
+                                ? "\(errorCount) invalid row\(errorCount > 1 ? "s" : "")"
+                                : nil
+                            let reason = [dupes, errs].compactMap { $0 }.joined(
+                                separator: " and "
+                            )
+
+                            Text(
+                                "We skipped \(reason). There are no new entries to import."
+                            )
                         }
                     }
-                )
-            }
-            .fileImporter(
-                isPresented: $isShowingFilePicker,
-                allowedContentTypes: [.commaSeparatedText],
-                allowsMultipleSelection: false
-            ) { result in
-                switch result {
-                case .success(let urls):
-                    guard let fileURL = urls.first else { return }
-                    onProcessNewCSV(fileURL)
-                case .failure(let error):
-                    print("Error selecting file: \(error.localizedDescription)")
+                    .font(.subheadline)
+                } actions: {
+                    Button("Select Another CSV") {
+                        isShowingFilePicker = true
+                    }
+                    .tint(.blue)
                 }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .id("empty_state")
+
+            } else {
+                ScrollView {
+                    if duplicateCount > 0 || errorCount > 0 {
+                        importSummaryCard
+                            .padding([.horizontal, .bottom])
+                    }
+
+                    EntryList(
+                        title: duplicateCount > 0 || errorCount > 0
+                            ? "Entries" : nil,
+                        items: items,
+                        rowContent: { item in reviewRow(for: item) },
+                        onDelete: { item in
+                            items.removeAll(where: { $0.id == item.id })
+                        },
+                        onEdit: { item in itemToEdit = item }
+                    )
+                    .padding(.horizontal)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .id("list_state")
+            }
+        }
+        .animation(.snappy, value: viewState)
+        .withGlobalSwipeDismissal()
+        .navigationTitle("Review Import (\(items.count))")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    saveAllToDatabase()
+                } label: {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.primary)
+                }
+                .tint(Color.blue)
+                .buttonStyle(.glassProminent)
+                .disabled(items.isEmpty)
+            }
+        }
+        .sheet(item: $itemToEdit) { editingItem in
+            let dummy = FoodItem(
+                name: "",
+                servingSize: 1.0,
+                servingWeightUnit: "",
+                isAIEstimated: false,
+                calories: 0,
+                protein: 0,
+                carbs: 0,
+                fat: 0,
+                fiber: 0,
+                isCustomDefaultServing: false
+            )
+
+            EditEntryView(
+                foodItem: dummy,
+                draftItem: editingItem,
+                isImportMode: true,
+                onImportSave: { updatedDraft in
+                    if let index = items.firstIndex(where: {
+                        $0.id == editingItem.id
+                    }) {
+                        items[index] = updatedDraft
+                    }
+                }
+            )
+        }
+        .fileImporter(
+            isPresented: $isShowingFilePicker,
+            allowedContentTypes: [.commaSeparatedText],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let fileURL = urls.first else { return }
+                onProcessNewCSV(fileURL)
+            case .failure(let error):
+                print("Error selecting file: \(error.localizedDescription)")
             }
         }
     }
@@ -461,18 +459,20 @@ struct ImportReviewView: View {
         @State private var isLoading = false
 
         var body: some View {
-            ImportReviewView(
-                items: $mockItems,
-                duplicateCount: $duplicateCount,
-                errorCount: $errorCount,
-                isLoading: $isLoading,
-                onProcessNewCSV: { url in
-                    print("Preview: Would process new CSV at \(url)")
-                },
-                onSaveComplete: {
-                    print("Preview: Save completed")
-                }
-            )
+            NavigationStack {
+                ImportReviewView(
+                    items: $mockItems,
+                    duplicateCount: $duplicateCount,
+                    errorCount: $errorCount,
+                    isLoading: $isLoading,
+                    onProcessNewCSV: { url in
+                        print("Preview: Would process new CSV at \(url)")
+                    },
+                    onSaveComplete: {
+                        print("Preview: Save completed")
+                    }
+                )
+            }
             .modelContainer(
                 for: [
                     FoodItem.self, EntrySource.self, ServingSizeUnit.self,

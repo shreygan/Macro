@@ -23,112 +23,100 @@ struct ImportView: View {
     @State private var errorCount = 0
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.background.ignoresSafeArea()
+        ZStack {
+            Color.background.ignoresSafeArea()
 
-                VStack {
-                    Card("Library Entries") {
-                        InformationRow(
-                            blocks: [
-                                .text(
-                                    "Ensure your CSV columns match one of the formats below (headers are optional). Any incomplete or invalid rows will be automatically skipped."
-                                ),
-                                .title("Detailed Format"),
-                                .code(
-                                    "TBD"
-                                ),
-                                .title("Simplified Format"),
-                                .code(
-                                    "Source\nName\nCalories\nProtein\nCarbohydrates\nFat\nFiber"
-                                ),
-                            ]
-                        )
+            VStack {
+                Card("Library Entries") {
+                    InformationRow(
+                        blocks: [
+                            .text(
+                                "Ensure your CSV columns match one of the formats below (headers are optional). Any incomplete or invalid rows will be automatically skipped."
+                            ),
+                            .title("Detailed Format"),
+                            .code(
+                                "TBD"
+                            ),
+                            .title("Simplified Format"),
+                            .code(
+                                "Source\nName\nCalories\nProtein\nCarbohydrates\nFat\nFiber"
+                            ),
+                        ]
+                    )
 
-                        ZStack {
-                            if isLoading {
-                                HStack(spacing: 12) {
-                                    ProgressView()
-                                        .tint(.blue)
-                                    Text("Reading CSV...")
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.bottom, 9)
-                                .frame(height: 60)
-                                .transition(
-                                    .opacity.combined(with: .scale(scale: 0.95))
-                                )
-                            } else {
-                                ButtonRow(
-                                    icon: .customSymbol(
-                                        "tray.and.arrow.down.fill",
-                                        tint: .white
-                                    ),
-                                    title: "Select CSV File",
-                                    tint: .blue,
-                                    textColor: .white,
-                                    topPadding: 8
-                                ) {
-                                    isShowingFilePicker = true
-                                }
-                                .transition(
-                                    .opacity.combined(with: .scale(scale: 0.95))
-                                )
+                    ZStack {
+                        if isLoading {
+                            HStack(spacing: 12) {
+                                ProgressView()
+                                    .tint(.blue)
+                                Text("Reading CSV...")
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(.secondary)
                             }
+                            .padding(.bottom, 9)
+                            .frame(height: 60)
+                            .transition(
+                                .opacity.combined(with: .scale(scale: 0.95))
+                            )
+                        } else {
+                            ButtonRow(
+                                icon: .customSymbol(
+                                    "tray.and.arrow.down.fill",
+                                    tint: .white
+                                ),
+                                title: "Select CSV File",
+                                tint: .blue,
+                                textColor: .white,
+                                topPadding: 8
+                            ) {
+                                isShowingFilePicker = true
+                            }
+                            .transition(
+                                .opacity.combined(with: .scale(scale: 0.95))
+                            )
                         }
-                        .animation(.snappy, value: isLoading)
                     }
-                    .padding(.horizontal)
+                    .animation(.snappy, value: isLoading)
+                }
+                .padding(.horizontal)
 
-                    Spacer()
-                }
+                Spacer()
             }
-            .navigationTitle("Import Data")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .foregroundStyle(.primary)
-                    }
-                }
-            }
-            .fileImporter(
-                isPresented: $isShowingFilePicker,
-                allowedContentTypes: [.commaSeparatedText],
-                allowsMultipleSelection: false
-            ) { result in
-                switch result {
-                case .success(let urls):
-                    guard let fileURL = urls.first else { return }
+        }
+        .navigationTitle("Import Data")
+        .navigationBarTitleDisplayMode(.inline)
+        .fileImporter(
+            isPresented: $isShowingFilePicker,
+            allowedContentTypes: [.commaSeparatedText],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let fileURL = urls.first else { return }
 
-                    isLoading = true
-                    processFoodCSV(at: fileURL)
-                case .failure(let error):
-                    print("Error selecting file: \(error.localizedDescription)")
-                }
+                isLoading = true
+                processFoodCSV(at: fileURL)
+            case .failure(let error):
+                print("Error selecting file: \(error.localizedDescription)")
             }
-            .navigationDestination(isPresented: $showReviewSheet) {
-                ImportReviewView(
-                    items: $parsedItems,
-                    duplicateCount: $duplicateCount,
-                    errorCount: $errorCount,
-                    isLoading: $isLoading,
-                    onProcessNewCSV: { url in
-                        withAnimation(.snappy) {
-                            isLoading = true
-                            parsedItems = []
-                        }
-                        processFoodCSV(at: url)
-                    },
-                    onSaveComplete: {
-                        dismiss()
+        }
+        .navigationDestination(isPresented: $showReviewSheet) {
+            ImportReviewView(
+                items: $parsedItems,
+                duplicateCount: $duplicateCount,
+                errorCount: $errorCount,
+                isLoading: $isLoading,
+                onProcessNewCSV: { url in
+                    withAnimation(.snappy) {
+                        isLoading = true
+                        parsedItems = []
                     }
-                )
-            }
+                    processFoodCSV(at: url)
+                },
+                onSaveComplete: {
+                    dismiss()
+                }
+            )
         }
     }
 
@@ -261,5 +249,7 @@ struct ImportView: View {
 }
 
 #Preview {
-    ImportView()
+    NavigationStack {
+        ImportView()
+    }
 }
