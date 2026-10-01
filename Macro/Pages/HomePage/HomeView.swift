@@ -20,6 +20,8 @@ struct HomeView: View {
     @State private var showSettingsSheet = false
 
     @State private var entryToLogAgain: LoggedEntry? = nil
+    @State private var entryToAddToLibrary: LoggedEntry? = nil
+    @State private var foodToLog: FoodItem? = nil
 
     @State private var entryToDelete: LoggedEntry? = nil
     @State private var showEntryDeleteConfirmation = false
@@ -82,6 +84,7 @@ struct HomeView: View {
 
     @State private var swipeDirection: Edge = .trailing
     @State private var hasAlignedToday = false
+    @State private var bottomInset: CGFloat = 0
 
     private var dayStartMinutes: Int {
         users.first?.dayStartMinutes ?? 0
@@ -115,6 +118,11 @@ struct HomeView: View {
 
     private func isFavorited(_ entry: LoggedEntry) -> Bool {
         entry.originalFoodItem?.favoriteEntry != nil
+    }
+
+    private func link(_ entry: LoggedEntry, to food: FoodItem) {
+        entry.originalFoodItem = food
+        try? modelContext.save()
     }
 
     private func toggleFavorite(for entry: LoggedEntry) {
@@ -356,17 +364,25 @@ struct HomeView: View {
                                         showDraftDeleteConfirmation = true
                                     }
                                 ) { entry in
-                                    Button {
-                                        if entry.originalFoodItem != nil {
+                                    if entry.originalFoodItem != nil {
+                                        Button {
                                             entryToLogAgain = entry
+                                        } label: {
+                                            Label(
+                                                "Log Again",
+                                                systemImage: "plus.square.on.square"
+                                            )
                                         }
-                                    } label: {
-                                        Label(
-                                            "Log Again",
-                                            systemImage: "plus.square.on.square"
-                                        )
+                                    } else {
+                                        Button {
+                                            entryToAddToLibrary = entry
+                                        } label: {
+                                            Label(
+                                                "Add to Library",
+                                                systemImage: "plus.square.dashed"
+                                            )
+                                        }
                                     }
-                                    //                                    .disabled(entry.originalFoodItem == nil)
 
                                     Button {
                                         clickedEntry = entry
@@ -377,18 +393,19 @@ struct HomeView: View {
                                         )
                                     }
 
-                                    Button {
-                                        toggleFavorite(for: entry)
-                                    } label: {
-                                        Label(
-                                            isFavorited(entry)
-                                                ? "Unfavorite Entry"
-                                                : "Favorite Entry",
-                                            systemImage: isFavorited(entry)
-                                                ? "star.slash" : "star"
-                                        )
+                                    if entry.originalFoodItem != nil {
+                                        Button {
+                                            toggleFavorite(for: entry)
+                                        } label: {
+                                            Label(
+                                                isFavorited(entry)
+                                                    ? "Unfavorite Entry"
+                                                    : "Favorite Entry",
+                                                systemImage: isFavorited(entry)
+                                                    ? "star.slash" : "star"
+                                            )
+                                        }
                                     }
-                                    .disabled(entry.originalFoodItem == nil)
 
                                     Divider()
 
@@ -400,7 +417,6 @@ struct HomeView: View {
                                     }
                                 }
                                 .padding(.horizontal)
-                                .padding(.bottom, 24)
                                 .padding(
                                     .top,
                                     users.first?.currentGoals == nil ? nil : 0
@@ -430,6 +446,16 @@ struct HomeView: View {
                             )
                             .tag(date)
                         }
+                        .contentMargins(
+                            .bottom,
+                            bottomInset + 48,
+                            for: .scrollContent
+                        )
+                        .contentMargins(
+                            .bottom,
+                            bottomInset,
+                            for: .scrollIndicators
+                        )
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
@@ -446,6 +472,11 @@ struct HomeView: View {
                     )
                 }
                 .ignoresSafeArea(edges: .bottom)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.safeAreaInsets.bottom
+                } action: { newInset in
+                    bottomInset = newInset
+                }
             }
             .navigationTitle("Home")
             .navigationSubtitle(currDate(for: displayDate))
@@ -602,6 +633,31 @@ struct HomeView: View {
                             draft: draft,
                             isPushedView: false
                         )
+                    }
+                }
+            }
+            .sheet(item: $entryToAddToLibrary) { entry in
+                if entry.libraryEntryType == .recipe {
+                    AddRecipeView(
+                        onLogInstantly: { food in foodToLog = food },
+                        prefill: entry.addRecipePrefill,
+                        onCreate: { food in link(entry, to: food) }
+                    )
+                } else {
+                    AddEntryView(
+                        entryType: entry.libraryEntryType,
+                        onLogInstantly: { food in foodToLog = food },
+                        prefill: entry.addEntryPrefill,
+                        onCreate: { food in link(entry, to: food) }
+                    )
+                }
+            }
+            .sheet(item: $foodToLog) { food in
+                NavigationStack {
+                    if food.type == .recipe {
+                        LogRecipeView(recipe: food, isPushedView: false)
+                    } else {
+                        LogEntryView(food: food, isPushedView: false)
                     }
                 }
             }

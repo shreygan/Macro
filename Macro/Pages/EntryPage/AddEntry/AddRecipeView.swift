@@ -14,6 +14,7 @@ struct AddRecipeView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var onLogInstantly: ((FoodItem) -> Void)?
+    var onCreate: ((FoodItem) -> Void)?
     @State private var showSuccessAlert: Bool = false
     @State private var newlySavedEntry: FoodItem? = nil
 
@@ -49,14 +50,32 @@ struct AddRecipeView: View {
 
     init(
         onLogInstantly: ((FoodItem) -> Void)? = nil,
-        draft: EntryDraft? = nil
+        draft: EntryDraft? = nil,
+        prefill: AddRecipePrefill? = nil,
+        onCreate: ((FoodItem) -> Void)? = nil
     ) {
         self.onLogInstantly = onLogInstantly
+        self.onCreate = onCreate
 
         _draftID = State(initialValue: draft?.id ?? UUID())
         self.isResumedDraft = draft != nil
 
-        if let draft, let state = draft.decodeState(AddRecipeDraftState.self) {
+        if let prefill {
+            let state = prefill.state
+            _name = State(initialValue: state.name)
+            _source = State(initialValue: state.source)
+            _category = State(initialValue: state.category)
+            _servingSize = State(initialValue: state.servingSize)
+            _servingSizeUnit = State(initialValue: state.servingSizeUnit)
+            _servingWeight = State(initialValue: state.servingWeight)
+            _servingWeightUnit = State(initialValue: state.servingWeightUnit)
+            _isCustomDefaultServing = State(
+                initialValue: state.isCustomDefaultServing
+            )
+            _customServingSize = State(initialValue: state.customServingSize)
+            _stickyNote = State(initialValue: state.stickyNote)
+            _draftIngredients = State(initialValue: prefill.ingredients)
+        } else if let draft, let state = draft.decodeState(AddRecipeDraftState.self) {
             _name = State(initialValue: state.name)
             _source = State(initialValue: state.source)
             _category = State(initialValue: state.category)
@@ -82,6 +101,10 @@ struct AddRecipeView: View {
                 }
             )
         }
+    }
+
+    private var isDraftEnabled: Bool {
+        onCreate == nil
     }
 
     private var draftState: AddRecipeDraftState {
@@ -356,6 +379,7 @@ struct AddRecipeView: View {
             didFinishAdding = true
 
             newlySavedEntry = newRecipe
+            onCreate?(newRecipe)
             if onLogInstantly != nil {
                 showSuccessAlert = true
             } else {
@@ -640,13 +664,22 @@ struct AddRecipeView: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        DraftCloseButton(
-                            isResumedDraft: isResumedDraft,
-                            canSaveDraft: draftState != .empty,
-                            onClose: { dismiss() },
-                            onSaveDraft: saveDraftAndClose,
-                            onDiscard: discardAndClose
-                        )
+                        if isDraftEnabled {
+                            DraftCloseButton(
+                                isResumedDraft: isResumedDraft,
+                                canSaveDraft: draftState != .empty,
+                                onClose: { dismiss() },
+                                onSaveDraft: saveDraftAndClose,
+                                onDiscard: discardAndClose
+                            )
+                        } else {
+                            Button {
+                                dismiss()
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .foregroundStyle(.primary)
+                            }
+                        }
                     }
 
                     ToolbarItem(placement: .confirmationAction) {
@@ -724,12 +757,12 @@ struct AddRecipeView: View {
 
         }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .background && !didFinishAdding {
+            if newPhase == .background && isDraftEnabled && !didFinishAdding {
                 saveDraft()
             }
         }
         .onDisappear {
-            guard !didFinishAdding else { return }
+            guard isDraftEnabled && !didFinishAdding else { return }
 
             if isResumedDraft {
                 saveDraft()
