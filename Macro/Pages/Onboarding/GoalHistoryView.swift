@@ -9,44 +9,135 @@ import SwiftData
 import SwiftUI
 
 struct GoalHistoryView: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
     let user: User
+    var onSelect: ((UserGoals) -> Void)?
+    var isActive: ((UserGoals) -> Bool)?
 
-    private var sortedHistory: [UserGoals] {
-        (user.goalsHistory ?? []).sorted { $0.date > $1.date }
+    @State private var history: [UserGoals]
+    @State private var activeGoals: UserGoals?
+
+    init(
+        user: User,
+        onSelect: ((UserGoals) -> Void)? = nil,
+        isActive: ((UserGoals) -> Bool)? = nil
+    ) {
+        self.user = user
+        self.onSelect = onSelect
+        self.isActive = isActive
+        let sortedHistory = (user.goalsHistory ?? []).sorted {
+            $0.date > $1.date
+        }
+        _history = State(initialValue: sortedHistory)
+        _activeGoals = State(initialValue: sortedHistory.first)
+    }
+
+    private func isAlreadyActive(_ goals: UserGoals) -> Bool {
+        if let isActive {
+            return isActive(goals)
+        }
+        return activeGoals?.hasSameTargets(as: goals) ?? false
     }
 
     var body: some View {
         ZStack {
             Color.background.ignoresSafeArea()
 
-            ScrollView {
-                if sortedHistory.isEmpty {
-                    emptyState
-                } else {
-                    VStack {
-                        ForEach(sortedHistory) { goals in
-                            Card {
-                                GoalHistoryRow(
-                                    goals: goals,
-                                    isCurrent: goals.id
-                                        == user.currentGoals?.id
+            ScrollViewReader { proxy in
+                ScrollView {
+                    if history.isEmpty {
+                        emptyState
+                    } else {
+                        VStack {
+                            ForEach(history) { goals in
+                                let isActive = isAlreadyActive(goals)
+
+                                Card {
+                                    GoalHistoryRow(
+                                        goals: goals,
+                                        isCurrent: goals.id
+                                            == history.first?.id
+                                    )
+                                } menuItems: {
+                                    Button {
+                                        select(goals, proxy: proxy)
+                                    } label: {
+                                        Label(
+                                            isActive
+                                                ? "Already Active"
+                                                : "Set as Active",
+                                            systemImage: "checkmark.circle"
+                                        )
+                                    }
+                                    .disabled(isActive)
+                                }
+                                .padding(.bottom)
+                                .id(goals.id)
+                                .transition(
+                                    .scale(scale: 0.9, anchor: .top)
+                                        .combined(with: .opacity)
                                 )
                             }
-                            .padding(.bottom)
                         }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                 }
             }
         }
         .navigationTitle("Goal History")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Done") {
-                    dismiss()
+            if onSelect != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
+        }
+    }
+
+    private func select(_ goals: UserGoals, proxy: ScrollViewProxy) {
+        guard !isAlreadyActive(goals) else { return }
+
+        if let onSelect {
+            onSelect(goals)
+            dismiss()
+            return
+        }
+
+        let activatedGoals = UserGoals(
+            calories: goals.calories,
+            calorieMode: goals.calorieMode,
+            protein: goals.protein,
+            proteinMode: goals.proteinMode,
+            carbs: goals.carbs,
+            carbsMode: goals.carbsMode,
+            fat: goals.fat,
+            fatMode: goals.fatMode,
+            fiber: goals.fiber,
+            fiberMode: goals.fiberMode,
+            owner: user
+        )
+        modelContext.insert(activatedGoals)
+        try? modelContext.save()
+        activeGoals = activatedGoals
+
+        let topID = history.first?.id
+
+        Task {
+            try? await Task.sleep(for: .milliseconds(350))
+
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(topID, anchor: .top)
+            } completion: {
+                withAnimation(.spring(duration: 0.45, bounce: 0.25)) {
+                    history.insert(activatedGoals, at: 0)
                 }
             }
         }

@@ -44,32 +44,25 @@ struct GoalSetupView: View {
 
     var body: some View {
         VStack {
-            HStack(spacing: 8) {
-                Text("Set Your Macro Goals")
-                    .font(.system(.title2, design: .rounded))
-                    .fontWeight(.bold)
+            if !isEditingExistingUser {
+                HStack(spacing: 8) {
+                    Text("Set Your Macro Goals")
+                        .font(.system(.title2, design: .rounded))
+                        .fontWeight(.bold)
 
-                Button {
-                    showInfoSheet = true
-                } label: {
-                    Image(systemName: "info.circle")
-                        .font(.system(.footnote))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if isEditingExistingUser {
                     Button {
-                        showHistorySheet = true
+                        showInfoSheet = true
                     } label: {
-                        Image(systemName: "clock.arrow.circlepath")
+                        Image(systemName: "info.circle")
+                            .font(.system(.footnote))
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.glass)
+
+                    Spacer()
                 }
+                .padding(.top, 20)
+                .padding(.horizontal, 30)
             }
-            .padding(.top, 20)
-            .padding(.horizontal, 30)
 
             Spacer()
 
@@ -224,6 +217,25 @@ struct GoalSetupView: View {
             .padding(.top, 8)
             .padding(.bottom, 16)
         }
+        .navigationTitle(isEditingExistingUser ? "Set Goals" : "")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if isEditingExistingUser {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        showInfoSheet = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                    }
+
+                    Button {
+                        showHistorySheet = true
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showInfoSheet) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("About Goals")
@@ -257,7 +269,13 @@ struct GoalSetupView: View {
         .sheet(isPresented: $showHistorySheet) {
             if let user = users.first {
                 NavigationStack {
-                    GoalHistoryView(user: user)
+                    GoalHistoryView(
+                        user: user,
+                        onSelect: { goals in
+                            loadGoals(from: goals)
+                        },
+                        isActive: matchesSliders
+                    )
                 }
             }
         }
@@ -269,8 +287,21 @@ struct GoalSetupView: View {
         }
     }
 
-    private func loadGoals() {
-        if let savedGoals = users.first?.currentGoals {
+    private func matchesSliders(_ goals: UserGoals) -> Bool {
+        goals.calories == calorieValue
+            && goals.calorieMode == calorieMode
+            && goals.protein == proteinValue
+            && goals.proteinMode == proteinMode
+            && goals.carbs == carbsValue
+            && goals.carbsMode == carbsMode
+            && goals.fat == fatValue
+            && goals.fatMode == fatMode
+            && goals.fiber == fiberValue
+            && goals.fiberMode == fiberMode
+    }
+
+    private func loadGoals(from savedGoals: UserGoals? = nil) {
+        if let savedGoals = savedGoals ?? users.first?.currentGoals {
             calorieValue = savedGoals.calories
             calorieMode = savedGoals.calorieMode
             proteinValue = savedGoals.protein
