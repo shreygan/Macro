@@ -53,8 +53,8 @@ extension DraftIngredientSnapshot {
     }
 
     init(_ ingredient: DraftRecipeIngredient) {
-        self.foodItemID = ingredient.item.id
-        self.name = ingredient.item.name
+        self.foodItemID = ingredient.item?.id
+        self.name = ingredient.displayName
         self.quantity = ingredient.quantity
         self.unit = ingredient.unit
         self.baseServingSize = ingredient.baseServingSize
@@ -85,14 +85,6 @@ extension LogRecipeIngredient {
         self.baseFiber = snapshot.baseFiber
         self.icon = item?.type.appSymbol.rawValue
         self.ingredientItem = item
-    }
-}
-
-extension DraftRecipeIngredient {
-    init(snapshot: DraftIngredientSnapshot, item: FoodItem) {
-        self.init(item: item)
-        self.quantity = snapshot.quantity
-        self.unit = snapshot.unit
     }
 }
 

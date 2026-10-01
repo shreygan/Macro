@@ -160,8 +160,8 @@ struct EditRecipeView: View {
     var availableWeightUnits: [String] {
         let units = Set(
             draftIngredients.compactMap {
-                $0.item.servingWeightUnit.isEmpty
-                    ? nil : $0.item.servingWeightUnit
+                $0.baseServingWeightUnit.isEmpty
+                    ? nil : $0.baseServingWeightUnit
             }
         )
         return units.isEmpty ? ["g", "ml"] : units.sorted()
@@ -179,7 +179,7 @@ struct EditRecipeView: View {
     }
 
     var shouldShowIngredientIcons: Bool {
-        draftIngredients.contains { $0.item.type != .ingredient }
+        draftIngredients.contains { $0.displayType != .ingredient }
     }
 
     var isRecipeValid: Bool {
@@ -209,10 +209,10 @@ struct EditRecipeView: View {
 
         let ingredients = draftIngredients.map { draft in
             DraftImportIngredient(
-                linkedItemID: draft.item.id,
-                linkedItemType: draft.item.type,
-                linkedItemSource: draft.item.source?.source ?? "",
-                name: draft.item.name,
+                linkedItemID: draft.item?.id,
+                linkedItemType: draft.item?.type,
+                linkedItemSource: draft.displaySource,
+                name: draft.displayName,
                 quantity: parseDouble(draft.quantity),
                 unit: draft.unit,
                 baseServingSize: draft.baseServingSize,
@@ -370,27 +370,11 @@ struct EditRecipeView: View {
             recipe.recipeIngredients = []
 
             for (index, draft) in draftIngredients.enumerated() {
-                let ingredientQty = parseDouble(draft.quantity)
-                let originalItem = draft.item
-
-                let newIngredient = RecipeIngredient(
-                    quantity: ingredientQty,
-                    unit: draft.unit,
+                let newIngredient = draft.makeRecipeIngredient(
+                    quantity: parseDouble(draft.quantity),
                     displayOrder: index,
-                    name: originalItem.name,
-                    baseServingSize: originalItem.servingSize,
-                    baseServingUnitName: originalItem.servingUnit?.unit,
-                    baseServingWeight: originalItem.servingWeight,
-                    baseServingWeightUnit: originalItem.servingWeightUnit,
-                    baseCalories: originalItem.calories,
-                    baseProtein: originalItem.protein,
-                    baseCarbs: originalItem.carbs,
-                    baseFat: originalItem.fat,
-                    baseFiber: originalItem.fiber
+                    parentRecipe: recipe
                 )
-
-                newIngredient.ingredientItem = originalItem
-                newIngredient.parentRecipe = recipe
 
                 modelContext.insert(newIngredient)
                 recipe.recipeIngredients?.append(newIngredient)
@@ -434,27 +418,11 @@ struct EditRecipeView: View {
             modelContext.insert(newRecipe)
 
             for (index, draft) in draftIngredients.enumerated() {
-                let ingredientQty = parseDouble(draft.quantity)
-                let originalItem = draft.item
-
-                let newIngredient = RecipeIngredient(
-                    quantity: ingredientQty,
-                    unit: draft.unit,
+                let newIngredient = draft.makeRecipeIngredient(
+                    quantity: parseDouble(draft.quantity),
                     displayOrder: index,
-                    name: originalItem.name,
-                    baseServingSize: originalItem.servingSize,
-                    baseServingUnitName: originalItem.servingUnit?.unit,
-                    baseServingWeight: originalItem.servingWeight,
-                    baseServingWeightUnit: originalItem.servingWeightUnit,
-                    baseCalories: originalItem.calories,
-                    baseProtein: originalItem.protein,
-                    baseCarbs: originalItem.carbs,
-                    baseFat: originalItem.fat,
-                    baseFiber: originalItem.fiber
+                    parentRecipe: newRecipe
                 )
-
-                newIngredient.ingredientItem = originalItem
-                newIngredient.parentRecipe = newRecipe
 
                 modelContext.insert(newIngredient)
                 newRecipe.recipeIngredients?.append(newIngredient)
@@ -551,62 +519,31 @@ struct EditRecipeView: View {
                     Card("Ingredients") {
                         RowGroup(.divider) {
                             ForEach($draftIngredients) { $draft in
-                                let item = draft.item
-                                let baseUnit =
-                                    item.servingUnit?.unit ?? "serving"
-                                let hasWeight = item.servingWeight != nil
-
                                 let unitConversionBinding = Binding<String>(
                                     get: { draft.unit },
-                                    set: { newUnit in
-                                        let oldUnit = draft.unit
-                                        guard oldUnit != newUnit else { return }
-
-                                        let currentMultiplier = draft
-                                            .activeMultiplier
-
-                                        if newUnit == item.servingWeightUnit,
-                                            let baseWeight = item.servingWeight
-                                        {
-                                            let convertedQuantity =
-                                                currentMultiplier * baseWeight
-                                            draft.quantity = EntryHelper.format(
-                                                convertedQuantity
-                                            )
-                                        } else {
-                                            let convertedQuantity =
-                                                currentMultiplier
-                                                * item.servingSize
-                                            draft.quantity = EntryHelper.format(
-                                                convertedQuantity
-                                            )
-                                        }
-
-                                        draft.unit = newUnit
-                                    }
+                                    set: { draft.updateUnit(to: $0) }
                                 )
 
                                 CustomSwipeRow {
                                     MealRow(
-                                        name: item.name,
-                                        source: item.source?.source ?? "",
-                                        isCustomDefaultServing: item
+                                        name: draft.displayName,
+                                        source: draft.displaySource,
+                                        isCustomDefaultServing: draft
                                             .isCustomDefaultServing,
                                         customServingSize: EntryHelper.format(
                                             draft.activeMultiplier
-                                                * item.servingSize
+                                                * draft.baseServingSize
                                         ),
                                         servingSize: EntryHelper.format(
                                             draft.activeMultiplier
-                                                * item.servingSize
+                                                * draft.baseServingSize
                                         ),
-                                        servingSizeUnit: item.servingUnit?.unit
-                                            ?? "serving",
+                                        servingSizeUnit: draft.servingUnitName,
                                         servingWeight: EntryHelper.format(
                                             draft.activeWeight
                                         ),
-                                        servingWeightUnit: item
-                                            .servingWeightUnit,
+                                        servingWeightUnit: draft
+                                            .baseServingWeightUnit,
                                         servingUnits: servingUnits,
                                         calorie: EntryHelper.format(
                                             draft.activeCalories
@@ -624,7 +561,7 @@ struct EditRecipeView: View {
                                             draft.activeFiber
                                         ),
                                         icon: shouldShowIngredientIcons
-                                            ? item.type.appSymbol : nil
+                                            ? draft.displayType.appSymbol : nil
                                     ) {
                                         HStack(spacing: 8) {
                                             InputPill(
@@ -632,11 +569,7 @@ struct EditRecipeView: View {
                                                 keyboardType: .decimalPad
                                             )
                                             DropdownPill(
-                                                options: hasWeight
-                                                    ? [
-                                                        baseUnit,
-                                                        item.servingWeightUnit,
-                                                    ] : [baseUnit],
+                                                options: draft.unitOptions,
                                                 displayCustomOption: false,
                                                 selection: unitConversionBinding
                                             )
