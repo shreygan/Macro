@@ -121,6 +121,12 @@ struct ProgressCard: View {
     }
 
     var body: some View {
+        if !goals.isDeleted && goals.modelContext != nil {
+            card
+        }
+    }
+
+    private var card: some View {
         Card("Progress") {
             VStack(spacing: 20) {
                 ForEach(sortedMacros) { config in
@@ -151,6 +157,7 @@ struct ProgressCard: View {
         container = try ModelContainer(
             for: LoggedEntry.self,
             FoodItem.self,
+            UserGoals.self,
             configurations: config
         )
     } catch {
@@ -173,6 +180,7 @@ struct ProgressCard: View {
         fiber: 25,
         fiberMode: .off
     )
+    context.insert(mockGoals)
 
     let mockEntry = LoggedEntry(
         name: "Mock Daily Totals",

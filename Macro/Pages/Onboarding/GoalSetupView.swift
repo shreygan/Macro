@@ -262,18 +262,36 @@ struct GoalSetupView: View {
             }
         }
         .onAppear {
-            if let savedGoals = users.first?.currentGoals {
-                calorieValue = savedGoals.calories
-                calorieMode = savedGoals.calorieMode
-                proteinValue = savedGoals.protein
-                proteinMode = savedGoals.proteinMode
-                carbsValue = savedGoals.carbs
-                carbsMode = savedGoals.carbsMode
-                fatValue = savedGoals.fat
-                fatMode = savedGoals.fatMode
-                fiberValue = savedGoals.fiber
-                fiberMode = savedGoals.fiberMode
-            }
+            loadGoals()
+        }
+        .onChange(of: users.first?.currentGoals?.id) {
+            loadGoals()
+        }
+    }
+
+    private func loadGoals() {
+        if let savedGoals = users.first?.currentGoals {
+            calorieValue = savedGoals.calories
+            calorieMode = savedGoals.calorieMode
+            proteinValue = savedGoals.protein
+            proteinMode = savedGoals.proteinMode
+            carbsValue = savedGoals.carbs
+            carbsMode = savedGoals.carbsMode
+            fatValue = savedGoals.fat
+            fatMode = savedGoals.fatMode
+            fiberValue = savedGoals.fiber
+            fiberMode = savedGoals.fiberMode
+        } else {
+            calorieValue = 3000
+            calorieMode = .ceiling
+            proteinValue = 150
+            proteinMode = .ceiling
+            carbsValue = 150
+            carbsMode = .ceiling
+            fatValue = 100
+            fatMode = .ceiling
+            fiberValue = 30
+            fiberMode = .ceiling
         }
     }
 }
