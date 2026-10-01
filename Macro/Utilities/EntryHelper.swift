@@ -24,6 +24,19 @@ enum EntryHelper {
         return targetPortion / basePortion
     }
 
+    static func ingredientMultiplier(
+        quantity: Double,
+        unit: String,
+        baseServingSize: Double,
+        baseServingWeight: Double?,
+        baseServingWeightUnit: String
+    ) -> Double {
+        if unit == baseServingWeightUnit, let baseWeight = baseServingWeight {
+            return quantity / baseWeight
+        }
+        return quantity / baseServingSize
+    }
+
     static func defaultPortion(for food: FoodItem) -> Double {
         (food.isCustomDefaultServing ? food.customServingSize : nil) ?? food.servingSize
     }

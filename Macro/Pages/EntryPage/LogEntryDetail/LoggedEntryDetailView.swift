@@ -18,6 +18,8 @@ struct LoggedEntryDetailView: View {
     @State private var isEditing: Bool = false
     @State private var showDeleteConfirmation: Bool = false
     @State private var foodToLogAgain: FoodItem? = nil
+    @State private var showAddToLibrary = false
+    @State private var newFoodToLog: FoodItem? = nil
 
     @Query(sort: \EntrySource.displayOrder) var sourceOptions: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var categoryOptions:
@@ -500,6 +502,33 @@ struct LoggedEntryDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $showAddToLibrary) {
+            if entry.libraryEntryType == .recipe {
+                AddRecipeView(
+                    onLogInstantly: { food in newFoodToLog = food },
+                    prefill: entry.addRecipePrefill,
+                    onCreate: linkToLibrary
+                )
+            } else {
+                AddEntryView(
+                    entryType: entry.libraryEntryType,
+                    onLogInstantly: { food in newFoodToLog = food },
+                    prefill: entry.addEntryPrefill,
+                    onCreate: linkToLibrary
+                )
+            }
+        }
+        .sheet(item: $newFoodToLog) { food in
+            NavigationStack {
+                if food.type == .recipe {
+                    LogRecipeView(recipe: food, isPushedView: false)
+                        .environment(\.rootDismiss) { dismiss() }
+                } else {
+                    LogEntryView(food: food, isPushedView: false)
+                        .environment(\.rootDismiss) { dismiss() }
+                }
+            }
+        }
         .navigationTitle(name.isEmpty ? "Unnamed Entry" : name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -516,17 +545,25 @@ struct LoggedEntryDetailView: View {
                     .fontWeight(.semibold)
                 } else {
                     Menu {
-                        Button {
-                            if let originalFood = entry.originalFoodItem {
+                        if let originalFood = entry.originalFoodItem {
+                            Button {
                                 foodToLogAgain = originalFood
+                            } label: {
+                                Label(
+                                    "Log Again",
+                                    systemImage: "plus.square.on.square"
+                                )
                             }
-                        } label: {
-                            Label(
-                                "Log Again",
-                                systemImage: "plus.square.on.square"
-                            )
+                        } else {
+                            Button {
+                                showAddToLibrary = true
+                            } label: {
+                                Label(
+                                    "Add to Library",
+                                    systemImage: "plus.square.dashed"
+                                )
+                            }
                         }
-                        .disabled(entry.originalFoodItem == nil)
 
                         Button {
                             withAnimation {
@@ -831,6 +868,12 @@ struct LoggedEntryDetailView: View {
         } catch {
             print("Error saving edited LoggedEntry: \(error)")
         }
+    }
+
+    private func linkToLibrary(_ food: FoodItem) {
+        entry.originalFoodItem = food
+        try? modelContext.save()
+        pinnedNoteText = food.stickyNote?.text ?? ""
     }
 
     private func pinEntryNote() {

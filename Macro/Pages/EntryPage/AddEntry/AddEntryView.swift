@@ -19,6 +19,7 @@ struct AddEntryView: View {
     var onSelectInstantly: ((FoodItem) -> Void)?
 
     var onLogInstantly: ((FoodItem) -> Void)?
+    var onCreate: ((FoodItem) -> Void)?
     @State private var showSuccessAlert: Bool = false
     @State private var newlySavedEntry: FoodItem? = nil
 
@@ -63,17 +64,20 @@ struct AddEntryView: View {
         isPushedView: Bool = false,
         onSelectInstantly: ((FoodItem) -> Void)? = nil,
         onLogInstantly: ((FoodItem) -> Void)? = nil,
-        draft: EntryDraft? = nil
+        draft: EntryDraft? = nil,
+        prefill: AddEntryDraftState? = nil,
+        onCreate: ((FoodItem) -> Void)? = nil
     ) {
         self.entryType = entryType
         self.isPushedView = isPushedView
         self.onSelectInstantly = onSelectInstantly
         self.onLogInstantly = onLogInstantly
+        self.onCreate = onCreate
 
         _draftID = State(initialValue: draft?.id ?? UUID())
         self.isResumedDraft = draft != nil
 
-        if let state = draft?.decodeState(AddEntryDraftState.self) {
+        if let state = draft?.decodeState(AddEntryDraftState.self) ?? prefill {
             _name = State(initialValue: state.name)
             _source = State(initialValue: state.source)
             _category = State(initialValue: state.category)
@@ -97,7 +101,7 @@ struct AddEntryView: View {
     }
 
     private var isDraftEnabled: Bool {
-        onSelectInstantly == nil
+        onSelectInstantly == nil && onCreate == nil
     }
 
     private var draftState: AddEntryDraftState {
@@ -348,6 +352,7 @@ struct AddEntryView: View {
             didFinishAdding = true
 
             newlySavedEntry = newEntry
+            onCreate?(newEntry)
             if onLogInstantly != nil {
                 showSuccessAlert = true
             } else if onSelectInstantly != nil {

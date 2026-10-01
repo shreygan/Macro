@@ -11,6 +11,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.eraseAllData) private var eraseAllData
 
     @Query private var users: [User]
 
@@ -118,16 +119,33 @@ struct SettingsView: View {
                         }
 
                         Card("Data") {
-                            NavigationLink {
-                                ImportView()
-                            } label: {
-                                NavigationRow(
-                                    icon: .customSymbol("square.and.arrow.down"),
-                                    title: "Import"
-                                )
-                                .contentShape(Rectangle())
+                            RowGroup(.divider) {
+                                NavigationLink {
+                                    ImportView()
+                                } label: {
+                                    NavigationRow(
+                                        icon: .customSymbol(
+                                            "square.and.arrow.down"
+                                        ),
+                                        title: "Import"
+                                    )
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+
+                                NavigationLink {
+                                    ExportView()
+                                } label: {
+                                    NavigationRow(
+                                        icon: .customSymbol(
+                                            "square.and.arrow.up"
+                                        ),
+                                        title: "Export"
+                                    )
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                         .padding([.top, .leading, .trailing])
 
@@ -167,38 +185,14 @@ struct SettingsView: View {
             .alert("Delete All Data?", isPresented: $showDeleteConfirmation) {
                 Button("Cancel", role: .cancel) {}
                 Button("Delete", role: .destructive) {
-                    deleteAllData()
                     dismiss()
+                    eraseAllData()
                 }
             } message: {
                 Text(
                     "This will permanently delete all your logged entries, saved foods, and personal data. This action cannot be undone."
                 )
             }
-        }
-    }
-
-    private func deleteAllData() {
-        do {
-            try modelContext.delete(model: User.self)
-            try modelContext.delete(model: FoodItem.self)
-            try modelContext.delete(model: EntrySource.self)
-            try modelContext.delete(model: CategorySource.self)
-            try modelContext.delete(model: FoodGroupSource.self)
-            try modelContext.delete(model: ServingSizeUnit.self)
-            try modelContext.delete(model: FavoriteEntry.self)
-            try modelContext.delete(model: LoggedEntry.self)
-            try modelContext.delete(model: EntryDraft.self)
-
-            try modelContext.save()
-            print("All data successfully cleared.")
-
-            try AppSeeder.seedDefaults(into: modelContext)
-            print("Default data successfully reseeded.")
-        } catch {
-            print(
-                "Failed to clear or reseed data: \(error.localizedDescription)"
-            )
         }
     }
 }

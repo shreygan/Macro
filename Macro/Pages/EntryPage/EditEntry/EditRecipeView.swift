@@ -30,6 +30,9 @@ struct EditRecipeView: View {
     let recipe: FoodItem
     var isPushedView: Bool = false
 
+    var isImportMode: Bool = false
+    var onImportSave: ((DraftFoodItem) -> Void)?
+
     @State private var name: String
     @State private var source: String
     @State private var category: String
@@ -68,11 +71,15 @@ struct EditRecipeView: View {
     init(
         recipe: FoodItem,
         isPushedView: Bool = false,
-        onSaveInstantly: ((FoodItem) -> Void)? = nil
+        onSaveInstantly: ((FoodItem) -> Void)? = nil,
+        isImportMode: Bool = false,
+        onImportSave: ((DraftFoodItem) -> Void)? = nil
     ) {
         self.recipe = recipe
         self.isPushedView = isPushedView
         self.onSaveInstantly = onSaveInstantly
+        self.isImportMode = isImportMode
+        self.onImportSave = onImportSave
 
         _name = State(initialValue: recipe.name)
         _source = State(initialValue: recipe.source?.source ?? "")
@@ -192,7 +199,67 @@ struct EditRecipeView: View {
         return string.isEmpty ? nil : Double(normalized)
     }
 
+    private func saveImportDraft() {
+        let trimmedNote = stickyNote.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        let trimmedUnit = servingSizeUnit.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+
+        let ingredients = draftIngredients.map { draft in
+            DraftImportIngredient(
+                linkedItemID: draft.item.id,
+                linkedItemType: draft.item.type,
+                linkedItemSource: draft.item.source?.source ?? "",
+                name: draft.item.name,
+                quantity: parseDouble(draft.quantity),
+                unit: draft.unit,
+                baseServingSize: draft.baseServingSize,
+                baseServingUnitName: draft.baseServingUnitName,
+                baseServingWeight: draft.baseServingWeight,
+                baseServingWeightUnit: draft.baseServingWeightUnit,
+                baseCalories: draft.baseCalories,
+                baseProtein: draft.baseProtein,
+                baseCarbs: draft.baseCarbs,
+                baseFat: draft.baseFat,
+                baseFiber: draft.baseFiber
+            )
+        }
+
+        let updatedDraft = DraftFoodItem(
+            type: .recipe,
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            source: source.trimmingCharacters(in: .whitespacesAndNewlines),
+            category: category.trimmingCharacters(in: .whitespacesAndNewlines),
+            foodGroup: recipe.foodGroup?.foodGroup ?? "",
+            servingSize: parseDouble(servingSize),
+            servingUnit: trimmedUnit.isEmpty ? "serving" : trimmedUnit,
+            servingWeight: parseOptionalDouble(servingWeight)
+                ?? (calculatedTotalWeight > 0 ? calculatedTotalWeight : nil),
+            servingWeightUnit: servingWeightUnit,
+            isAIEstimated: recipe.isAIEstimated,
+            calories: totalCalories,
+            protein: totalProtein,
+            carbs: totalCarbs,
+            fat: totalFat,
+            fiber: totalFiber,
+            isCustomDefaultServing: isCustomDefaultServing,
+            customServingSize: parseOptionalDouble(customServingSize),
+            stickyNote: trimmedNote,
+            ingredients: ingredients
+        )
+
+        onImportSave?(updatedDraft)
+        dismiss()
+    }
+
     private func saveRecipe() {
+        guard !isImportMode else {
+            saveImportDraft()
+            return
+        }
+
         // SOURCE
         var resolvedSource: EntrySource? = nil
         let trimmedSource = source.trimmingCharacters(
@@ -663,16 +730,20 @@ struct EditRecipeView: View {
                 }
 
                 ToolbarItemGroup(placement: .confirmationAction) {
-                    Menu {
-                        Picker("Save Mode", selection: $saveMode) {
-                            ForEach(EditRecipeSaveMode.allCases, id: \.self) {
-                                mode in
-                                Text(mode.rawValue).tag(mode)
+                    if !isImportMode {
+                        Menu {
+                            Picker("Save Mode", selection: $saveMode) {
+                                ForEach(
+                                    EditRecipeSaveMode.allCases,
+                                    id: \.self
+                                ) { mode in
+                                    Text(mode.rawValue).tag(mode)
+                                }
                             }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .foregroundStyle(.primary)
                         }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .foregroundStyle(.primary)
                     }
 
                     Button {
