@@ -63,10 +63,13 @@ struct DraftRecipeIngredient: Identifiable {
     var activeMultiplier: Double {
         guard let qty = Double(quantity) else { return 0 }
 
-        if unit == baseServingWeightUnit, let baseWeight = baseServingWeight {
-            return qty / baseWeight
-        }
-        return qty / baseServingSize
+        return EntryHelper.ingredientMultiplier(
+            quantity: qty,
+            unit: unit,
+            baseServingSize: baseServingSize,
+            baseServingWeight: baseServingWeight,
+            baseServingWeightUnit: baseServingWeightUnit
+        )
     }
 
     var activeCalories: Double { baseCalories * activeMultiplier }
