@@ -8,15 +8,13 @@
 import Foundation
 
 extension LoggedEntry {
-    var linkedComponents: [LoggedEntry] {
-        (childEntries ?? [])
-            .sorted { $0.displayOrder < $1.displayOrder }
-            .filter { $0.originalFoodItem != nil }
+    var sortedComponents: [LoggedEntry] {
+        (childEntries ?? []).sorted { $0.displayOrder < $1.displayOrder }
     }
 
     var libraryEntryType: EntryType {
         switch entryType {
-        case .recipe: linkedComponents.isEmpty ? .food : .recipe
+        case .recipe: sortedComponents.isEmpty ? .food : .recipe
         case .some(let type): type
         case .none: .food
         }
@@ -79,8 +77,15 @@ extension LoggedEntry {
             stickyNote: logNote ?? ""
         )
 
-        let ingredients = linkedComponents.compactMap { child -> DraftRecipeIngredient? in
-            guard let item = child.originalFoodItem else { return nil }
+        let ingredients = sortedComponents.map { child in
+            guard let item = child.originalFoodItem else {
+                return DraftRecipeIngredient(
+                    logIngredient: LogRecipeIngredient(
+                        loggedEntry: child,
+                        recipeMultiplier: 1
+                    )
+                )
+            }
             var ingredient = DraftRecipeIngredient(item: item)
             ingredient.quantity = EntryHelper.format(child.loggedQuantity)
             ingredient.unit = child.loggedUnit
