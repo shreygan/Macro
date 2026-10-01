@@ -483,7 +483,7 @@ struct AddRecipeView: View {
 
                                     CustomSwipeRow {
                                         MealRow(
-                                            name: draft.displayName,
+                                            name: draft.name,
                                             source: draft.displaySource,
                                             isCustomDefaultServing: draft
                                                 .isCustomDefaultServing,

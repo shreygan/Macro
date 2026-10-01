@@ -97,7 +97,6 @@ struct DraftRecipeIngredient: Identifiable {
         self.baseFiber = logIngredient.baseFiber
     }
 
-    var displayName: String { item?.name ?? name }
     var displaySource: String { item?.source?.source ?? "" }
     var displayType: EntryType { item?.type ?? .ingredient }
     var isCustomDefaultServing: Bool { item?.isCustomDefaultServing ?? false }
@@ -117,7 +116,7 @@ struct DraftRecipeIngredient: Identifiable {
             quantity: quantity,
             unit: unit,
             displayOrder: displayOrder,
-            name: displayName,
+            name: name,
             baseServingSize: baseServingSize,
             baseServingUnitName: baseServingUnitName,
             baseServingWeight: baseServingWeight,

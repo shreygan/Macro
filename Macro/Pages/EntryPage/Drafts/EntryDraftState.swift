@@ -54,7 +54,7 @@ extension DraftIngredientSnapshot {
 
     init(_ ingredient: DraftRecipeIngredient) {
         self.foodItemID = ingredient.item?.id
-        self.name = ingredient.displayName
+        self.name = ingredient.name
         self.quantity = ingredient.quantity
         self.unit = ingredient.unit
         self.baseServingSize = ingredient.baseServingSize

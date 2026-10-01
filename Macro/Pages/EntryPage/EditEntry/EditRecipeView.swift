@@ -212,7 +212,7 @@ struct EditRecipeView: View {
                 linkedItemID: draft.item?.id,
                 linkedItemType: draft.item?.type,
                 linkedItemSource: draft.displaySource,
-                name: draft.displayName,
+                name: draft.name,
                 quantity: parseDouble(draft.quantity),
                 unit: draft.unit,
                 baseServingSize: draft.baseServingSize,
@@ -526,7 +526,7 @@ struct EditRecipeView: View {
 
                                 CustomSwipeRow {
                                     MealRow(
-                                        name: draft.displayName,
+                                        name: draft.name,
                                         source: draft.displaySource,
                                         isCustomDefaultServing: draft
                                             .isCustomDefaultServing,
