@@ -281,23 +281,7 @@ struct LibraryView<Header: View>: View {
                 sortMenu
             }
         }
-        .alert(
-            "Delete Food",
-            isPresented: $showDeleteAlert,
-            presenting: foodToDelete
-        ) { food in
-            Button("Cancel", role: .cancel) { foodToDelete = nil }
-            Button("Delete", role: .destructive) {
-                let item = food
-                foodToDelete = nil
-                DispatchQueue.main.async {
-                    modelContext.delete(item)
-                    try? modelContext.save()
-                }
-            }
-        } message: { food in
-            Text("Are you sure you want to delete \(food.name)?")
-        }
+        .deleteFoodAlert(isPresented: $showDeleteAlert, food: $foodToDelete)
     }
 
     @ViewBuilder

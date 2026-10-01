@@ -597,23 +597,7 @@ struct NewEntryView: View {
             .presentationDetents([.height(350)])
             .presentationDragIndicator(.visible)
         }
-        .alert(
-            "Delete Food",
-            isPresented: $showDeleteAlert,
-            presenting: foodToDelete
-        ) { food in
-            Button("Cancel", role: .cancel) { foodToDelete = nil }
-            Button("Delete", role: .destructive) {
-                let item = food
-                foodToDelete = nil
-                DispatchQueue.main.async {
-                    modelContext.delete(item)
-                    try? modelContext.save()
-                }
-            }
-        } message: { food in
-            Text("Are you sure you want to delete \(food.name)?")
-        }
+        .deleteFoodAlert(isPresented: $showDeleteAlert, food: $foodToDelete)
         .alert(
             "Delete Draft?",
             isPresented: $showDraftDeleteAlert,
