@@ -16,17 +16,24 @@ struct InputPill: View {
     var placeholder: String = "-"
 
     @FocusState private var isFocused: Bool
+    @State private var draft = ""
+    @State private var selection: TextSelection?
 
     var body: some View {
         HStack(spacing: 4) {
-            TextField(placeholder, text: $text)
+            TextField(placeholder, text: $draft, selection: $selection)
                 .focused($isFocused)
-                .autoFloatingToolbar(for: keyboardType)
+                .autoFloatingToolbar(
+                    for: keyboardType,
+                    text: $text,
+                    draft: $draft,
+                    selection: $selection
+                )
                 .font(.system(size: textFontSize))
                 .multilineTextAlignment(.center)
                 .frame(minWidth: 10)
                 .fixedSize(horizontal: true, vertical: false)
-                .numericKeyboardFilter(text: $text, type: keyboardType)
+                .numericKeyboardFilter(text: $draft, type: keyboardType)
 
             if let unit = unit {
                 Text(unit)

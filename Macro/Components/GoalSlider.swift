@@ -56,6 +56,7 @@ public struct GoalSlider: View {
     @State private var offset: CGFloat = 0
     @State private var isDragging: Bool = false
     @State private var displayText: String = ""
+    @State private var selection: TextSelection?
 
     @Binding var limitMode: GoalLimitMode
     @State private var lastActiveMode: GoalLimitMode = .ceiling
@@ -121,6 +122,14 @@ public struct GoalSlider: View {
         trackHeight / 2
     }
 
+    private var typedValue: Double? {
+        if KeyboardExpression.containsOperator(displayText) {
+            return KeyboardExpression.evaluate(displayText)
+        }
+        return editingFormatter.number(from: displayText)?.doubleValue
+            ?? formatter.number(from: displayText)?.doubleValue
+    }
+
     public var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             if let title {
@@ -156,8 +165,14 @@ public struct GoalSlider: View {
                     Spacer()
 
                     HStack(spacing: 4) {
-                        TextField("", text: $displayText)
+                        TextField("", text: $displayText, selection: $selection)
                             .focused($isEditingNumber)
+                            .autoFloatingToolbar(
+                                for: .decimalPad,
+                                text: $displayText,
+                                selection: $selection,
+                                allowsFractions: false
+                            )
                             .font(.system(size: textFontSize))
                             .multilineTextAlignment(.trailing)
                             .fixedSize(horizontal: true, vertical: false)
@@ -199,14 +214,7 @@ public struct GoalSlider: View {
                                             from: NSNumber(value: value)
                                         ) ?? String(value)
                                 } else {
-                                    let parsedValue =
-                                        editingFormatter.number(
-                                            from: displayText
-                                        )?.doubleValue
-                                        ?? formatter.number(from: displayText)?
-                                        .doubleValue
-
-                                    if let newValue = parsedValue {
+                                    if let newValue = typedValue {
                                         let customValue = max(
                                             range.lowerBound,
                                             newValue
@@ -223,6 +231,19 @@ public struct GoalSlider: View {
                                     }
 
                                     displayText = formatNumber(value)
+                                }
+                            }
+                            .onChange(of: displayText) {
+                                guard isEditingNumber,
+                                    let newValue = typedValue
+                                else { return }
+
+                                let customValue = max(
+                                    range.lowerBound,
+                                    newValue
+                                )
+                                if customValue != value {
+                                    value = customValue
                                 }
                             }
 

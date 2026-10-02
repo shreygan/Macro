@@ -28,6 +28,7 @@ struct DropdownPill: View {
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(minWidth: 10)
                     .focused($isFocused)
+                    .autoFloatingToolbar(for: .default)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5.39)
                     .background(

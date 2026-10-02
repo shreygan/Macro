@@ -19,6 +19,8 @@ struct WrappedInputRow: View {
     var characterLimit: Int? = nil
 
     @FocusState private var isFocused: Bool
+    @State private var draft = ""
+    @State private var selection: TextSelection?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -47,11 +49,21 @@ struct WrappedInputRow: View {
             }
 
             if isEditable {
-                TextField(placeholder, text: $text, axis: .vertical)
+                TextField(
+                    placeholder,
+                    text: $draft,
+                    selection: $selection,
+                    axis: .vertical
+                )
                     .focused($isFocused)
-                    .autoFloatingToolbar(for: keyboardType)
+                    .autoFloatingToolbar(
+                        for: keyboardType,
+                        text: $text,
+                        draft: $draft,
+                        selection: $selection
+                    )
                     .lineLimit(1...10)
-                    .numericKeyboardFilter(text: $text, type: keyboardType)
+                    .numericKeyboardFilter(text: $draft, type: keyboardType)
                     .textInputAutocapitalization(.never)
                     .onChange(of: text) { oldValue, newValue in
                         if let limit = characterLimit, newValue.count > limit {
