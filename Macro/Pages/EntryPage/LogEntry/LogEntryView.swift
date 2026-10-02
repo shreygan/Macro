@@ -933,7 +933,6 @@ struct LogEntryView: View {
                     .background(.ultraThinMaterial)
                 }
                 .withCustomKeyboardToolbar()
-                .scrollDismissesKeyboard(.immediately)
                 .navigationTitle(
                     food.type == .food ? "Log Food" : "Log Ingredient"
                 )

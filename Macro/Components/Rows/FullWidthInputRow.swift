@@ -14,13 +14,20 @@ struct FullWidthInputRow: View {
     var keyboardType: UIKeyboardType = .default
 
     @FocusState private var isFocused: Bool
+    @State private var draft = ""
+    @State private var selection: TextSelection?
 
     var body: some View {
-        TextField(placeholder, text: $text)
+        TextField(placeholder, text: $draft, selection: $selection)
             .focused($isFocused)
-            .autoFloatingToolbar(for: keyboardType)
+            .autoFloatingToolbar(
+                for: keyboardType,
+                text: $text,
+                draft: $draft,
+                selection: $selection
+            )
             .frame(maxWidth: .infinity, alignment: .leading)
-            .numericKeyboardFilter(text: $text, type: keyboardType)
+            .numericKeyboardFilter(text: $draft, type: keyboardType)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
     }

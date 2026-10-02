@@ -597,7 +597,6 @@ struct EditEntryView: View {
                 }
             }
             .withCustomKeyboardToolbar()
-            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Edit \(type.rawValue.capitalized)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

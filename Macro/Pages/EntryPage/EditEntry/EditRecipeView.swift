@@ -632,7 +632,6 @@ struct EditRecipeView: View {
                 }
             }
             .withCustomKeyboardToolbar()
-            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Edit Recipe")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showIngredientSelectionSheet) {

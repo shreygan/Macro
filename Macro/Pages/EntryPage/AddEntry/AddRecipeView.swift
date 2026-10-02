@@ -592,7 +592,6 @@ struct AddRecipeView: View {
                     }
                 }
                 .withCustomKeyboardToolbar()
-                .scrollDismissesKeyboard(.immediately)
                 .navigationTitle("Add New Recipe")
                 .navigationBarTitleDisplayMode(.inline)
                 .sheet(isPresented: $showIngredientSelectionSheet) {
