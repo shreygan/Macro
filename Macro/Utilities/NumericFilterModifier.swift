@@ -21,13 +21,7 @@ struct NumericFilterModifier: ViewModifier {
 
     private func filterNumericInput(newValue: String) {
         if keyboardType == .decimalPad {
-            var filtered = newValue.filter { "0123456789.".contains($0) }
-
-            let parts = filtered.components(separatedBy: ".")
-            if parts.count > 2 {
-                filtered = parts[0] + "." + parts.dropFirst().joined()
-            }
-
+            let filtered = KeyboardExpression.filtered(newValue)
             if text != filtered { text = filtered }
 
         } else if keyboardType == .numberPad {

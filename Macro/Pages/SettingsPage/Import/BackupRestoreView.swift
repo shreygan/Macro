@@ -128,6 +128,7 @@ struct BackupRestoreView: View {
                 }
                 .padding(.bottom)
             }
+            .withCustomKeyboardToolbar()
         }
         .navigationTitle("Restore Backup")
         .navigationBarTitleDisplayMode(.inline)

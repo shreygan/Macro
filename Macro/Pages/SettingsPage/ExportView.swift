@@ -180,6 +180,7 @@ struct ExportView: View {
                 }
                 .padding(.bottom)
             }
+            .withCustomKeyboardToolbar()
         }
         .navigationTitle("Export Data")
         .navigationBarTitleDisplayMode(.inline)

@@ -22,6 +22,8 @@ struct TextInputRow: View {
     var maxWidth: CGFloat? = 120
 
     @FocusState private var isFocused: Bool
+    @State private var draft = ""
+    @State private var selection: TextSelection?
 
     var body: some View {
         BaseRowLayout(
@@ -30,9 +32,14 @@ struct TextInputRow: View {
             titleExtension: titleExtension,
             subtitle: subtitle
         ) {
-            TextField(placeholder, text: $text)
+            TextField(placeholder, text: $draft, selection: $selection)
                 .focused($isFocused)
-                .autoFloatingToolbar(for: keyboardType)
+                .autoFloatingToolbar(
+                    for: keyboardType,
+                    text: $text,
+                    draft: $draft,
+                    selection: $selection
+                )
                 .multilineTextAlignment(.trailing)
                 .frame(maxWidth: maxWidth)
                 .foregroundStyle(
@@ -41,7 +48,7 @@ struct TextInputRow: View {
                         : Color(uiColor: .secondaryLabel)
                 )
                 .disabled(!isEnabled)
-                .numericKeyboardFilter(text: $text, type: keyboardType)
+                .numericKeyboardFilter(text: $draft, type: keyboardType)
         }
     }
 }

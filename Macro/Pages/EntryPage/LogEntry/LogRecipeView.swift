@@ -850,7 +850,6 @@ struct LogRecipeView: View {
                     }
                 }
                 .withCustomKeyboardToolbar()
-                .scrollDismissesKeyboard(.immediately)
                 .navigationTitle("Log Recipe")
                 .navigationBarTitleDisplayMode(.inline)
                 .sheet(isPresented: $showIngredientSelectionSheet) {

@@ -64,7 +64,7 @@ struct GoalSetupView: View {
                 .padding(.horizontal, 30)
             }
 
-            Spacer()
+            Spacer(minLength: 16)
 
             GoalSlider(
                 "Calories",
@@ -79,7 +79,7 @@ struct GoalSetupView: View {
                 }
             )
 
-            Spacer()
+            Spacer(minLength: 16)
 
             GoalSlider(
                 "Protein",
@@ -94,7 +94,7 @@ struct GoalSetupView: View {
                 }
             )
 
-            Spacer()
+            Spacer(minLength: 16)
 
             GoalSlider(
                 "Carbonhydrates",
@@ -109,7 +109,7 @@ struct GoalSetupView: View {
                 }
             )
 
-            Spacer()
+            Spacer(minLength: 16)
 
             GoalSlider(
                 "Fat",
@@ -124,7 +124,7 @@ struct GoalSetupView: View {
                 }
             )
 
-            Spacer()
+            Spacer(minLength: 16)
 
             GoalSlider(
                 "Fiber",
@@ -139,7 +139,7 @@ struct GoalSetupView: View {
                 }
             )
 
-            Spacer()
+            Spacer(minLength: 16)
 
             Button {
                 if let existingUser = users.first {
@@ -217,6 +217,8 @@ struct GoalSetupView: View {
             .padding(.top, 8)
             .padding(.bottom, 16)
         }
+        .keyboardAvoidingScrollView(alwaysScrollable: isEditingExistingUser)
+        .withCustomKeyboardToolbar(insetsContent: false)
         .navigationTitle(isEditingExistingUser ? "Set Goals" : "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

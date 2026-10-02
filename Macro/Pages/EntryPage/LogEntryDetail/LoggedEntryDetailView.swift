@@ -461,6 +461,7 @@ struct LoggedEntryDetailView: View {
                 .padding(.bottom, 16)
                 .background(.ultraThinMaterial)
             }
+            .withCustomKeyboardToolbar()
         }
         .environment(focusManager)
         .sheet(isPresented: $showIngredientSelectionSheet) {

@@ -544,7 +544,6 @@ struct AddEntryView: View {
                 }
             }
             .withCustomKeyboardToolbar()
-            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Add New \(entryType.rawValue.capitalized)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

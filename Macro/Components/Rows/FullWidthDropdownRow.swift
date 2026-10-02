@@ -22,6 +22,7 @@ struct FullWidthDropdownRow: View {
                 .font(.system(size: 16))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .focused($isTextFieldFocused)
+                .autoFloatingToolbar(for: .default)
 
             Menu {
                 ForEach(options, id: \.self) { option in
