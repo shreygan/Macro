@@ -24,48 +24,58 @@ struct AppSeeder {
         "Fruits", "Others",
     ]
 
+    private static let seededListsKey = "AppSeeder.hasSeededLists"
+
+    static func resetListSeeding() {
+        UserDefaults.standard.removeObject(forKey: seededListsKey)
+    }
+
     @MainActor
     static func seedDefaults(into context: ModelContext) throws {
-        // --- SEED ENTRY SOURCES ---
-        let entryDescriptor = FetchDescriptor<EntrySource>()
-        if try context.fetchCount(entryDescriptor) == 0 {
-            for (index, source) in defaultEntrySources.enumerated() {
-                let newSource = EntrySource(
-                    source: source,
-                    isDefault: true,
-                    displayOrder: index
-                )
-                context.insert(newSource)
-            }
-            print("Successfully seeded default EntrySources.")
-        }
+        let shouldSeedLists = !UserDefaults.standard.bool(forKey: seededListsKey)
 
-        // --- SEED CATEGORY SOURCES ---
-        let categoryDescriptor = FetchDescriptor<CategorySource>()
-        if try context.fetchCount(categoryDescriptor) == 0 {
-            for (index, category) in defaultCategorySources.enumerated() {
-                let newCategory = CategorySource(
-                    category: category,
-                    isDefault: true,
-                    displayOrder: index
-                )
-                context.insert(newCategory)
+        if shouldSeedLists {
+            // --- SEED ENTRY SOURCES ---
+            let entryDescriptor = FetchDescriptor<EntrySource>()
+            if try context.fetchCount(entryDescriptor) == 0 {
+                for (index, source) in defaultEntrySources.enumerated() {
+                    let newSource = EntrySource(
+                        source: source,
+                        isDefault: true,
+                        displayOrder: index
+                    )
+                    context.insert(newSource)
+                }
+                print("Successfully seeded default EntrySources.")
             }
-            print("Successfully seeded default CategorySources.")
-        }
 
-        // --- SEED FOOD GROUP SOURCES ---
-        let foodGroupDescriptor = FetchDescriptor<FoodGroupSource>()
-        if try context.fetchCount(foodGroupDescriptor) == 0 {
-            for (index, foodGroup) in defaultFoodGroupSources.enumerated() {
-                let newFoodGroup = FoodGroupSource(
-                    foodGroup: foodGroup,
-                    isDefault: true,
-                    displayOrder: index
-                )
-                context.insert(newFoodGroup)
+            // --- SEED CATEGORY SOURCES ---
+            let categoryDescriptor = FetchDescriptor<CategorySource>()
+            if try context.fetchCount(categoryDescriptor) == 0 {
+                for (index, category) in defaultCategorySources.enumerated() {
+                    let newCategory = CategorySource(
+                        category: category,
+                        isDefault: true,
+                        displayOrder: index
+                    )
+                    context.insert(newCategory)
+                }
+                print("Successfully seeded default CategorySources.")
             }
-            print("Successfully seeded default FoodGroupSources.")
+
+            // --- SEED FOOD GROUP SOURCES ---
+            let foodGroupDescriptor = FetchDescriptor<FoodGroupSource>()
+            if try context.fetchCount(foodGroupDescriptor) == 0 {
+                for (index, foodGroup) in defaultFoodGroupSources.enumerated() {
+                    let newFoodGroup = FoodGroupSource(
+                        foodGroup: foodGroup,
+                        isDefault: true,
+                        displayOrder: index
+                    )
+                    context.insert(newFoodGroup)
+                }
+                print("Successfully seeded default FoodGroupSources.")
+            }
         }
 
         // --- SERVING SIZE UNIT SOURCES ---
@@ -84,5 +94,6 @@ struct AppSeeder {
         }
 
         try context.save()
+        UserDefaults.standard.set(true, forKey: seededListsKey)
     }
 }

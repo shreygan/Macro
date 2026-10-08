@@ -223,8 +223,11 @@ struct AddRecipeView: View {
         let isNameValid = !name.trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty
         let hasIngredients = !draftIngredients.isEmpty
+        let hasServingSize =
+            (Double(servingSize.replacingOccurrences(of: ",", with: ".")) ?? 0)
+            > 0
 
-        return isNameValid && hasIngredients
+        return isNameValid && hasIngredients && hasServingSize
     }
 
     private func addRecipe() {
@@ -399,7 +402,7 @@ struct AddRecipeView: View {
                                 FullWidthDropdownRow(
                                     placeholder: "Source",
                                     options: [""]
-                                        + savedSources.map { $0.source }.filter
+                                        + savedSources.visibleNames(keeping: source).filter
                                     {
                                         let trimmed = $0.trimmingCharacters(
                                             in: .whitespacesAndNewlines
@@ -413,7 +416,7 @@ struct AddRecipeView: View {
                                 FullWidthDropdownRow(
                                     placeholder: "Category",
                                     options: [""]
-                                        + savedCategories.map { $0.category }
+                                        + savedCategories.visibleNames(keeping: category)
                                         .filter {
                                             let trimmed = $0.trimmingCharacters(
                                                 in: .whitespacesAndNewlines

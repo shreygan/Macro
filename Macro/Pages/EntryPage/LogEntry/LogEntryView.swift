@@ -137,18 +137,13 @@ struct LogEntryView: View {
     }
 
     private var activeMultiplier: Double {
-        let currentPortion = Double(portionQuantity) ?? 0
-
-        let isWeightSelected =
-            (portionUnitSelection == food.servingWeightUnit
-                && food.servingWeight != nil)
-        let basePortion =
-            isWeightSelected ? food.servingWeight! : food.servingSize
-
-        return EntryHelper.calculateMultiplier(
-            targetPortion: currentPortion,
-            basePortion: basePortion
-        )
+        EntryHelper.portionMultiplier(
+            quantity: Double(portionQuantity) ?? 0,
+            unit: portionUnitSelection,
+            servingSize: food.servingSize,
+            servingWeight: food.servingWeight,
+            servingWeightUnit: food.servingWeightUnit
+        ) ?? 0
     }
 
     private var displayServingSize: String {
@@ -660,7 +655,9 @@ struct LogEntryView: View {
                                 DropdownPillRow(
                                     title: "Source",
                                     options: [""]
-                                        + sourceOptions.map { $0.source }.filter
+                                        + sourceOptions.visibleNames(
+                                            keeping: sourceSelection
+                                        ).filter
                                     {
                                         !$0.trimmingCharacters(
                                             in: .whitespacesAndNewlines
@@ -673,9 +670,9 @@ struct LogEntryView: View {
                                     DropdownPillRow(
                                         title: "Category",
                                         options: [""]
-                                            + categoryOptions.map {
-                                                $0.category
-                                            }.filter {
+                                            + categoryOptions.visibleNames(
+                                                keeping: categorySelection
+                                            ).filter {
                                                 !$0.trimmingCharacters(
                                                     in: .whitespacesAndNewlines
                                                 ).isEmpty
@@ -686,9 +683,9 @@ struct LogEntryView: View {
                                     DropdownPillRow(
                                         title: "Food Group",
                                         options: [""]
-                                            + foodGroupOptions.map {
-                                                $0.foodGroup
-                                            }.filter {
+                                            + foodGroupOptions.visibleNames(
+                                                keeping: foodGroupSelection
+                                            ).filter {
                                                 !$0.trimmingCharacters(
                                                     in: .whitespacesAndNewlines
                                                 ).isEmpty
