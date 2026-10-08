@@ -24,6 +24,19 @@ enum EntryHelper {
         return targetPortion / basePortion
     }
 
+    static func portionMultiplier(
+        quantity: Double,
+        unit: String,
+        servingSize: Double,
+        servingWeight: Double?,
+        servingWeightUnit: String
+    ) -> Double? {
+        if unit == servingWeightUnit, let servingWeight {
+            return servingWeight > 0 ? quantity / servingWeight : nil
+        }
+        return servingSize > 0 ? quantity / servingSize : nil
+    }
+
     static func ingredientMultiplier(
         quantity: Double,
         unit: String,
@@ -31,10 +44,48 @@ enum EntryHelper {
         baseServingWeight: Double?,
         baseServingWeightUnit: String
     ) -> Double {
-        if unit == baseServingWeightUnit, let baseWeight = baseServingWeight {
-            return quantity / baseWeight
-        }
-        return quantity / baseServingSize
+        portionMultiplier(
+            quantity: quantity,
+            unit: unit,
+            servingSize: baseServingSize,
+            servingWeight: baseServingWeight,
+            servingWeightUnit: baseServingWeightUnit
+        ) ?? 0
+    }
+
+    static func ingredientWeight(
+        quantity: Double,
+        unit: String,
+        baseServingSize: Double,
+        baseServingWeight: Double?,
+        baseServingWeightUnit: String
+    ) -> Double? {
+        if unit == baseServingWeightUnit { return quantity }
+        guard let baseServingWeight else { return nil }
+        return baseServingWeight
+            * ingredientMultiplier(
+                quantity: quantity,
+                unit: unit,
+                baseServingSize: baseServingSize,
+                baseServingWeight: baseServingWeight,
+                baseServingWeightUnit: baseServingWeightUnit
+            )
+    }
+
+    static func recipeWeight(for recipe: FoodItem) -> Double? {
+        if let servingWeight = recipe.servingWeight { return servingWeight }
+        let total = (recipe.recipeIngredients ?? [])
+            .compactMap {
+                ingredientWeight(
+                    quantity: $0.quantity,
+                    unit: $0.unit,
+                    baseServingSize: $0.baseServingSize,
+                    baseServingWeight: $0.baseServingWeight,
+                    baseServingWeightUnit: $0.baseServingWeightUnit
+                )
+            }
+            .reduce(0, +)
+        return total > 0 ? total : nil
     }
 
     static func defaultPortion(for food: FoodItem) -> Double {
@@ -43,6 +94,18 @@ enum EntryHelper {
 
     static func defaultPortionMultiplier(for food: FoodItem) -> Double {
         calculateMultiplier(targetPortion: defaultPortion(for: food), basePortion: food.servingSize)
+    }
+
+    static func portionText(
+        quantity: Double,
+        unit: String,
+        servingUnits: [ServingSizeUnit]
+    ) -> String {
+        let quantityText = format(quantity)
+        let unitText =
+            servingUnits.first { $0.unit == unit }?
+            .displayString(for: quantityText) ?? unit
+        return "\(quantityText) \(unitText)"
     }
 
     static func formatMacro(_ value: Double) -> String {
@@ -80,17 +143,16 @@ enum EntryHelper {
 
     /// The portion multiplier a recipe was logged with
     static func loggedRecipeMultiplier(for entry: LoggedEntry) -> Double {
-        guard let recipe = entry.originalFoodItem else { return 1 }
-
-        let multiplier: Double
-        if entry.loggedUnit == recipe.servingWeightUnit
-            && entry.loggedUnit != recipe.servingUnit?.unit
-        {
-            multiplier = recipe.servingWeight.map { entry.loggedQuantity / $0 }
-                ?? 1
-        } else {
-            multiplier = entry.loggedQuantity / recipe.servingSize
-        }
-        return multiplier.isFinite && multiplier > 0 ? multiplier : 1
+        guard let recipe = entry.originalFoodItem,
+            let multiplier = portionMultiplier(
+                quantity: entry.loggedQuantity,
+                unit: entry.loggedUnit,
+                servingSize: recipe.servingSize,
+                servingWeight: recipeWeight(for: recipe),
+                servingWeightUnit: recipe.servingWeightUnit
+            ),
+            multiplier > 0
+        else { return 1 }
+        return multiplier
     }
 }
