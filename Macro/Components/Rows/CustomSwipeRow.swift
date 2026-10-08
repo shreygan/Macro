@@ -12,6 +12,7 @@ struct CustomSwipeRow<Content: View>: View {
     @ViewBuilder var content: Content
     var onDelete: (() -> Void)? = nil
     var onEdit: (() -> Void)? = nil
+    var editTitle: LocalizedStringKey = "Edit"
 
     var onFavorite: (() -> Void)? = nil
     var isFavorited: Bool = false
@@ -151,7 +152,7 @@ struct CustomSwipeRow<Content: View>: View {
                                 .background(Color.gray)
                                 .clipShape(Circle())
 
-                            Text("Edit")
+                            Text(editTitle)
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(.secondary)
                         }

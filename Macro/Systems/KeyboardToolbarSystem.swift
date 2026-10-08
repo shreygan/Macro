@@ -201,6 +201,16 @@ enum KeyboardExpression {
     }
 }
 
+struct KeyboardToolbarActions {
+    var canConfirm: Bool = true
+    var onCancel: () -> Void
+    var onConfirm: () -> Void
+}
+
+struct KeyboardToolbarActionsKey: FocusedValueKey {
+    typealias Value = KeyboardToolbarActions
+}
+
 struct KeyboardToolbarKey: FocusedValueKey {
     typealias Value = KeyboardToolbarStyle
 }
@@ -228,6 +238,11 @@ extension FocusedValues {
     var keyboardToolbarSelection: Binding<TextSelection?>? {
         get { self[KeyboardToolbarSelectionKey.self] }
         set { self[KeyboardToolbarSelectionKey.self] = newValue }
+    }
+
+    var keyboardToolbarActions: KeyboardToolbarActions? {
+        get { self[KeyboardToolbarActionsKey.self] }
+        set { self[KeyboardToolbarActionsKey.self] = newValue }
     }
 }
 
@@ -337,7 +352,8 @@ extension View {
         text: Binding<String>? = nil,
         draft: Binding<String>? = nil,
         selection: Binding<TextSelection?>? = nil,
-        allowsFractions: Bool = true
+        allowsFractions: Bool = true,
+        actions: KeyboardToolbarActions? = nil
     ) -> some View {
         self.modifier(
             KeyboardFieldModifier(
@@ -345,7 +361,8 @@ extension View {
                 text: text,
                 draft: draft,
                 selection: selection,
-                allowsFractions: allowsFractions
+                allowsFractions: allowsFractions,
+                actions: actions
             )
         )
     }
@@ -406,6 +423,7 @@ struct KeyboardFieldModifier: ViewModifier {
     let draft: Binding<String>?
     let selection: Binding<TextSelection?>?
     let allowsFractions: Bool
+    let actions: KeyboardToolbarActions?
 
     @Environment(\.keyboardFieldRegistry) private var registry
     @Environment(\.isEnabled) private var isEnabled
@@ -430,6 +448,7 @@ struct KeyboardFieldModifier: ViewModifier {
             .focusedValue(\.activeKeyboardToolbar, toolbarStyle)
             .focusedValue(\.keyboardToolbarText, displayText)
             .focusedValue(\.keyboardToolbarSelection, selection)
+            .focusedValue(\.keyboardToolbarActions, actions)
             .onGeometryChange(for: CGRect.self) { proxy in
                 proxy.frame(in: .global)
             } action: { frame in
@@ -533,6 +552,7 @@ struct FloatingKeyboardModifier: ViewModifier {
     @FocusedValue(\.activeKeyboardToolbar) var requestedToolbar
     @FocusedBinding(\.keyboardToolbarText) private var focusedText: String?
     @FocusedValue(\.keyboardToolbarSelection) private var focusedSelection
+    @FocusedValue(\.keyboardToolbarActions) private var focusedActions
 
     private var activeToolbar: KeyboardToolbarStyle? {
         guard isSystemKeyboardVisible else { return nil }
@@ -609,6 +629,11 @@ struct FloatingKeyboardModifier: ViewModifier {
     private func toolbarView(for style: KeyboardToolbarStyle) -> some View {
         GlassEffectContainer(spacing: 0) {
             HStack {
+                if style == .done, let focusedActions {
+                    glassButton(icon: "xmark", action: focusedActions.onCancel)
+                        .transition(.opacity)
+                }
+
                 if hasFieldNavigation
                     && !(style != .done && expandedMenu != nil)
                 {
@@ -620,6 +645,9 @@ struct FloatingKeyboardModifier: ViewModifier {
 
                 if style != .done {
                     menuSizingReference(count: style == .fractions ? 2 : 1)
+                } else if let focusedActions {
+                    confirmButton(focusedActions)
+                        .transition(.opacity)
                 }
             }
             .overlay(alignment: .trailing) {
@@ -831,6 +859,17 @@ struct FloatingKeyboardModifier: ViewModifier {
         .controlSize(.large)
         .glassEffectUnion(id: "keyboardFieldNavigation", namespace: glassNamespace)
         .disabled(target == nil)
+    }
+
+    private func confirmButton(_ actions: KeyboardToolbarActions) -> some View {
+        Button(action: actions.onConfirm) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 20, weight: .semibold))
+        }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .disabled(!actions.canConfirm)
     }
 
     private func glassButton(icon: String, action: @escaping () -> Void)

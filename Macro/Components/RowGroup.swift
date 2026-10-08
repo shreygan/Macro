@@ -15,21 +15,26 @@ enum SeparatorStyle {
 
 struct RowGroup<Content: View, BottomContent: View>: View {
     var separator: SeparatorStyle = .divider
+    var isLazy: Bool = false
     @ViewBuilder var content: Content
     @ViewBuilder var bottomContent: BottomContent
 
     init(
         _ separator: SeparatorStyle = .divider,
+        isLazy: Bool = false,
         @ViewBuilder content: () -> Content,
         @ViewBuilder bottomContent: () -> BottomContent
     ) {
         self.separator = separator
+        self.isLazy = isLazy
         self.content = content()
         self.bottomContent = bottomContent()
     }
 
     var body: some View {
-        _VariadicView.Tree(RowGroupLayout(separator: separator)) {
+        _VariadicView.Tree(
+            RowGroupLayout(separator: separator, isLazy: isLazy)
+        ) {
             content
         }
 
@@ -40,9 +45,11 @@ struct RowGroup<Content: View, BottomContent: View>: View {
 extension RowGroup where BottomContent == EmptyView {
     init(
         _ separator: SeparatorStyle = .divider,
+        isLazy: Bool = false,
         @ViewBuilder content: () -> Content
     ) {
         self.separator = separator
+        self.isLazy = isLazy
         self.content = content()
         self.bottomContent = EmptyView()
     }
@@ -50,24 +57,38 @@ extension RowGroup where BottomContent == EmptyView {
 
 struct RowGroupLayout: _VariadicView_UnaryViewRoot {
     var separator: SeparatorStyle
+    var isLazy: Bool = false
 
     @ViewBuilder
     func body(children: _VariadicView.Children) -> some View {
-        VStack(spacing: 0) {
-            ForEach(children) { child in
-                child
+        if isLazy {
+            LazyVStack(spacing: 0) {
+                rows(children)
+            }
+        } else {
+            VStack(spacing: 0) {
+                rows(children)
+            }
+        }
+    }
 
-                if child.id != children.last?.id {
-                    switch separator {
-                    case .divider:
-                        Divider()
-                            .padding(.horizontal, 16)
-                    case .spacing(let space):
-                        Spacer()
-                            .frame(height: space)
-                    case .none:
-                        EmptyView()
-                    }
+    @ViewBuilder
+    private func rows(_ children: _VariadicView.Children) -> some View {
+        let lastID = children.last?.id
+
+        ForEach(children) { child in
+            child
+
+            if child.id != lastID {
+                switch separator {
+                case .divider:
+                    Divider()
+                        .padding(.horizontal, 16)
+                case .spacing(let space):
+                    Spacer()
+                        .frame(height: space)
+                case .none:
+                    EmptyView()
                 }
             }
         }

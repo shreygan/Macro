@@ -23,11 +23,12 @@ struct EntryList<Item: Identifiable & Equatable, RowContent: View>: View {
 
     var onDelete: ((Item) -> Void)? = nil
     var onEdit: ((Item) -> Void)? = nil
+    var editTitle: LocalizedStringKey = "Edit"
     var onFavorite: ((Item) -> Void)? = nil
     var isFavorited: ((Item) -> Bool)? = nil
 
     var body: some View {
-        let content = RowGroup(.divider) {
+        let content = RowGroup(.divider, isLazy: true) {
             ForEach(items) { item in
                 if allowSwipeActions {
                     let deleteAction: (() -> Void)? =
@@ -41,6 +42,7 @@ struct EntryList<Item: Identifiable & Equatable, RowContent: View>: View {
                         content: { rowContent(item) },
                         onDelete: deleteAction,
                         onEdit: editAction,
+                        editTitle: editTitle,
                         onFavorite: favoriteAction,
                         isFavorited: isFavorited?(item) ?? false,
                     )
