@@ -99,4 +99,18 @@ extension LoggedEntry {
 struct AddRecipePrefill {
     var state: AddRecipeDraftState
     var ingredients: [DraftRecipeIngredient]
+
+    static func named(_ name: String) -> AddRecipePrefill {
+        var state = AddRecipeDraftState.empty
+        state.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return AddRecipePrefill(state: state, ingredients: [])
+    }
+}
+
+extension AddEntryDraftState {
+    static func named(_ name: String) -> AddEntryDraftState {
+        var state = AddEntryDraftState.empty
+        state.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return state
+    }
 }

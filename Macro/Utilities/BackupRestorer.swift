@@ -171,7 +171,8 @@ struct BackupRestorer {
             EntrySource(
                 source: record.name,
                 isDefault: record.isDefault,
-                displayOrder: order
+                displayOrder: order,
+                isHidden: record.isHidden ?? false
             )
         }
         let categories = restoreList(
@@ -187,7 +188,8 @@ struct BackupRestorer {
             CategorySource(
                 category: record.name,
                 isDefault: record.isDefault,
-                displayOrder: order
+                displayOrder: order,
+                isHidden: record.isHidden ?? false
             )
         }
         let foodGroups = restoreList(
@@ -203,7 +205,8 @@ struct BackupRestorer {
             FoodGroupSource(
                 foodGroup: record.name,
                 isDefault: record.isDefault,
-                displayOrder: order
+                displayOrder: order,
+                isHidden: record.isHidden ?? false
             )
         }
         let units = restoreList(

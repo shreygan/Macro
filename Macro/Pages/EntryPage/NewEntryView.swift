@@ -8,11 +8,23 @@
 import SwiftData
 import SwiftUI
 
+private struct NewFoodRequest: Identifiable {
+    let id = UUID()
+    let name: String
+}
+
+private final class SearchLogStatsCache {
+    var stats: [UUID: FoodLogStats]?
+}
+
 struct NewEntryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) var dismiss
 
-    @Query(sort: \FavoriteEntry.orderIndex) private var favoriteEntries:
+    var onBrowseLibrary: (() -> Void)? = nil
+    var onFinishLogging: (() -> Void)? = nil
+
+    @Query(NewEntryView.favoritesDescriptor) private var favoriteEntries:
         [FavoriteEntry]
     @Query(sort: \ServingSizeUnit.displayOrder) private var portionUnitOptions:
         [ServingSizeUnit]
@@ -20,18 +32,35 @@ struct NewEntryView: View {
         [FoodItem]
     @Query(sort: \EntryDraft.updatedAt, order: .reverse) private var drafts:
         [EntryDraft]
-    @Query private var loggedEntries: [LoggedEntry]
+    @Query(NewEntryView.recentEntriesDescriptor) private var recentEntries:
+        [LoggedEntry]
+
+    @State private var searchLogStats = SearchLogStatsCache()
 
     @State private var draftToResume: EntryDraft? = nil
     @State private var draftToDelete: EntryDraft? = nil
     @State private var showDraftDeleteAlert = false
+    @State private var showAllDrafts = false
 
-    private var sortedDrafts: [EntryDraft] {
-        func sortDate(_ draft: EntryDraft) -> Date {
-            draft.kind?.isLog == true
-                ? (draft.timestamp ?? draft.updatedAt) : draft.updatedAt
-        }
-        return drafts.sorted { sortDate($0) > sortDate($1) }
+    private let recentLimit = 10
+    private let draftPreviewLimit = 3
+
+    private static var recentEntriesDescriptor: FetchDescriptor<LoggedEntry> {
+        var descriptor = FetchDescriptor<LoggedEntry>(
+            predicate: #Predicate { $0.parentEntry == nil },
+            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+        )
+        descriptor.fetchLimit = 100
+        descriptor.relationshipKeyPathsForPrefetching = [\.originalFoodItem]
+        return descriptor
+    }
+
+    private static var favoritesDescriptor: FetchDescriptor<FavoriteEntry> {
+        var descriptor = FetchDescriptor<FavoriteEntry>(
+            sortBy: [SortDescriptor(\.orderIndex)]
+        )
+        descriptor.relationshipKeyPathsForPrefetching = [\.foodItem]
+        return descriptor
     }
 
     @State private var searchText = ""
@@ -39,199 +68,189 @@ struct NewEntryView: View {
     @State private var showAddIngredientSheet = false
     @State private var showAddFoodSheet = false
     @State private var showAddRecipeSheet = false
+    @State private var foodToCreate: NewFoodRequest? = nil
     @State private var foodToLog: FoodItem? = nil
     @State private var recipeToLog: FoodItem? = nil
 
-    @State private var showDeleteAlert = false
-    @State private var foodToDelete: FoodItem?
-    @State private var showEditSheet = false
-    @State private var foodToEdit: FoodItem?
-
     @State private var showReorderFavoritesSheet = false
 
-    @State private var sortOption: FoodSortOption = .lastLogged
-    @State private var sortDescending: Bool = true
+    @State private var foodToEdit: FoodItem? = nil
+    @State private var foodToDelete: FoodItem? = nil
+    @State private var showDeleteAlert = false
 
-    @State private var showFilterSheet = false
-    @State private var selectedTypes: Set<String> = []
-    @State private var selectedSources: Set<String> = []
-    @State private var selectedCategories: Set<String> = []
-
-    private var hasActiveFilters: Bool {
-        !searchText.isEmpty || !selectedTypes.isEmpty
-            || !selectedSources.isEmpty || !selectedCategories.isEmpty
+    private var isSearching: Bool {
+        !searchText.isEmpty
     }
 
-    private var lastLoggedDates: [UUID: Date] {
-        var result: [UUID: Date] = [:]
-        for entry in loggedEntries {
-            guard let id = entry.originalFoodItem?.id else { continue }
-            if let existing = result[id], existing > entry.timestamp {
-                continue
+    private var searchResults: [FoodItem] {
+        let matches = allFoods.filter { food in
+            food.name.localizedStandardContains(searchText)
+                || (food.source?.source.localizedStandardContains(searchText)
+                    ?? false)
+        }
+
+        let stats = logStats()
+        return matches.sorted { lhs, rhs in
+            let lhsDate = stats[lhs.id]?.lastLogged ?? .distantPast
+            let rhsDate = stats[rhs.id]?.lastLogged ?? .distantPast
+            if lhsDate == rhsDate {
+                return lhs.dateAdded > rhs.dateAdded
             }
-            result[id] = entry.timestamp
+            return lhsDate > rhsDate
+        }
+    }
+
+    private func logStats() -> [UUID: FoodLogStats] {
+        if let stats = searchLogStats.stats {
+            return stats
+        }
+        let stats = FoodItemStore.logStats(in: modelContext)
+        searchLogStats.stats = stats
+        return stats
+    }
+
+    private var recentFoods: [FoodItem] {
+        var seen = Set<UUID>()
+        var result: [FoodItem] = []
+        for entry in recentEntries {
+            guard let food = entry.originalFoodItem,
+                seen.insert(food.id).inserted
+            else { continue }
+            result.append(food)
+            if result.count == recentLimit { break }
         }
         return result
     }
 
-    private var filteredAllFoods: [FoodItem] {
-        var result =
-            searchText.isEmpty
-            ? allFoods
-            : allFoods.filter { food in
-                food.name.localizedStandardContains(searchText)
-                    || (food.source?.source.localizedStandardContains(
-                        searchText
-                    ) ?? false)
-            }
-
-        if !selectedTypes.isEmpty {
-            result = result.filter { food in
-                selectedTypes.contains(food.type.rawValue.capitalized)
-            }
-        }
-
-        if !selectedSources.isEmpty {
-            result = result.filter { food in
-                guard let sourceName = food.source?.source else {
-                    return false
-                }
-                return selectedSources.contains(sourceName)
-            }
-        }
-
-        if !selectedCategories.isEmpty {
-            result = result.filter { food in
-                guard let categoryName = food.category?.category else {
-                    return false
-                }
-                return selectedCategories.contains(categoryName)
-            }
-        }
-
-        let lastLoggedDates = lastLoggedDates
-        return result.sorted { lhs, rhs in
-            switch sortOption {
-            case .name:
-                return lhs.name.localizedStandardCompare(rhs.name)
-                    == .orderedAscending
-            case .dateAdded:
-                return sortDescending
-                    ? lhs.dateAdded > rhs.dateAdded
-                    : lhs.dateAdded < rhs.dateAdded
-            case .lastLogged:
-                let lhsDate = lastLoggedDates[lhs.id] ?? .distantPast
-                let rhsDate = lastLoggedDates[rhs.id] ?? .distantPast
-                return sortDescending
-                    ? lhsDate > rhsDate : lhsDate < rhsDate
-            case .calories:
-                return sortDescending
-                    ? lhs.calories > rhs.calories : lhs.calories < rhs.calories
-            case .protein:
-                return sortDescending
-                    ? lhs.protein > rhs.protein : lhs.protein < rhs.protein
-            case .carbs:
-                return sortDescending
-                    ? lhs.carbs > rhs.carbs : lhs.carbs < rhs.carbs
-            case .fat:
-                return sortDescending ? lhs.fat > rhs.fat : lhs.fat < rhs.fat
-            case .fiber:
-                return sortDescending
-                    ? lhs.fiber > rhs.fiber : lhs.fiber < rhs.fiber
-            }
-        }
-    }
-
-    private var filterButton: some View {
-        Button {
-            showFilterSheet = true
-        } label: {
-            Image(
-                systemName: hasActiveFilters
-                    ? "line.3.horizontal.decrease.circle.fill"
-                    : "line.3.horizontal.decrease.circle"
-            )
-            .tint(.primary)
-        }
-    }
-
-    private var sortMenu: some View {
-        Menu {
-            Picker("Sort By", selection: $sortOption) {
-                Text("Name").tag(FoodSortOption.name)
-                Text("Date Added").tag(FoodSortOption.dateAdded)
-                Text("Recently Logged").tag(FoodSortOption.lastLogged)
-                Text("Calories").tag(FoodSortOption.calories)
-                Text("Protein").tag(FoodSortOption.protein)
-                Text("Carbohydrates").tag(FoodSortOption.carbs)
-                Text("Fat").tag(FoodSortOption.fat)
-                Text("Fiber").tag(FoodSortOption.fiber)
-            }
-            if sortOption != .name {
-                Divider()
-                Picker("Order", selection: $sortDescending) {
-                    if sortOption == .dateAdded || sortOption == .lastLogged {
-                        Text("Newest First").tag(true)
-                        Text("Oldest First").tag(false)
-                    } else {
-                        Text("Highest First").tag(true)
-                        Text("Lowest First").tag(false)
-                    }
-                }
-            }
-        } label: {
-            Image(systemName: "arrow.up.arrow.down")
-        }
-    }
-
-    @ViewBuilder
     private func foodRow(for food: FoodItem) -> some View {
-        let displayPortion = EntryHelper.defaultPortion(for: food)
-        let multiplier = EntryHelper.defaultPortionMultiplier(for: food)
-
         MealRow(
-            name: food.name,
-            source: food.source?.source ?? "None",
-            isCustomDefaultServing: food.isCustomDefaultServing,
-            customServingSize: EntryHelper.format(food.customServingSize),
-            servingSize: EntryHelper.format(displayPortion),
-            servingSizeUnit: food.servingUnit?.unit ?? "serving",
-            servingWeight: EntryHelper.format(food.servingWeight),
-            servingWeightUnit: food.servingWeightUnit,
+            food: food,
             servingUnits: portionUnitOptions,
-            calorie: EntryHelper.scale(
-                EntryHelper.format(food.calories),
-                by: multiplier
-            ),
-            protein: EntryHelper.scale(
-                EntryHelper.format(food.protein),
-                by: multiplier
-            ),
-            carbs: EntryHelper.scale(
-                EntryHelper.format(food.carbs),
-                by: multiplier
-            ),
-            fat: EntryHelper.scale(
-                EntryHelper.format(food.fat),
-                by: multiplier
-            ),
-            fiber: EntryHelper.scale(
-                EntryHelper.format(food.fiber),
-                by: multiplier
-            ),
             icon: food.type.appSymbol
         ) {
-            if food.type == .recipe {
-                recipeToLog = food
-            } else {
-                foodToLog = food
+            log(food)
+        }
+    }
+
+    private func log(_ food: FoodItem) {
+        if food.type == .recipe {
+            recipeToLog = food
+        } else {
+            foodToLog = food
+        }
+    }
+
+    private func finishLogging() {
+        dismiss()
+        onFinishLogging?()
+    }
+
+    private func confirmDelete(_ food: FoodItem) {
+        foodToDelete = food
+        showDeleteAlert = true
+    }
+
+    private func confirmDelete(_ draft: EntryDraft) {
+        draftToDelete = draft
+        showDraftDeleteAlert = true
+    }
+
+    private func foodList(_ foods: [FoodItem]) -> some View {
+        EntryList(
+            items: foods,
+            allowSwipeActions: true,
+            showCard: false,
+            rowContent: { food in
+                foodRow(for: food)
+                    .contextMenu {
+                        FoodActionMenuItems(
+                            food: food,
+                            onLog: { log(food) },
+                            onEdit: { foodToEdit = food },
+                            onDelete: { confirmDelete(food) }
+                        )
+                    }
+            },
+            onDelete: { food in
+                confirmDelete(food)
+            },
+            onEdit: { food in
+                foodToEdit = food
+            },
+            onFavorite: { food in
+                FoodItemStore.toggleFavorite(food, in: modelContext)
+            },
+            isFavorited: { food in
+                food.favoriteEntry != nil
             }
+        )
+    }
+
+    private func draftList(_ drafts: [EntryDraft]) -> some View {
+        EntryList(
+            items: drafts,
+            allowSwipeActions: true,
+            showCard: false,
+            rowContent: { draft in
+                DraftRow(
+                    draft: draft,
+                    servingUnits: portionUnitOptions,
+                    showsLogDate: true
+                ) {
+                    draftToResume = draft
+                }
+                .contextMenu {
+                    Button {
+                        draftToResume = draft
+                    } label: {
+                        Label("Resume Draft", systemImage: "square.and.pencil")
+                    }
+
+                    Divider()
+
+                    Button(role: .destructive) {
+                        confirmDelete(draft)
+                    } label: {
+                        Label("Delete Draft", systemImage: "trash")
+                    }
+                }
+            },
+            onDelete: { draft in
+                confirmDelete(draft)
+            }
+        )
+    }
+
+    private func emptyText(_ text: LocalizedStringKey) -> some View {
+        Text(text)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(.secondary)
+            .padding()
+            .transition(.opacity)
+    }
+
+    private var noResultsView: some View {
+        ContentUnavailableView {
+            Label(
+                "No Results for \"\(searchText)\"",
+                systemImage: "magnifyingglass"
+            )
+        } description: {
+            Text("Try a new search or create a new item.")
+                .font(.subheadline)
+        } actions: {
+            Button("Create New Food") {
+                foodToCreate = NewFoodRequest(name: searchText)
+            }
+            .tint(.blue)
         }
     }
 
     var body: some View {
         let favoritedFoods = favoriteEntries.compactMap { $0.foodItem }
-        let filteredFoods = filteredAllFoods
+        let recentFoods = recentFoods
+        let searchResults = isSearching ? searchResults : []
+        let showsNoResults = isSearching && searchResults.isEmpty
 
         NavigationStack {
             ZStack {
@@ -239,7 +258,7 @@ struct NewEntryView: View {
 
                 ScrollView {
                     VStack {
-                        if !hasActiveFilters {
+                        if !isSearching {
                             Group {
                                 Card("New Entry") {
                                     ButtonRow(
@@ -267,87 +286,12 @@ struct NewEntryView: View {
                                 }
                                 .padding([.leading, .trailing])
 
-                                Card("Library") {
-                                    RowGroup(.divider) {
-                                        NavigationLink(
-                                            destination: LibraryView(
-                                                defaultType: .specific(
-                                                    .ingredient
-                                                )
-                                            )
-                                        ) {
-                                            NavigationRow(
-                                                icon: .appSymbol(.ingredient),
-                                                title: "Ingredients"
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        NavigationLink(
-                                            destination: LibraryView(
-                                                defaultType: .specific(.food)
-                                            )
-                                        ) {
-                                            NavigationRow(
-                                                icon: .appSymbol(.food),
-                                                title: "Foods"
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-
-                                        NavigationLink(
-                                            destination: LibraryView(
-                                                defaultType: .specific(.recipe)
-                                            )
-                                        ) {
-                                            NavigationRow(
-                                                icon: .appSymbol(.recipe),
-                                                title: "Recipes"
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-
-                                }
-                                .padding([.top, .leading, .trailing])
-
                                 Card("Favorites", titleBottomPadding: -4) {
                                     if favoritedFoods.isEmpty {
-                                        Text("No favorites yet.")
-                                            .font(
-                                                .system(
-                                                    size: 14,
-                                                    weight: .medium
-                                                )
-                                            )
-                                            .foregroundColor(.secondary)
-                                            .padding()
-                                            .transition(.opacity)
+                                        emptyText("No favorites yet.")
                                     } else {
-                                        EntryList(
-                                            items: favoritedFoods,
-                                            allowSwipeActions: true,
-                                            showCard: false,
-                                            rowContent: { food in
-                                                foodRow(for: food)
-                                            },
-                                            onEdit: { food in
-                                                foodToEdit = food
-                                                showEditSheet = true
-                                            },
-                                            onFavorite: { food in
-                                                if let entry = food
-                                                    .favoriteEntry
-                                                {
-                                                    modelContext.delete(entry)
-                                                    try? modelContext.save()
-                                                }
-                                            },
-                                            isFavorited: { food in
-                                                food.favoriteEntry != nil
-                                            }
-                                        )
-                                        .transition(.opacity)
+                                        foodList(favoritedFoods)
+                                            .transition(.opacity)
                                     }
                                 } menuItems: {
                                     Button {
@@ -363,104 +307,84 @@ struct NewEntryView: View {
 
                                 if !drafts.isEmpty {
                                     Card("Drafts", titleBottomPadding: -4) {
-                                        EntryList(
-                                            items: sortedDrafts,
-                                            allowSwipeActions: true,
-                                            showCard: false,
-                                            rowContent: { draft in
-                                                DraftRow(
-                                                    draft: draft,
-                                                    servingUnits:
-                                                        portionUnitOptions,
-                                                    showsLogDate: true
-                                                ) {
-                                                    draftToResume = draft
-                                                }
-                                            },
-                                            onDelete: { draft in
-                                                draftToDelete = draft
-                                                showDraftDeleteAlert = true
-                                            }
+                                        draftList(
+                                            Array(
+                                                drafts.prefix(draftPreviewLimit)
+                                            )
                                         )
+
+                                        if drafts.count > draftPreviewLimit {
+                                            ButtonRow(
+                                                icon: .customSymbol(
+                                                    "tray.full"
+                                                ),
+                                                title:
+                                                    "See All Drafts (\(drafts.count))"
+                                            ) {
+                                                showAllDrafts = true
+                                            }
+                                            .transition(.opacity)
+                                        }
                                     }
                                     .padding([.top, .leading, .trailing])
                                     .transition(.opacity)
                                 }
-                            }
-                            .transition(.opacity)
-                        }
 
-                        if !allFoods.isEmpty {
-                            Card {
-                                if filteredFoods.isEmpty {
-                                    Text("No entries match these filters.")
-                                        .font(
-                                            .system(size: 14, weight: .medium)
-                                        )
-                                        .foregroundColor(.secondary)
-                                        .padding()
-                                        .transition(.opacity)
-                                } else {
-                                    EntryList(
-                                        items: filteredFoods,
-                                        allowSwipeActions: true,
-                                        showCard: false,
-                                        rowContent: { food in
-                                            foodRow(for: food)
-                                        },
-                                        onDelete: { food in
-                                            foodToDelete = food
-                                            showDeleteAlert = true
-                                        },
-                                        onEdit: { food in
-                                            foodToEdit = food
-                                            showEditSheet = true
-                                        },
-                                        onFavorite: { food in
-                                            let descriptor = FetchDescriptor<
-                                                FavoriteEntry
-                                            >()
-                                            let existingFavorites =
-                                                (try? modelContext.fetch(
-                                                    descriptor
-                                                )) ?? []
-
-                                            let maxIndex =
-                                                existingFavorites.compactMap {
-                                                    $0.orderIndex
-                                                }.max() ?? -1
-
-                                            let newFavorite = FavoriteEntry(
-                                                orderIndex: maxIndex + 1,
-                                                foodItem: food
+                                if !allFoods.isEmpty {
+                                    Card("Recents", titleBottomPadding: -4) {
+                                        if recentFoods.isEmpty {
+                                            emptyText(
+                                                "Recently logged items will appear here."
                                             )
-                                            modelContext.insert(newFavorite)
-
-                                            try? modelContext.save()
-                                        },
-                                        isFavorited: { food in
-                                            food.favoriteEntry != nil
+                                        } else {
+                                            foodList(recentFoods)
+                                                .transition(.opacity)
                                         }
-                                    )
-                                    .transition(.opacity)
+
+                                        if let onBrowseLibrary {
+                                            ButtonRow(
+                                                icon: .customSymbol(
+                                                    "book.pages"
+                                                ),
+                                                title: "Browse Library",
+                                                topPadding: recentFoods.isEmpty
+                                                    ? 0 : 8
+                                            ) {
+                                                dismiss()
+                                                onBrowseLibrary()
+                                            }
+                                        }
+                                    }
+                                    .padding([.top, .leading, .trailing])
                                 }
                             }
-                            .padding([.top, .leading, .trailing])
+                            .transition(.opacity)
+                        } else if !searchResults.isEmpty {
+                            Card {
+                                foodList(searchResults)
+                                    .transition(.opacity)
+                            }
+                            .padding([.leading, .trailing])
+                            .transition(.opacity)
                         }
 
                         Spacer()
                     }
                     .animation(
                         .easeInOut(duration: 0.25),
-                        value: hasActiveFilters
+                        value: isSearching
                     )
                     .animation(
                         .easeInOut(duration: 0.25),
-                        value: filteredFoods.isEmpty
+                        value: searchResults.isEmpty
                     )
                     .animation(
                         .easeInOut(duration: 0.25),
                         value: favoritedFoods.isEmpty
+                    )
+                    .animation(
+                        .easeInOut(duration: 0.25),
+                        value: recentFoods.isEmpty
                     )
                     .animation(
                         .easeInOut(duration: 0.25),
@@ -472,9 +396,18 @@ struct NewEntryView: View {
                     )
                     .animation(
                         .spring(response: 0.4, dampingFraction: 0.8),
-                        value: filteredFoods
+                        value: recentFoods
+                    )
+                    .animation(
+                        .spring(response: 0.4, dampingFraction: 0.8),
+                        value: drafts
+                    )
+                    .animation(
+                        .spring(response: 0.4, dampingFraction: 0.8),
+                        value: searchResults
                     )
                 }
+                .contentMargins(.bottom, 8, for: .scrollContent)
                 .navigationTitle("New Entry")
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(
@@ -483,6 +416,17 @@ struct NewEntryView: View {
                 )
                 .searchDictationBehavior(.automatic)
                 .searchPresentationToolbarBehavior(.avoidHidingContent)
+                .onChange(of: isSearching) { _, searching in
+                    if !searching {
+                        searchLogStats.stats = nil
+                    }
+                }
+                .navigationDestination(isPresented: $showAllDrafts) {
+                    DraftListView(
+                        onResume: { draftToResume = $0 },
+                        onDelete: { confirmDelete($0) }
+                    )
+                }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
@@ -492,15 +436,16 @@ struct NewEntryView: View {
                                 .foregroundStyle(.primary)
                         }
                     }
+                }
 
-                    ToolbarItemGroup(placement: .topBarTrailing) {
-                        filterButton
-                        sortMenu
-                    }
+                if showsNoResults {
+                    noResultsView
+                        .transition(.opacity)
                 }
             }
+            .animation(.easeInOut(duration: 0.25), value: showsNoResults)
         }
-        .environment(\.rootDismiss, { dismiss() })
+        .environment(\.rootDismiss, { finishLogging() })
         .sheet(isPresented: $showAddIngredientSheet) {
             AddEntryView(
                 entryType: .ingredient,
@@ -515,6 +460,15 @@ struct NewEntryView: View {
                 onLogInstantly: { savedFood in
                     self.foodToLog = savedFood
                 }
+            )
+        }
+        .sheet(item: $foodToCreate) { request in
+            AddEntryView(
+                entryType: .food,
+                onLogInstantly: { savedFood in
+                    self.foodToLog = savedFood
+                },
+                prefill: .named(request.name)
             )
         }
         .sheet(isPresented: $showAddRecipeSheet) {
@@ -544,7 +498,7 @@ struct NewEntryView: View {
                             }
                         }
                         .environment(\.rootDismiss) {
-                            dismiss()
+                            finishLogging()
                         }
                     }
                 case .addRecipe:
@@ -568,14 +522,17 @@ struct NewEntryView: View {
         .sheet(item: $foodToLog) { food in
             LogEntryView(food: food, isPushedView: false)
                 .environment(\.rootDismiss) {
-                    dismiss()
+                    finishLogging()
                 }
         }
         .sheet(item: $recipeToLog) { recipe in
             LogRecipeView(recipe: recipe, isPushedView: false)
                 .environment(\.rootDismiss) {
-                    dismiss()
+                    finishLogging()
                 }
+        }
+        .sheet(isPresented: $showReorderFavoritesSheet) {
+            ReorderFavoritesView()
         }
         .sheet(item: $foodToEdit) { food in
             if food.type == .recipe {
@@ -583,19 +540,6 @@ struct NewEntryView: View {
             } else {
                 EditEntryView(foodItem: food)
             }
-        }
-        .sheet(isPresented: $showReorderFavoritesSheet) {
-            ReorderFavoritesView()
-        }
-        .sheet(isPresented: $showFilterSheet) {
-            FilterView(
-                selectedTypes: $selectedTypes,
-                selectedSources: $selectedSources,
-                selectedCategories: $selectedCategories,
-                defaultType: .all
-            )
-            .presentationDetents([.height(350)])
-            .presentationDragIndicator(.visible)
         }
         .deleteFoodAlert(isPresented: $showDeleteAlert, food: $foodToDelete)
         .alert(

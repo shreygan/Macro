@@ -12,11 +12,38 @@ enum FoodSortOption {
     case name
     case dateAdded
     case lastLogged
+    case mostLogged
     case calories
     case protein
     case carbs
     case fat
     case fiber
+}
+
+enum LibraryChip: Hashable {
+    case all
+    case favorites
+    case type(EntryType)
+
+    static let allChips: [LibraryChip] =
+        [.all, .favorites]
+        + [EntryType.ingredient, .food, .recipe, .drink].map { .type($0) }
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .favorites: return "Favorites"
+        case .type(let type): return "\(type.rawValue.capitalized)s"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .all: return AppSymbols.all.rawValue
+        case .favorites: return "star.fill"
+        case .type(let type): return type.appSymbol.rawValue
+        }
+    }
 }
 
 nonisolated enum SwipeAction: Hashable, Sendable {
@@ -31,18 +58,29 @@ struct LibraryView<Header: View>: View {
     var swipeActions: Set<SwipeAction>
     var onSelect: ((FoodItem) -> Void)? = nil
     var defaultType: LibraryFilterType
+    var isTabRoot: Bool
+    var popToRootTrigger: Int
     let headerContent: Header
 
     @Query(sort: \FoodItem.dateAdded, order: .reverse) var savedMeals:
         [FoodItem]
     @Query(sort: \ServingSizeUnit.displayOrder) var portionUnitOptions:
         [ServingSizeUnit]
+    @Query private var sourceOptions: [EntrySource]
+    @Query private var categoryOptions: [CategorySource]
+
+    @State private var selectedChip: LibraryChip = .all
+    @State private var listToManage: LibraryListKind? = nil
+    @Environment(\.tabBarHeight) private var tabBarHeight
+
+    @State private var foodToLog: FoodItem? = nil
 
     @State private var selectedFood: FoodItem?
     @State private var searchText = ""
 
     @State private var sortOption: FoodSortOption = .dateAdded
     @State private var sortDescending: Bool = true
+    @State private var logStats: [UUID: FoodLogStats] = [:]
 
     @State private var showFilterSheet = false
     @State private var selectedTypes: Set<String>
@@ -52,10 +90,10 @@ struct LibraryView<Header: View>: View {
     @State private var showDeleteAlert = false
     @State private var foodToDelete: FoodItem?
 
-    @State private var showEditSheet = false
     @State private var foodToEdit: FoodItem?
 
     @State private var entryTypeToAdd: EntryType?
+    @State private var newEntryName = ""
 
     private var addableEntryType: EntryType {
         guard selectedTypes.count == 1,
@@ -68,10 +106,20 @@ struct LibraryView<Header: View>: View {
     }
 
     private var dynamicTitle: String {
-        if selectedTypes.count == 1, let singleType = selectedTypes.first {
+        if !isTabRoot, selectedTypes.count == 1,
+            let singleType = selectedTypes.first
+        {
             return "\(singleType)s"
         }
         return title
+    }
+
+    private var usesLogStats: Bool {
+        sortOption == .lastLogged || sortOption == .mostLogged
+    }
+
+    private var hasListFilters: Bool {
+        !selectedSources.isEmpty || !selectedCategories.isEmpty
     }
 
     var filteredFoods: [FoodItem] {
@@ -111,7 +159,13 @@ struct LibraryView<Header: View>: View {
             }
         }
 
+        if selectedChip == .favorites {
+            result = result.filter { $0.favoriteEntry != nil }
+        }
+
         // 5. Sort filtered results
+        let stats = logStats
+
         return result.sorted { lhs, rhs in
             switch sortOption {
             case .name:
@@ -122,9 +176,18 @@ struct LibraryView<Header: View>: View {
                     ? lhs.dateAdded > rhs.dateAdded
                     : lhs.dateAdded < rhs.dateAdded
             case .lastLogged:
+                let lhsDate = stats[lhs.id]?.lastLogged ?? .distantPast
+                let rhsDate = stats[rhs.id]?.lastLogged ?? .distantPast
+                return sortDescending ? lhsDate > rhsDate : lhsDate < rhsDate
+            case .mostLogged:
+                let lhsCount = stats[lhs.id]?.count ?? 0
+                let rhsCount = stats[rhs.id]?.count ?? 0
+                if lhsCount == rhsCount {
+                    return lhs.name.localizedStandardCompare(rhs.name)
+                        == .orderedAscending
+                }
                 return sortDescending
-                    ? lhs.dateAdded > rhs.dateAdded
-                    : lhs.dateAdded < rhs.dateAdded
+                    ? lhsCount > rhsCount : lhsCount < rhsCount
             case .calories:
                 return sortDescending
                     ? lhs.calories > rhs.calories : lhs.calories < rhs.calories
@@ -148,12 +211,16 @@ struct LibraryView<Header: View>: View {
         searchPrompt: String = "What did you eat today?",
         defaultType: LibraryFilterType = .all,
         swipeActions: Set<SwipeAction> = [.edit, .delete, .favorite],
+        isTabRoot: Bool = false,
+        popToRootTrigger: Int = 0,
         onSelect: ((FoodItem) -> Void)? = nil,
         @ViewBuilder headerContent: () -> Header = { EmptyView() }
     ) {
         self.title = title
         self.searchPrompt = searchPrompt
         self.defaultType = defaultType
+        self.isTabRoot = isTabRoot
+        self.popToRootTrigger = popToRootTrigger
         self.swipeActions = swipeActions
         self.onSelect = onSelect
         self.headerContent = headerContent()
@@ -164,10 +231,13 @@ struct LibraryView<Header: View>: View {
     }
 
     var body: some View {
-        ZStack {
-            Color.background.ignoresSafeArea()
+        let foods = filteredFoods
 
-            if filteredFoods.isEmpty {
+        ZStack {
+            (isTabRoot ? Color.clear : Color.background)
+                .ignoresSafeArea()
+
+            if foods.isEmpty {
                 VStack(spacing: 0) {
                     headerContent
                         .padding([.horizontal, .bottom])
@@ -184,43 +254,39 @@ struct LibraryView<Header: View>: View {
                             .padding([.horizontal, .bottom])
 
                         EntryList(
-                            items: filteredFoods,
+                            items: foods,
                             allowSwipeActions: !swipeActions.isEmpty,
                             rowContent: { food in
-                                foodRow(for: food)
+                                if isTabRoot {
+                                    foodRow(for: food)
+                                        .contextMenu {
+                                            FoodActionMenuItems(
+                                                food: food,
+                                                onLog: { foodToLog = food },
+                                                onEdit: { foodToEdit = food },
+                                                onDelete: {
+                                                    confirmDelete(food)
+                                                }
+                                            )
+                                        }
+                                } else {
+                                    foodRow(for: food)
+                                }
                             },
                             onDelete: swipeActions.contains(.delete)
                                 ? { food in
-                                    foodToDelete = food
-                                    showDeleteAlert = true
+                                    confirmDelete(food)
                                 } : nil,
                             onEdit: swipeActions.contains(.edit)
                                 ? { food in
                                     foodToEdit = food
-                                    showEditSheet = true
                                 } : nil,
                             onFavorite: swipeActions.contains(.favorite)
                                 ? { food in
-                                    let descriptor = FetchDescriptor<
-                                        FavoriteEntry
-                                    >()
-                                    let existingFavorites =
-                                        (try? modelContext.fetch(descriptor))
-                                        ?? []
-
-                                    let maxIndex =
-                                        existingFavorites.compactMap {
-                                            $0.orderIndex
-                                        }.max() ?? -1
-
-                                    let newFavorite = FavoriteEntry(
-                                        orderIndex: maxIndex + 1,
-                                        foodItem: food
+                                    FoodItemStore.toggleFavorite(
+                                        food,
+                                        in: modelContext
                                     )
-                                    modelContext.insert(newFavorite)
-
-                                    try? modelContext.save()
-
                                 } : nil,
                             isFavorited: { food in
                                 food.favoriteEntry != nil
@@ -229,24 +295,64 @@ struct LibraryView<Header: View>: View {
                         .padding([.horizontal, .bottom])
                     }
                 }
+                .contentMargins(
+                    .bottom,
+                    tabBarHeight > 0 ? tabBarHeight + 12 : 0,
+                    for: .scrollContent
+                )
+                .contentMargins(.bottom, tabBarHeight, for: .scrollIndicators)
+                .ignoresSafeArea(edges: tabBarHeight > 0 ? .bottom : [])
+                .id(selectedChip)
                 .transition(.opacity)
                 .zIndex(2)
             }
         }
         .withGlobalSwipeDismissal()
-        .animation(.easeInOut(duration: 0.25), value: filteredFoods.isEmpty)
+        .animation(.easeInOut(duration: 0.25), value: foods.isEmpty)
         .navigationTitle(dynamicTitle)
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.immediately)
-        .searchable(text: $searchText, prompt: searchPrompt)
+        .safeAreaBar(edge: .top) {
+            if isTabRoot {
+                chipsBar
+            }
+        }
+        .searchable(
+            text: $searchText,
+            placement: isTabRoot
+                ? .navigationBarDrawer(displayMode: .always) : .automatic,
+            prompt: searchPrompt
+        )
         .searchDictationBehavior(.automatic)
         .searchPresentationToolbarBehavior(.avoidHidingContent)
-        .navigationDestination(item: $selectedFood) { foodToLog in
-            if foodToLog.type == .recipe {
-                LogRecipeView(recipe: foodToLog)
+        .navigationDestination(item: $selectedFood) { food in
+            if isTabRoot {
+                FoodDetailView(food: food)
+            } else if food.type == .recipe {
+                LogRecipeView(recipe: food)
             } else {
-                LogEntryView(food: foodToLog)
+                LogEntryView(food: food)
             }
+        }
+        .navigationDestination(item: $listToManage) { kind in
+            ManageListView(kind: kind)
+        }
+        .onAppear(perform: refreshLogStats)
+        .onChange(of: usesLogStats) {
+            refreshLogStats()
+        }
+        .onChange(of: popToRootTrigger) {
+            selectedFood = nil
+            listToManage = nil
+        }
+        .onChange(of: sourceOptions.map(\.source)) { _, names in
+            selectedSources.formIntersection(names)
+        }
+        .onChange(of: categoryOptions.map(\.category)) { _, names in
+            selectedCategories.formIntersection(names)
+        }
+        .sheet(item: $foodToLog, onDismiss: refreshLogStats) { food in
+            LogFoodSheet(food: food)
         }
         .sheet(item: $foodToEdit) { food in
             if food.type == .recipe {
@@ -259,7 +365,8 @@ struct LibraryView<Header: View>: View {
             isPresented: Binding(
                 get: { entryTypeToAdd != nil },
                 set: { if !$0 { entryTypeToAdd = nil } }
-            )
+            ),
+            onDismiss: { newEntryName = "" }
         ) {
             if let type = entryTypeToAdd {
                 addEntrySheet(for: type)
@@ -270,60 +377,28 @@ struct LibraryView<Header: View>: View {
                 selectedTypes: $selectedTypes,
                 selectedSources: $selectedSources,
                 selectedCategories: $selectedCategories,
-                defaultType: defaultType
+                defaultType: defaultType,
+                showsTypeFilter: !isTabRoot
             )
-            .presentationDetents([.height(350)])
+            .presentationDetents([.height(isTabRoot ? 250 : 350)])
             .presentationDragIndicator(.visible)
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 filterButton
                 sortMenu
+                if isTabRoot {
+                    manageMenu
+                }
             }
         }
         .deleteFoodAlert(isPresented: $showDeleteAlert, food: $foodToDelete)
     }
 
-    @ViewBuilder
     private func foodRow(for food: FoodItem) -> some View {
-        let displayPortion =
-            (food.isCustomDefaultServing && food.customServingSize != nil)
-            ? food.customServingSize! : food.servingSize
-        let multiplier = EntryHelper.calculateMultiplier(
-            targetPortion: displayPortion,
-            basePortion: food.servingSize
-        )
-
         MealRow(
-            name: food.name,
-            source: food.source?.source ?? "None",
-            isCustomDefaultServing: food.isCustomDefaultServing,
-            customServingSize: EntryHelper.format(food.customServingSize),
-            servingSize: EntryHelper.format(displayPortion),
-            servingSizeUnit: food.servingUnit?.unit ?? "serving",
-            servingWeight: EntryHelper.format(food.servingWeight),
-            servingWeightUnit: food.servingWeightUnit,
+            food: food,
             servingUnits: portionUnitOptions,
-            calorie: EntryHelper.scale(
-                EntryHelper.format(food.calories),
-                by: multiplier
-            ),
-            protein: EntryHelper.scale(
-                EntryHelper.format(food.protein),
-                by: multiplier
-            ),
-            carbs: EntryHelper.scale(
-                EntryHelper.format(food.carbs),
-                by: multiplier
-            ),
-            fat: EntryHelper.scale(
-                EntryHelper.format(food.fat),
-                by: multiplier
-            ),
-            fiber: EntryHelper.scale(
-                EntryHelper.format(food.fiber),
-                by: multiplier
-            ),
             icon: selectedTypes.count != 1 ? food.type.appSymbol : nil
         ) {
             handleSelect(food)
@@ -338,8 +413,51 @@ struct LibraryView<Header: View>: View {
         }
     }
 
+    private func refreshLogStats() {
+        logStats = usesLogStats ? FoodItemStore.logStats(in: modelContext) : [:]
+    }
+
+    private func confirmDelete(_ food: FoodItem) {
+        foodToDelete = food
+        showDeleteAlert = true
+    }
+
     @ViewBuilder
     private var emptyStateView: some View {
+        if searchText.isEmpty && hasListFilters {
+            ContentUnavailableView {
+                Label(
+                    "No Matches",
+                    systemImage: "line.3.horizontal.decrease.circle"
+                )
+            } description: {
+                Text("No items match the selected filters.")
+                    .font(.subheadline)
+            } actions: {
+                Button("Clear Filters") {
+                    withAnimation {
+                        selectedSources.removeAll()
+                        selectedCategories.removeAll()
+                    }
+                }
+                .tint(.blue)
+            }
+        } else if selectedChip == .favorites && searchText.isEmpty {
+            ContentUnavailableView(
+                "No Favorites",
+                systemImage: "star",
+                description: Text(
+                    "Swipe on an item and tap the star to add it to your favorites."
+                )
+                .font(.subheadline)
+            )
+        } else {
+            typeEmptyStateView
+        }
+    }
+
+    @ViewBuilder
+    private var typeEmptyStateView: some View {
         let singleType = selectedTypes.count == 1 ? selectedTypes.first : nil
         let itemName = singleType?.lowercased() ?? "item"
         let symbolName =
@@ -373,6 +491,7 @@ struct LibraryView<Header: View>: View {
         } actions: {
             if !searchText.isEmpty {
                 Button("Create New \(singleType ?? "Food")") {
+                    newEntryName = searchText
                     entryTypeToAdd = addableEntryType
                 }
                 .tint(.blue)
@@ -389,7 +508,7 @@ struct LibraryView<Header: View>: View {
     @ViewBuilder
     private func addEntrySheet(for type: EntryType) -> some View {
         if type == .recipe {
-            AddRecipeView()
+            AddRecipeView(prefill: .named(newEntryName))
         } else {
             AddEntryView(
                 entryType: type,
@@ -398,7 +517,8 @@ struct LibraryView<Header: View>: View {
                         entryTypeToAdd = nil
                         select(food)
                     }
-                }
+                },
+                prefill: .named(newEntryName)
             )
         }
     }
@@ -410,8 +530,8 @@ struct LibraryView<Header: View>: View {
             let defaultTypesSet: Set<String> =
                 defaultType == .all ? [] : [defaultType.displayName]
             let hasFilters =
-                selectedTypes != defaultTypesSet || !selectedSources.isEmpty
-                || !selectedCategories.isEmpty
+                (!isTabRoot && selectedTypes != defaultTypesSet)
+                || hasListFilters
             Image(
                 systemName: hasFilters
                     ? "line.3.horizontal.decrease.circle.fill"
@@ -426,6 +546,10 @@ struct LibraryView<Header: View>: View {
             Picker("Sort By", selection: $sortOption) {
                 Text("Name").tag(FoodSortOption.name)
                 Text("Date Added").tag(FoodSortOption.dateAdded)
+                if isTabRoot {
+                    Text("Recently Logged").tag(FoodSortOption.lastLogged)
+                    Text("Most Logged").tag(FoodSortOption.mostLogged)
+                }
                 Text("Calories").tag(FoodSortOption.calories)
                 Text("Protein").tag(FoodSortOption.protein)
                 Text("Carbohydrates").tag(FoodSortOption.carbs)
@@ -435,9 +559,12 @@ struct LibraryView<Header: View>: View {
             if sortOption != .name {
                 Divider()
                 Picker("Order", selection: $sortDescending) {
-                    if sortOption == .dateAdded {
+                    if sortOption == .dateAdded || sortOption == .lastLogged {
                         Text("Newest First").tag(true)
                         Text("Oldest First").tag(false)
+                    } else if sortOption == .mostLogged {
+                        Text("Most First").tag(true)
+                        Text("Least First").tag(false)
                     } else {
                         Text("Highest First").tag(true)
                         Text("Lowest First").tag(false)
@@ -446,6 +573,60 @@ struct LibraryView<Header: View>: View {
             }
         } label: {
             Image(systemName: "arrow.up.arrow.down")
+        }
+    }
+
+    private var manageMenu: some View {
+        Menu {
+            ForEach(LibraryListKind.allCases) { kind in
+                Button {
+                    listToManage = kind
+                } label: {
+                    Label("Edit \(kind.title)", systemImage: kind.symbol)
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+        }
+    }
+
+    private var chipsBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(LibraryChip.allChips, id: \.self) { chip in
+                    let isSelected = selectedChip == chip
+
+                    Button {
+                        withAnimation(.snappy) {
+                            selectedChip = chip
+                            if case .type(let type) = chip {
+                                selectedTypes = [type.rawValue.capitalized]
+                            } else {
+                                selectedTypes = []
+                            }
+                        }
+                    } label: {
+                        Label(chip.title, systemImage: chip.symbol)
+                            .font(.subheadline)
+                            .fontWeight(isSelected ? .semibold : .regular)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(
+                                isSelected
+                                    ? Color.accentColor
+                                    : Color.secondary.opacity(0.15)
+                            )
+                            .foregroundStyle(
+                                isSelected ? Color.white : Color.primary
+                            )
+                            .clipShape(Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 10)
         }
     }
 }

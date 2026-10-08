@@ -30,6 +30,7 @@ struct ProminentTabBar<Item: ProminentTabItem, SheetContent: View, PopoverConten
     var prominentSymbol: String
     var prominentLabel: LocalizedStringKey = "Add"
     var popoverActionLabel: LocalizedStringKey = "More Options"
+    var onReselect: (Item) -> Void = { _ in }
     @ContentBuilder var sheet: SheetContent
     @ContentBuilder var popover: PopoverContent
 
@@ -48,7 +49,7 @@ struct ProminentTabBar<Item: ProminentTabItem, SheetContent: View, PopoverConten
         
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 10) {
-                CustomProminentTabBar(selection: $selection)
+                CustomProminentTabBar(selection: $selection, onReselect: onReselect)
                     .padding(2)
                     .glassEffect(.regular.interactive(), in: .capsule)
                     .frame(width: isSmall ? CGFloat(tabCount) * 90 : nil)
@@ -140,10 +141,14 @@ fileprivate struct CustomProminentTabBar<Item: ProminentTabItem>: UIViewRepresen
     @Environment(\.displayScale) private var displayScale
     
     @Binding var selection: Item
-    
+    var onReselect: (Item) -> Void
+
     func makeUIView(context: Context) -> UISegmentedControl {
         let control = InstantSelectSegmentedControl(items: allTabs.compactMap({ generateItemImage($0) }))
-        
+        control.onReselect = { [weak coordinator = context.coordinator] index in
+            coordinator?.didReselect(index)
+        }
+
         control.selectedSegmentIndex = allTabs.firstIndex(of: selection) ?? 0
         control.selectedSegmentTintColor = UIColor(Color.gray.opacity(0.18))
         control.setTitleTextAttributes([.foregroundColor: UIColor(Color.accentColor)], for: .selected)
@@ -159,6 +164,8 @@ fileprivate struct CustomProminentTabBar<Item: ProminentTabItem>: UIViewRepresen
     }
 
     func updateUIView(_ uiView: UISegmentedControl, context: Context) {
+        context.coordinator.onReselect = onReselect
+
         if let seletionIndex = allTabs.firstIndex(of: selection), uiView.selectedSegmentIndex != seletionIndex {
             uiView.selectedSegmentIndex = seletionIndex
         }
@@ -176,20 +183,26 @@ fileprivate struct CustomProminentTabBar<Item: ProminentTabItem>: UIViewRepresen
     }
     
     func makeCoordinator() -> Coordinator {
-        Coordinator(selection: $selection)
+        Coordinator(selection: $selection, onReselect: onReselect)
     }
-    
+
     class Coordinator: NSObject {
         @Binding var selection: Item
+        var onReselect: (Item) -> Void
         var renderedScale: CGFloat = 0
 
-        init(selection: Binding<Item>) {
+        init(selection: Binding<Item>, onReselect: @escaping (Item) -> Void) {
             self._selection = selection
+            self.onReselect = onReselect
         }
-        
+
         @objc
         func didChange(_ control: UISegmentedControl) {
             selection = Array(Item.allCases)[control.selectedSegmentIndex]
+        }
+
+        func didReselect(_ index: Int) {
+            onReselect(Array(Item.allCases)[index])
         }
     }
     
@@ -217,6 +230,8 @@ fileprivate struct CustomProminentTabBar<Item: ProminentTabItem>: UIViewRepresen
 }
 
 fileprivate final class InstantSelectSegmentedControl: UISegmentedControl {
+    var onReselect: ((Int) -> Void)?
+
     override func layoutSubviews() {
         super.layoutSubviews()
         for subview in subviews where subview is UIImageView && subview != subviews.last {
@@ -224,24 +239,53 @@ fileprivate final class InstantSelectSegmentedControl: UISegmentedControl {
         }
     }
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if let touch = touches.first, numberOfSegments > 0 {
-            let segmentWidth = bounds.width / CGFloat(numberOfSegments)
-            var index = Int(touch.location(in: self).x / segmentWidth)
-            if effectiveUserInterfaceLayoutDirection == .rightToLeft {
-                index = numberOfSegments - 1 - index
-            }
-            index = min(max(index, 0), numberOfSegments - 1)
+    private var pendingReselectIndex: Int?
 
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        pendingReselectIndex = nil
+
+        if let touch = touches.first, let index = segmentIndex(at: touch) {
             if index != selectedSegmentIndex {
                 UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
                     self.selectedSegmentIndex = index
                     self.layoutIfNeeded()
                 }
                 sendActions(for: .valueChanged)
+            } else {
+                pendingReselectIndex = index
             }
         }
 
         super.touchesBegan(touches, with: event)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesEnded(touches, with: event)
+
+        guard let pending = pendingReselectIndex else { return }
+        pendingReselectIndex = nil
+
+        if let touch = touches.first,
+            bounds.contains(touch.location(in: self)),
+            segmentIndex(at: touch) == pending,
+            selectedSegmentIndex == pending
+        {
+            onReselect?(pending)
+        }
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        pendingReselectIndex = nil
+        super.touchesCancelled(touches, with: event)
+    }
+
+    private func segmentIndex(at touch: UITouch) -> Int? {
+        guard numberOfSegments > 0 else { return nil }
+        let segmentWidth = bounds.width / CGFloat(numberOfSegments)
+        var index = Int(touch.location(in: self).x / segmentWidth)
+        if effectiveUserInterfaceLayoutDirection == .rightToLeft {
+            index = numberOfSegments - 1 - index
+        }
+        return min(max(index, 0), numberOfSegments - 1)
     }
 }

@@ -54,6 +54,7 @@ nonisolated struct MacroBackup: Codable, Sendable {
         var name: String
         var isDefault: Bool
         var displayOrder: Int
+        var isHidden: Bool?
     }
 
     struct UnitRecord: Codable, Sendable {
@@ -209,11 +210,11 @@ extension MacroBackup {
                 .sorted { $0.date < $1.date }
                 .map(goalRecord),
             sources: try context.fetch(FetchDescriptor<EntrySource>())
-                .map { ListRecord(name: $0.source, isDefault: $0.isDefault, displayOrder: $0.displayOrder) },
+                .map { ListRecord(name: $0.source, isDefault: $0.isDefault, displayOrder: $0.displayOrder, isHidden: $0.isHidden) },
             categories: try context.fetch(FetchDescriptor<CategorySource>())
-                .map { ListRecord(name: $0.category, isDefault: $0.isDefault, displayOrder: $0.displayOrder) },
+                .map { ListRecord(name: $0.category, isDefault: $0.isDefault, displayOrder: $0.displayOrder, isHidden: $0.isHidden) },
             foodGroups: try context.fetch(FetchDescriptor<FoodGroupSource>())
-                .map { ListRecord(name: $0.foodGroup, isDefault: $0.isDefault, displayOrder: $0.displayOrder) },
+                .map { ListRecord(name: $0.foodGroup, isDefault: $0.isDefault, displayOrder: $0.displayOrder, isHidden: $0.isHidden) },
             servingUnits: try context.fetch(FetchDescriptor<ServingSizeUnit>())
                 .map {
                     UnitRecord(

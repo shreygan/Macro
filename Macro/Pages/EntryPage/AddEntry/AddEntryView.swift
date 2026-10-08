@@ -390,7 +390,7 @@ struct AddEntryView: View {
                             FullWidthDropdownRow(
                                 placeholder: "Source",
                                 options: [""]
-                                    + savedSources.map { $0.source }.filter {
+                                    + savedSources.visibleNames(keeping: source).filter {
                                         !$0.trimmingCharacters(
                                             in: .whitespacesAndNewlines
                                         ).isEmpty
@@ -402,7 +402,7 @@ struct AddEntryView: View {
                                 FullWidthDropdownRow(
                                     placeholder: "Category",
                                     options: [""]
-                                        + savedCategories.map { $0.category }
+                                        + savedCategories.visibleNames(keeping: category)
                                         .filter {
                                             !$0.trimmingCharacters(
                                                 in: .whitespacesAndNewlines
@@ -414,7 +414,7 @@ struct AddEntryView: View {
                                 FullWidthDropdownRow(
                                     placeholder: "Food Group",
                                     options: [""]
-                                        + savedFoodGroups.map { $0.foodGroup }
+                                        + savedFoodGroups.visibleNames(keeping: foodGroup)
                                         .filter {
                                             !$0.trimmingCharacters(
                                                 in: .whitespacesAndNewlines
@@ -571,6 +571,9 @@ struct AddEntryView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     if name.trimmingCharacters(in: .whitespacesAndNewlines)
                         .isEmpty
+                        || (Double(
+                            servingSize.replacingOccurrences(of: ",", with: ".")
+                        ) ?? 0) <= 0
                     {
                         Button {
                         } label: {

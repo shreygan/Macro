@@ -95,7 +95,7 @@ struct LogRecipeView: View {
 
     var mappedSourceOptions: [String] {
         [""]
-            + sourceOptions.map { $0.source }.filter {
+            + sourceOptions.visibleNames(keeping: sourceSelection).filter {
                 let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
                 return !trimmed.isEmpty && trimmed != "-"
             }
@@ -103,7 +103,7 @@ struct LogRecipeView: View {
 
     var mappedCategoryOptions: [String] {
         [""]
-            + categoryOptions.map { $0.category }.filter {
+            + categoryOptions.visibleNames(keeping: categorySelection).filter {
                 let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
                 return !trimmed.isEmpty && trimmed != "-"
             }
@@ -155,18 +155,13 @@ struct LogRecipeView: View {
     }
 
     private var activeMultiplier: Double {
-        let currentPortion = Double(portionQuantity) ?? 0
-
-        let isWeightSelected =
-            (portionUnitSelection == recipe.servingWeightUnit
-                && totalRecipeWeight > 0)
-        let basePortion =
-            isWeightSelected ? totalRecipeWeight : recipe.servingSize
-
-        return EntryHelper.calculateMultiplier(
-            targetPortion: currentPortion,
-            basePortion: basePortion
-        )
+        EntryHelper.portionMultiplier(
+            quantity: Double(portionQuantity) ?? 0,
+            unit: portionUnitSelection,
+            servingSize: recipe.servingSize,
+            servingWeight: totalRecipeWeight > 0 ? totalRecipeWeight : nil,
+            servingWeightUnit: recipe.servingWeightUnit
+        ) ?? 0
     }
 
     var availableUnits: [String] {

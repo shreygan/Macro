@@ -13,6 +13,7 @@ struct DeleteFoodAlert: ViewModifier {
 
     @Binding var isPresented: Bool
     @Binding var food: FoodItem?
+    var onWillDelete: (() -> Void)? = nil
 
     func body(content: Content) -> some View {
         let usage = food.map { FoodItemStore.usage(of: $0, in: modelContext) }
@@ -65,6 +66,7 @@ struct DeleteFoodAlert: ViewModifier {
 
     private func delete(_ food: FoodItem, deletingLogs: Bool) {
         self.food = nil
+        onWillDelete?()
         DispatchQueue.main.async {
             FoodItemStore.delete(
                 food,
@@ -78,8 +80,15 @@ struct DeleteFoodAlert: ViewModifier {
 extension View {
     func deleteFoodAlert(
         isPresented: Binding<Bool>,
-        food: Binding<FoodItem?>
+        food: Binding<FoodItem?>,
+        onWillDelete: (() -> Void)? = nil
     ) -> some View {
-        modifier(DeleteFoodAlert(isPresented: isPresented, food: food))
+        modifier(
+            DeleteFoodAlert(
+                isPresented: isPresented,
+                food: food,
+                onWillDelete: onWillDelete
+            )
+        )
     }
 }

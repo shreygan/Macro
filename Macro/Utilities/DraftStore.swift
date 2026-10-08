@@ -20,7 +20,7 @@ enum DraftStore {
     }
 
     @discardableResult
-    static func upsert<State: Encodable>(
+    static func upsert<State: Codable & Equatable>(
         id: UUID,
         kind: DraftKind,
         type: EntryType,
@@ -33,6 +33,15 @@ enum DraftStore {
     ) -> EntryDraft {
         let draft: EntryDraft
         if let existing = fetch(id: id, in: context) {
+            let isUnchanged =
+                existing.kind == kind
+                && existing.entryType == type
+                && existing.name == name
+                && existing.timestamp == timestamp
+                && existing.foodItem?.id == foodItem?.id
+                && existing.decodeState(State.self) == state
+                && photosMatch(existing.photos ?? [], photos)
+            if isUnchanged { return existing }
             draft = existing
         } else {
             draft = EntryDraft(id: id, kind: kind, type: type, name: name)
@@ -66,6 +75,20 @@ enum DraftStore {
         }
 
         return draft
+    }
+
+    private static func photosMatch(
+        _ stored: [EntryPhoto],
+        _ photos: [LoggedPhoto]
+    ) -> Bool {
+        let sorted = stored.sorted { $0.displayOrder < $1.displayOrder }
+        guard sorted.count == photos.count else { return false }
+        return zip(sorted, photos).allSatisfy { stored, photo in
+            stored.imageData == photo.originalData
+                && stored.scale == Double(photo.scale)
+                && stored.offsetX == Double(photo.offset.width)
+                && stored.offsetY == Double(photo.offset.height)
+        }
     }
 
     static func foodItems(

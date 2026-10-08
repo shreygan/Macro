@@ -12,6 +12,7 @@ struct DraftRow: View {
     var subtitle: String
     var icon: AppSymbols?
     var status: String?
+    var statusSymbol: String?
 
     var action: (() -> Void)?
 
@@ -29,15 +30,18 @@ struct DraftRow: View {
 
         if draft.kind?.isLog == true {
             if showsLogDate, let timestamp = draft.timestamp {
-                self.status = Self.formatLogDate(timestamp)
+                self.status = "Logging for \(Self.formatLogDate(timestamp))"
+                self.statusSymbol = "calendar.badge.clock"
             } else {
                 self.status = nil
+                self.statusSymbol = nil
             }
         } else {
             let edited = draft.updatedAt.formatted(
                 .relative(presentation: .named)
             )
-            self.status = "Edited \(edited)"
+            self.status = "Adding to Library · Edited \(edited)"
+            self.statusSymbol = "book.pages"
         }
     }
 
@@ -144,10 +148,17 @@ struct DraftRow: View {
                 }
 
                 if let status {
-                    Text(status)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary)
-                        .padding(.top, 2)
+                    HStack(spacing: 4) {
+                        if let statusSymbol {
+                            Image(systemName: statusSymbol)
+                                .font(.system(size: 11, weight: .medium))
+                        }
+
+                        Text(status)
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundColor(.secondary)
+                    .padding(.top, 2)
                 }
             }
 

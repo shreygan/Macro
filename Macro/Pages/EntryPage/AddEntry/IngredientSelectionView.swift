@@ -126,6 +126,7 @@ struct IngredientSelectionView: View {
                 }
             }
         }
+        .environment(\.tabBarHeight, 0)
     }
 }
 
