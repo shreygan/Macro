@@ -41,12 +41,6 @@ struct Card<Content: View, MenuContent: View>: View {
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.8), lineWidth: 1.5)
-                .shadow(
-                    color: Color.black.opacity(0.05),
-                    radius: 10,
-                    x: 0,
-                    y: 4
-                )
         )
 
         Group {
