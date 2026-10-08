@@ -10,6 +10,7 @@ import SwiftUI
 
 extension EnvironmentValues {
     @Entry var eraseAllData: () -> Void = {}
+    @Entry var tabBarHeight: CGFloat = 0
 }
 
 struct MainView: View {
@@ -38,6 +39,9 @@ struct MainView: View {
     @State private var selection: TabSelection = .home
     @State private var foodToLog: FoodItem? = nil
     @State private var isErasingData = false
+    @State private var libraryPopToRoot = 0
+    @State private var screenBottom: CGFloat = 0
+    @State private var tabBarTop: CGFloat = 0
 
     @Query private var users: [User]
 
@@ -48,6 +52,11 @@ struct MainView: View {
     var body: some View {
         ZStack {
             Color.background.ignoresSafeArea()
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.frame(in: .global).maxY
+                } action: { maxY in
+                    screenBottom = maxY
+                }
 
             if !isErasingData {
                 tabContent
@@ -80,24 +89,53 @@ struct MainView: View {
             }
 
             Tab(value: .library) {
-                Text("Library View")
-                    .toolbarVisibility(.hidden, for: .tabBar)
+                NavigationStack {
+                    LibraryView(
+                        searchPrompt: "Search your library",
+                        isTabRoot: true,
+                        popToRootTrigger: libraryPopToRoot
+                    )
+                }
+                .environment(\.tabBarHeight, max(screenBottom - tabBarTop, 0))
+                .toolbarVisibility(.hidden, for: .tabBar)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ProminentTabBar(selection: $selection, prominentSymbol: "plus") {
-                NewEntryView()
+            ProminentTabBar(
+                selection: $selection,
+                prominentSymbol: "plus",
+                onReselect: { tab in
+                    if tab == .library {
+                        libraryPopToRoot += 1
+                    }
+                }
+            ) {
+                NewEntryView(
+                    onBrowseLibrary: { selection = .library },
+                    onFinishLogging: { selection = .home }
+                )
             } popover: {
                 QuickLogPopover { food in
                     foodToLog = food
                 }
             }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.frame(in: .global).minY
+            } action: { minY in
+                tabBarTop = minY
+            }
         }
         .sheet(item: $foodToLog) { food in
-            if food.type == .recipe {
-                LogRecipeView(recipe: food, isPushedView: false)
-            } else {
-                LogEntryView(food: food, isPushedView: false)
+            Group {
+                if food.type == .recipe {
+                    LogRecipeView(recipe: food, isPushedView: false)
+                } else {
+                    LogEntryView(food: food, isPushedView: false)
+                }
+            }
+            .environment(\.rootDismiss) {
+                foodToLog = nil
+                selection = .home
             }
         }
     }
@@ -112,6 +150,7 @@ struct MainView: View {
             do {
                 try modelContext.eraseAllData()
                 try modelContext.save()
+                AppSeeder.resetListSeeding()
                 try AppSeeder.seedDefaults(into: modelContext)
             } catch {
                 modelContext.rollback()

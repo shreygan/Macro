@@ -20,6 +20,7 @@ struct FilterView: View {
     @Binding var selectedCategories: Set<String>
 
     let defaultType: LibraryFilterType
+    var showsTypeFilter: Bool = true
 
     private var defaultTypesSet: Set<String> {
         defaultType == .all ? [] : [defaultType.displayName]
@@ -29,14 +30,16 @@ struct FilterView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    FilterRowView(
-                        title: "Type",
-                        items: EntryType.allCases.map {
-                            $0.rawValue.capitalized
-                        },
-                        defaultSelection: defaultTypesSet,
-                        selection: $selectedTypes
-                    )
+                    if showsTypeFilter {
+                        FilterRowView(
+                            title: "Type",
+                            items: EntryType.allCases.map {
+                                $0.rawValue.capitalized
+                            },
+                            defaultSelection: defaultTypesSet,
+                            selection: $selectedTypes
+                        )
+                    }
 
                     FilterRowView(
                         title: "Source",
@@ -61,12 +64,15 @@ struct FilterView: View {
                         withAnimation {
                             selectedSources.removeAll()
                             selectedCategories.removeAll()
-                            selectedTypes = defaultTypesSet
+                            if showsTypeFilter {
+                                selectedTypes = defaultTypesSet
+                            }
                         }
                     }
                     .disabled(
                         selectedSources.isEmpty && selectedCategories.isEmpty
-                            && selectedTypes == defaultTypesSet
+                            && (!showsTypeFilter
+                                || selectedTypes == defaultTypesSet)
                     )
                 }
 
