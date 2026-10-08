@@ -337,6 +337,38 @@ extension MealRow where Content == EmptyView {
             content: { EmptyView() }
         )
     }
+
+    init(
+        food: FoodItem,
+        servingUnits: [ServingSizeUnit],
+        icon: AppSymbols? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        let displayPortion = EntryHelper.defaultPortion(for: food)
+        let multiplier = EntryHelper.defaultPortionMultiplier(for: food)
+        let scaled = { (value: Double) in
+            EntryHelper.scale(EntryHelper.format(value), by: multiplier)
+        }
+
+        self.init(
+            name: food.name,
+            source: food.source?.source ?? "None",
+            isCustomDefaultServing: food.isCustomDefaultServing,
+            customServingSize: EntryHelper.format(food.customServingSize),
+            servingSize: EntryHelper.format(displayPortion),
+            servingSizeUnit: food.servingUnit?.unit ?? "serving",
+            servingWeight: EntryHelper.format(food.servingWeight),
+            servingWeightUnit: food.servingWeightUnit,
+            servingUnits: servingUnits,
+            calorie: scaled(food.calories),
+            protein: scaled(food.protein),
+            carbs: scaled(food.carbs),
+            fat: scaled(food.fat),
+            fiber: scaled(food.fiber),
+            icon: icon,
+            action: action
+        )
+    }
 }
 
 #Preview {

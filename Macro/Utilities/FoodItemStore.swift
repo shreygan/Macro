@@ -13,6 +13,26 @@ struct FoodItemUsage {
     var recipeCount: Int
 }
 
+struct FoodLogStats {
+    var count: Int
+    var lastLogged: Date
+
+    static func byFood(_ entries: [LoggedEntry]) -> [UUID: FoodLogStats] {
+        var result: [UUID: FoodLogStats] = [:]
+        for entry in entries {
+            guard let id = entry.originalFoodItem?.id else { continue }
+            if var stats = result[id] {
+                stats.count += 1
+                stats.lastLogged = max(stats.lastLogged, entry.timestamp)
+                result[id] = stats
+            } else {
+                result[id] = FoodLogStats(count: 1, lastLogged: entry.timestamp)
+            }
+        }
+        return result
+    }
+}
+
 @MainActor
 enum FoodItemStore {
     static func loggedEntries(
@@ -24,6 +44,27 @@ enum FoodItemStore {
             predicate: #Predicate { $0.originalFoodItem?.id == foodID }
         )
         return (try? context.fetch(descriptor)) ?? []
+    }
+
+    static func logStats(in context: ModelContext) -> [UUID: FoodLogStats] {
+        var descriptor = FetchDescriptor<LoggedEntry>(
+            predicate: #Predicate { $0.parentEntry == nil }
+        )
+        descriptor.propertiesToFetch = [\.timestamp]
+        descriptor.relationshipKeyPathsForPrefetching = [\.originalFoodItem]
+        return FoodLogStats.byFood((try? context.fetch(descriptor)) ?? [])
+    }
+
+    static func topLevelLogsDescriptor(
+        for food: FoodItem
+    ) -> FetchDescriptor<LoggedEntry> {
+        let foodID = food.id
+        return FetchDescriptor<LoggedEntry>(
+            predicate: #Predicate {
+                $0.originalFoodItem?.id == foodID && $0.parentEntry == nil
+            },
+            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+        )
     }
 
     static func recipeIngredients(
@@ -56,6 +97,21 @@ enum FoodItemStore {
             logCount: (try? context.fetchCount(topLevelLogs)) ?? 0,
             recipeCount: recipeIDs.count
         )
+    }
+
+    static func toggleFavorite(_ food: FoodItem, in context: ModelContext) {
+        if let favorite = food.favoriteEntry {
+            context.delete(favorite)
+        } else {
+            let existingFavorites =
+                (try? context.fetch(FetchDescriptor<FavoriteEntry>())) ?? []
+            let maxIndex =
+                existingFavorites.compactMap { $0.orderIndex }.max() ?? -1
+            context.insert(
+                FavoriteEntry(orderIndex: maxIndex + 1, foodItem: food)
+            )
+        }
+        try? context.save()
     }
 
     static func delete(
