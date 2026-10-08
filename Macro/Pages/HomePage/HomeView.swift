@@ -22,6 +22,7 @@ struct HomeView: View {
     @State private var entryToLogAgain: LoggedEntry? = nil
     @State private var entryToAddToLibrary: LoggedEntry? = nil
     @State private var foodToLog: FoodItem? = nil
+    @State private var foodToView: FoodItem? = nil
 
     @State private var entryToDelete: LoggedEntry? = nil
     @State private var showEntryDeleteConfirmation = false
@@ -127,23 +128,7 @@ struct HomeView: View {
 
     private func toggleFavorite(for entry: LoggedEntry) {
         guard let food = entry.originalFoodItem else { return }
-
-        if let favorite = food.favoriteEntry {
-            modelContext.delete(favorite)
-        } else {
-            let descriptor = FetchDescriptor<FavoriteEntry>()
-            let existingFavorites = (try? modelContext.fetch(descriptor)) ?? []
-            let maxIndex =
-                existingFavorites.compactMap { $0.orderIndex }.max() ?? -1
-
-            let newFavorite = FavoriteEntry(
-                orderIndex: maxIndex + 1,
-                foodItem: food
-            )
-            modelContext.insert(newFavorite)
-        }
-
-        try? modelContext.save()
+        FoodItemStore.toggleFavorite(food, in: modelContext)
     }
 
     private func currDate(for date: Date) -> String {
@@ -393,7 +378,16 @@ struct HomeView: View {
                                         )
                                     }
 
-                                    if entry.originalFoodItem != nil {
+                                    if let food = entry.originalFoodItem {
+                                        Button {
+                                            foodToView = food
+                                        } label: {
+                                            Label(
+                                                "View in Library",
+                                                systemImage: "book.pages"
+                                            )
+                                        }
+
                                         Button {
                                             toggleFavorite(for: entry)
                                         } label: {
@@ -650,6 +644,11 @@ struct HomeView: View {
                         prefill: entry.addEntryPrefill,
                         onCreate: { food in link(entry, to: food) }
                     )
+                }
+            }
+            .sheet(item: $foodToView) { food in
+                NavigationStack {
+                    FoodDetailView(food: food, isPushedView: false)
                 }
             }
             .sheet(item: $foodToLog) { food in

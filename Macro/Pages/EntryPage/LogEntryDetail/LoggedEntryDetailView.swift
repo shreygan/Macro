@@ -20,6 +20,8 @@ struct LoggedEntryDetailView: View {
     @State private var foodToLogAgain: FoodItem? = nil
     @State private var showAddToLibrary = false
     @State private var newFoodToLog: FoodItem? = nil
+    @State private var foodToView: FoodItem? = nil
+    @State private var isDismissing = false
 
     @Query(sort: \EntrySource.displayOrder) var sourceOptions: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var categoryOptions:
@@ -223,7 +225,25 @@ struct LoggedEntryDetailView: View {
         return scaledWeight.formatted(.number.precision(.fractionLength(0...2)))
     }
 
+    private var isAvailable: Bool {
+        !entry.isDeleted && entry.modelContext != nil
+    }
+
     var body: some View {
+        if isAvailable {
+            content
+        } else {
+            Color.background
+                .ignoresSafeArea()
+                .onAppear {
+                    guard !isDismissing else { return }
+                    isDismissing = true
+                    dismiss()
+                }
+        }
+    }
+
+    private var content: some View {
         ZStack {
             Color.background.ignoresSafeArea()
 
@@ -242,7 +262,10 @@ struct LoggedEntryDetailView: View {
 
                             DropdownPillRow(
                                 title: "Source",
-                                options: [""] + sourceOptions.map { $0.source },
+                                options: [""]
+                                    + sourceOptions.visibleNames(
+                                        keeping: sourceSelection
+                                    ),
                                 isEnabled: isEditing,
                                 selection: $sourceSelection
                             )
@@ -251,7 +274,9 @@ struct LoggedEntryDetailView: View {
                                 DropdownPillRow(
                                     title: "Category",
                                     options: [""]
-                                        + categoryOptions.map { $0.category },
+                                        + categoryOptions.visibleNames(
+                                            keeping: categorySelection
+                                        ),
                                     isEnabled: isEditing,
                                     selection: $categorySelection
                                 )
@@ -259,7 +284,9 @@ struct LoggedEntryDetailView: View {
                                 DropdownPillRow(
                                     title: "Food Group",
                                     options: [""]
-                                        + foodGroupOptions.map { $0.foodGroup },
+                                        + foodGroupOptions.visibleNames(
+                                            keeping: foodGroupSelection
+                                        ),
                                     isEnabled: isEditing,
                                     selection: $foodGroupSelection
                                 )
@@ -530,6 +557,12 @@ struct LoggedEntryDetailView: View {
                 }
             }
         }
+        .sheet(item: $foodToView) { food in
+            NavigationStack {
+                FoodDetailView(food: food, isPushedView: false)
+            }
+            .environment(\.tabBarHeight, 0)
+        }
         .navigationTitle(name.isEmpty ? "Unnamed Entry" : name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -553,6 +586,15 @@ struct LoggedEntryDetailView: View {
                                 Label(
                                     "Log Again",
                                     systemImage: "plus.square.on.square"
+                                )
+                            }
+
+                            Button {
+                                foodToView = originalFood
+                            } label: {
+                                Label(
+                                    "View in Library",
+                                    systemImage: "book.pages"
                                 )
                             }
                         } else {
@@ -610,6 +652,7 @@ struct LoggedEntryDetailView: View {
         .alert("Delete Entry?", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
+                isDismissing = true
                 withAnimation {
                     modelContext.delete(entry)
                     try? modelContext.save()
