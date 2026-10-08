@@ -9,7 +9,8 @@ import SwiftData
 import SwiftUI
 
 enum EditSaveMode: String, CaseIterable {
-    case update = "Update Existing"
+    case update = "Update Item"
+    case updateWithLogs = "Update Item & All Logs"
     case copy = "Save as Copy"
 }
 
@@ -197,6 +198,7 @@ struct EditEntryView: View {
 
     private var isSaveDisabled: Bool {
         name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || parseDouble(servingSize) <= 0
     }
 
     private func performSave(cascade: Bool) {
@@ -297,7 +299,8 @@ struct EditEntryView: View {
             in: .whitespacesAndNewlines
         )
 
-        if saveMode == .update {
+        if saveMode != .copy {
+            let previousSnapshot = FoodItemSnapshot(foodItem)
 
             foodItem.name = name
             foodItem.type = type
@@ -328,64 +331,20 @@ struct EditEntryView: View {
             }
 
             if cascade {
-                let allRecipeIngredients =
-                    (try? modelContext.fetch(
-                        FetchDescriptor<RecipeIngredient>()
-                    )) ?? []
-                let usages = allRecipeIngredients.filter {
-                    $0.ingredientItem?.id == foodItem.id
-                }
+                LoggedEntryUpdater.updateRecipeIngredients(
+                    using: foodItem,
+                    from: previousSnapshot,
+                    in: modelContext
+                )
+            }
 
-                var affectedParentRecipes = Set<FoodItem>()
-
-                for ingredient in usages {
-                    ingredient.name = foodItem.name
-                    ingredient.baseServingSize = foodItem.servingSize
-                    ingredient.baseServingUnitName = foodItem.servingUnit?.unit
-                    ingredient.baseServingWeight = foodItem.servingWeight
-                    ingredient.baseServingWeightUnit =
-                        foodItem.servingWeightUnit
-                    ingredient.baseCalories = foodItem.calories
-                    ingredient.baseProtein = foodItem.protein
-                    ingredient.baseCarbs = foodItem.carbs
-                    ingredient.baseFat = foodItem.fat
-                    ingredient.baseFiber = foodItem.fiber
-
-                    if let parent = ingredient.parentRecipe {
-                        affectedParentRecipes.insert(parent)
-                    }
-                }
-
-                for recipe in affectedParentRecipes {
-                    var newCals = 0.0
-                    var newPro = 0.0
-                    var newCarbs = 0.0
-                    var newFat = 0.0
-                    var newFiber = 0.0
-
-                    for ing in recipe.recipeIngredients ?? [] {
-                        let baseSize =
-                            (ing.unit == ing.baseServingWeightUnit
-                                && ing.baseServingWeight != nil)
-                            ? ing.baseServingWeight! : ing.baseServingSize
-                        let activeMult = EntryHelper.calculateMultiplier(
-                            targetPortion: ing.quantity,
-                            basePortion: baseSize
-                        )
-
-                        newCals += ing.baseCalories * activeMult
-                        newPro += ing.baseProtein * activeMult
-                        newCarbs += ing.baseCarbs * activeMult
-                        newFat += ing.baseFat * activeMult
-                        newFiber += ing.baseFiber * activeMult
-                    }
-
-                    recipe.calories = newCals
-                    recipe.protein = newPro
-                    recipe.carbs = newCarbs
-                    recipe.fat = newFat
-                    recipe.fiber = newFiber
-                }
+            if saveMode == .updateWithLogs {
+                LoggedEntryUpdater.apply(
+                    foodItem,
+                    from: previousSnapshot,
+                    recipesUpdated: cascade,
+                    in: modelContext
+                )
             }
 
             do {
@@ -456,24 +415,24 @@ struct EditEntryView: View {
                             )
                             FullWidthDropdownRow(
                                 placeholder: "Source",
-                                options: savedSources.map { $0.source },
+                                options: savedSources.visibleNames(keeping: source),
                                 selection: $source
                             )
 
                             if type == .food {
                                 FullWidthDropdownRow(
                                     placeholder: "Category",
-                                    options: savedCategories.map {
-                                        $0.category
-                                    },
+                                    options: savedCategories.visibleNames(
+                                        keeping: category
+                                    ),
                                     selection: $category
                                 )
                             } else {
                                 FullWidthDropdownRow(
                                     placeholder: "Food Group",
-                                    options: savedFoodGroups.map {
-                                        $0.foodGroup
-                                    },
+                                    options: savedFoodGroups.visibleNames(
+                                        keeping: foodGroup
+                                    ),
                                     selection: $foodGroup
                                 )
                             }

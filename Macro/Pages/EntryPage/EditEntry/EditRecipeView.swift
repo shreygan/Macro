@@ -9,8 +9,18 @@ import SwiftData
 import SwiftUI
 
 enum EditRecipeSaveMode: String, CaseIterable {
-    case update = "Update Existing"
+    case update = "Update Recipe"
+    case updateWithLogs = "Update Recipe & Logs"
     case copy = "Save as Copy"
+
+    var detail: LocalizedStringKey? {
+        switch self {
+        case .updateWithLogs:
+            "Logs where you changed the ingredients won't be updated"
+        default:
+            nil
+        }
+    }
 }
 
 struct EditRecipeView: View {
@@ -186,7 +196,7 @@ struct EditRecipeView: View {
         let isNameValid = !name.trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty
         let hasIngredients = !draftIngredients.isEmpty
-        return isNameValid && hasIngredients
+        return isNameValid && hasIngredients && parseDouble(servingSize) > 0
     }
 
     private func parseDouble(_ string: String) -> Double {
@@ -334,7 +344,9 @@ struct EditRecipeView: View {
             in: .whitespacesAndNewlines
         )
 
-        if saveMode == .update {
+        if saveMode != .copy {
+            let previousSnapshot = FoodItemSnapshot(recipe)
+
             recipe.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
             recipe.source = resolvedSource
             recipe.category = resolvedCategory
@@ -378,6 +390,15 @@ struct EditRecipeView: View {
 
                 modelContext.insert(newIngredient)
                 recipe.recipeIngredients?.append(newIngredient)
+            }
+
+            if saveMode == .updateWithLogs {
+                LoggedEntryUpdater.apply(
+                    recipe,
+                    from: previousSnapshot,
+                    recipesUpdated: false,
+                    in: modelContext
+                )
             }
 
             do {
@@ -459,12 +480,14 @@ struct EditRecipeView: View {
                             )
                             FullWidthDropdownRow(
                                 placeholder: "Source",
-                                options: savedSources.map { $0.source },
+                                options: savedSources.visibleNames(keeping: source),
                                 selection: $source
                             )
                             FullWidthDropdownRow(
                                 placeholder: "Category",
-                                options: savedCategories.map { $0.category },
+                                options: savedCategories.visibleNames(
+                                    keeping: category
+                                ),
                                 selection: $category
                             )
                         }
@@ -669,7 +692,13 @@ struct EditRecipeView: View {
                                     EditRecipeSaveMode.allCases,
                                     id: \.self
                                 ) { mode in
-                                    Text(mode.rawValue).tag(mode)
+                                    VStack {
+                                        Text(mode.rawValue)
+                                        if let detail = mode.detail {
+                                            Text(detail)
+                                        }
+                                    }
+                                    .tag(mode)
                                 }
                             }
                         } label: {
