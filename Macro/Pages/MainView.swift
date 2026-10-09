@@ -80,6 +80,7 @@ struct MainView: View {
         TabView(selection: $selection) {
             Tab(value: .home) {
                 HomeView()
+                    .environment(\.tabBarHeight, max(screenBottom - tabBarTop, 0))
                     .toolbarVisibility(.hidden, for: .tabBar)
             }
 

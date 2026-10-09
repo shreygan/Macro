@@ -11,6 +11,7 @@ import SwiftUI
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.toastCenter) private var toastCenter
+    @Environment(\.tabBarHeight) private var tabBarHeight
 
     @Query private var users: [User]
     @Query(filter: EntryDraft.logDraftsPredicate) private var logDrafts:
@@ -80,7 +81,6 @@ struct HomeView: View {
 
     @State private var swipeDirection: Edge = .trailing
     @State private var hasAlignedToday = false
-    @State private var bottomInset: CGFloat = 0
 
     private var dayStartMinutes: Int {
         users.first?.dayStartMinutes ?? 0
@@ -243,94 +243,8 @@ struct HomeView: View {
         let logicalToday = logicalToday
 
         NavigationStack {
-            VStack(spacing: 0) {
-                TabView(selection: $currentWeekStart) {
-                    ForEach(bufferWeeks, id: \.self) { weekStart in
-
-                        let weekDates = (0..<7).compactMap {
-                            Calendar.current.date(
-                                byAdding: .day,
-                                value: $0,
-                                to: weekStart
-                            )
-                        }
-
-                        HStack {
-                            ForEach(weekDates, id: \.self) { date in
-                                let isSelected = Calendar.current.isDate(
-                                    date,
-                                    inSameDayAs: displayDate
-                                )
-                                let isToday = Calendar.current.isDate(
-                                    date,
-                                    inSameDayAs: logicalToday
-                                )
-
-                                VStack(spacing: 12) {
-                                    Text(
-                                        date.formatted(
-                                            .dateTime.weekday(.narrow)
-                                        )
-                                    )
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(
-                                        isSelected
-                                            ? .white
-                                            : (isToday ? .blue : .primary)
-                                    )
-                                    .frame(width: 30, height: 30)
-                                    .background(
-                                        Circle().fill(
-                                            isSelected
-                                                ? Color.blue : Color.clear
-                                        )
-                                    )
-
-                                    Circle()
-                                        .fill(Color(uiColor: .systemGray5))
-                                        .frame(width: 40, height: 40)
-                                        .overlay(alignment: .bottom) {
-                                            if draftDays.contains(
-                                                Calendar.current.startOfDay(
-                                                    for: date
-                                                )
-                                            ) {
-                                                Circle()
-                                                    .fill(Color.white)
-                                                    .overlay(
-                                                        Circle().strokeBorder(
-                                                            Color.gray,
-                                                            lineWidth: 1.5
-                                                        )
-                                                    )
-                                                    .frame(width: 8, height: 8)
-                                                    .offset(y: 4)
-                                                    .transition(.opacity)
-                                            }
-                                        }
-                                        .animation(
-                                            .easeInOut(duration: 0.25),
-                                            value: draftDays
-                                        )
-                                }
-                                .onTapGesture {
-                                    navigateToDate(to: date)
-                                }
-
-                                if date != weekDates.last {
-                                    Spacer()
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        .tag(weekStart)
-                    }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .frame(height: 90)
-
-                TabView(selection: $selectedDate) {
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 0) {
                     ForEach(bufferDates, id: \.self) { date in
 
                         let effectiveDate =
@@ -346,7 +260,8 @@ struct HomeView: View {
                                         date: effectiveDate,
                                         dayStartMinutes: dayStartMinutes
                                     )
-                                    .padding()
+                                    .padding([.horizontal, .bottom])
+                                    .padding(.top, 5)
                                 }
 
                                 TimelineCard(
@@ -446,39 +361,129 @@ struct HomeView: View {
                                         }
                                 }
                             )
-                            .tag(date)
                         }
                         .contentMargins(
                             .bottom,
-                            bottomInset + 48,
+                            tabBarHeight + 28,
                             for: .scrollContent
                         )
                         .contentMargins(
                             .bottom,
-                            bottomInset,
+                            tabBarHeight,
                             for: .scrollIndicators
                         )
+                        .scrollEdgeEffectStyle(.hard, for: .top)
+                        .modifier(ScrolledTopEdgeEffect())
+                        .safeAreaBar(edge: .top) {
+                            Color.primary.opacity(0.001).frame(height: 97.5)
+                        }
+                        .containerRelativeFrame(.horizontal)
+                        .id(date)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(
+                id: Binding<Date?>(
+                    get: { selectedDate },
+                    set: { newDate in
+                        if let newDate {
+                            selectedDate = newDate
+                        }
+                    }
+                )
+            )
+            .scrollIndicators(.hidden, axes: .horizontal)
+            .scrollEdgeEffectHidden(true, for: .top)
+            .coordinateSpace(name: "MainTabView")
+            .ignoresSafeArea(edges: .bottom)
+            .overlay(alignment: .top) {
+                TabView(selection: $currentWeekStart) {
+                    ForEach(bufferWeeks, id: \.self) { weekStart in
+
+                        let weekDates = (0..<7).compactMap {
+                            Calendar.current.date(
+                                byAdding: .day,
+                                value: $0,
+                                to: weekStart
+                            )
+                        }
+
+                        HStack {
+                            ForEach(weekDates, id: \.self) { date in
+                                let isSelected = Calendar.current.isDate(
+                                    date,
+                                    inSameDayAs: displayDate
+                                )
+                                let isToday = Calendar.current.isDate(
+                                    date,
+                                    inSameDayAs: logicalToday
+                                )
+
+                                VStack(spacing: 12) {
+                                    Text(
+                                        date.formatted(
+                                            .dateTime.weekday(.narrow)
+                                        )
+                                    )
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(
+                                        isSelected
+                                            ? .white
+                                            : (isToday ? .blue : .primary)
+                                    )
+                                    .frame(width: 30, height: 30)
+                                    .background(
+                                        Circle().fill(
+                                            isSelected
+                                                ? Color.blue : Color.clear
+                                        )
+                                    )
+
+                                    Circle()
+                                        .fill(Color(uiColor: .systemGray5))
+                                        .frame(width: 40, height: 40)
+                                        .overlay(alignment: .bottom) {
+                                            if draftDays.contains(
+                                                Calendar.current.startOfDay(
+                                                    for: date
+                                                )
+                                            ) {
+                                                Circle()
+                                                    .fill(Color.white)
+                                                    .overlay(
+                                                        Circle().strokeBorder(
+                                                            Color.gray,
+                                                            lineWidth: 1.5
+                                                        )
+                                                    )
+                                                    .frame(width: 8, height: 8)
+                                                    .offset(y: 4)
+                                                    .transition(.opacity)
+                                            }
+                                        }
+                                        .animation(
+                                            .easeInOut(duration: 0.25),
+                                            value: draftDays
+                                        )
+                                }
+                                .onTapGesture {
+                                    navigateToDate(to: date)
+                                }
+
+                                if date != weekDates.last {
+                                    Spacer()
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .tag(weekStart)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .coordinateSpace(name: "MainTabView")
-                .mask {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0.0),
-                            .init(color: .black, location: 0.01),
-                            .init(color: .black, location: 1.0),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
-                .ignoresSafeArea(edges: .bottom)
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.safeAreaInsets.bottom
-                } action: { newInset in
-                    bottomInset = newInset
-                }
+                .frame(height: 90)
             }
             .navigationTitle("Home")
             .navigationSubtitle(currDate(for: displayDate))
@@ -679,6 +684,20 @@ struct HomeView: View {
                 }
             }
         }
+    }
+}
+
+private struct ScrolledTopEdgeEffect: ViewModifier {
+    @State private var isScrolled = false
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top > 1
+            } action: { _, newValue in
+                isScrolled = newValue
+            }
+            .scrollEdgeEffectHidden(!isScrolled, for: .top)
     }
 }
 
