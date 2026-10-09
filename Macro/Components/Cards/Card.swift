@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct Card<Content: View, MenuContent: View>: View {
+struct Card<Content: View, MenuContent: View, HeaderAccessory: View>: View {
     var title: String?
     var cornerRadius: CGFloat
     var tintColor: Color
@@ -15,17 +15,30 @@ struct Card<Content: View, MenuContent: View>: View {
 
     var content: Content
     var menuItems: MenuContent
+    var headerAccessory: HeaderAccessory
+
+    private var hasHeaderAccessory: Bool {
+        HeaderAccessory.self != EmptyView.self
+    }
 
     var body: some View {
         let cardVisuals = VStack(spacing: 0) {
-            if let title = title {
-                Text(title)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 12)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, titleBottomPadding)
+            if title != nil || hasHeaderAccessory {
+                HStack(spacing: 8) {
+                    if let title = title {
+                        Text(title)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.primary)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    headerAccessory
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 12)
+                .padding(.horizontal, 16)
+                .padding(.bottom, titleBottomPadding)
             }
 
             content
@@ -64,7 +77,7 @@ struct Card<Content: View, MenuContent: View>: View {
     }
 }
 
-extension Card where MenuContent == EmptyView {
+extension Card where MenuContent == EmptyView, HeaderAccessory == EmptyView {
     init(
         _ title: String? = nil,
         cornerRadius: CGFloat = 24.0,
@@ -78,10 +91,30 @@ extension Card where MenuContent == EmptyView {
         self.titleBottomPadding = titleBottomPadding
         self.content = content()
         self.menuItems = EmptyView()
+        self.headerAccessory = EmptyView()
     }
 }
 
-extension Card {
+extension Card where MenuContent == EmptyView {
+    init(
+        _ title: String? = nil,
+        cornerRadius: CGFloat = 24.0,
+        tintColor: Color = Color(white: 0.96),
+        titleBottomPadding: CGFloat = 0,
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder headerAccessory: () -> HeaderAccessory
+    ) {
+        self.title = title
+        self.cornerRadius = cornerRadius
+        self.tintColor = tintColor
+        self.titleBottomPadding = titleBottomPadding
+        self.content = content()
+        self.menuItems = EmptyView()
+        self.headerAccessory = headerAccessory()
+    }
+}
+
+extension Card where HeaderAccessory == EmptyView {
     init(
         _ title: String? = nil,
         cornerRadius: CGFloat = 24.0,
@@ -96,6 +129,7 @@ extension Card {
         self.titleBottomPadding = titleBottomPadding
         self.content = content()
         self.menuItems = menuItems()
+        self.headerAccessory = EmptyView()
     }
 }
 

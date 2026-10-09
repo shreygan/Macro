@@ -15,8 +15,6 @@ struct LogEntryView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.toastCenter) private var toastCenter
 
-    @State private var focusManager = SwipeFocusManager()
-
     @Query(sort: \EntrySource.displayOrder) var sourceOptions: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var categoryOptions:
         [CategorySource]
@@ -69,14 +67,11 @@ struct LogEntryView: View {
     @State private var manualOverrideToggle: Bool
 
     @State private var stickyNote: String
-    @State private var stickyNoteDate: Date
+    private let stickyNoteDate: Date?
 
     private let originalNoteText: String
 
     @State private var newNote: String
-    @State private var isAddingNewNote: Bool
-    @State private var isNewNotePinned: Bool = false
-    @State private var isOriginalNotePinned: Bool
 
     @State private var showingAllNotes: Bool = false
 
@@ -108,8 +103,21 @@ struct LogEntryView: View {
             || portionQuantity != originalPortionQuantity
             || portionUnitSelection != originalPortionUnitSelection
             || stickyNote != originalNoteText
-            || isAddingNewNote
+            || !newNote.isEmpty
             || !selectedPhotos.isEmpty
+    }
+
+    private var resolvedPinnedNote: String? {
+        let trimmed = stickyNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var hasPinnedNoteChanged: Bool {
+        resolvedPinnedNote != food.stickyNote?.text
+    }
+
+    private var pinnedNoteUpdated: Date? {
+        stickyNote == originalNoteText ? stickyNoteDate : .now
     }
 
     var mappedSourceOptions: [String] {
@@ -188,13 +196,16 @@ struct LogEntryView: View {
     private func saveEntry() {
         let combinedDate = combineDateAndTime(date: date, time: time)
 
-        let noteToSave = isAddingNewNote ? newNote : stickyNote
-        let trimmedNote = noteToSave.trimmingCharacters(
+        let trimmedNote = newNote.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
         let resolvedNote = trimmedNote.isEmpty ? nil : trimmedNote
+        let pinnedNote = resolvedPinnedNote
 
-        let originalFood = saveOption == .updateOriginal ? MacroBackup.foodRecord(food) : nil
+        let updatesOriginalPin = saveOption != .saveAsNew && hasPinnedNoteChanged
+        let originalFood =
+            saveOption == .updateOriginal || updatesOriginalPin
+            ? MacroBackup.foodRecord(food) : nil
         var createdListItems: [any PersistentModel] = []
         var createdFood: FoodItem? = nil
 
@@ -328,18 +339,6 @@ struct LogEntryView: View {
                     food.fat = baseFat
                     food.fiber = baseFib
                 }
-
-                if let resolvedNote = resolvedNote {
-                    if let existingNote = food.stickyNote {
-                        existingNote.text = resolvedNote
-                    } else {
-                        food.stickyNote = Note(text: resolvedNote)
-                    }
-                } else if let existingNote = food.stickyNote {
-                    modelContext.delete(existingNote)
-                    food.stickyNote = nil
-                }
-
             } else if saveOption == .saveAsNew {
                 let newFood = FoodItem(
                     name: name.isEmpty ? "New Entry" : name,
@@ -359,14 +358,17 @@ struct LogEntryView: View {
                     fiber: baseFib,
                     isCustomDefaultServing: food.isCustomDefaultServing,
                     customServingSize: food.customServingSize,
-                    stickyNote: resolvedNote != nil
-                        ? Note(text: resolvedNote!) : nil
+                    stickyNote: pinnedNote.map { Note(text: $0) }
                 )
                 modelContext.insert(newFood)
                 createdFood = newFood
 
                 newLog.originalFoodItem = newFood
             }
+        }
+
+        if updatesOriginalPin {
+            EntryHelper.applyPinnedNote(pinnedNote, to: food, in: modelContext)
         }
 
         let draftRecord = DraftStore.fetch(id: draftID, in: modelContext)
@@ -435,10 +437,7 @@ struct LogEntryView: View {
             manualOverrideToggle: manualOverrideToggle,
             notes: DraftNoteState(
                 stickyNote: stickyNote,
-                newNote: newNote,
-                isAddingNewNote: isAddingNewNote,
-                isNewNotePinned: isNewNotePinned,
-                isOriginalNotePinned: isOriginalNotePinned
+                newNote: newNote
             ),
             saveOptionRawValue: saveOption.rawValue
         )
@@ -603,20 +602,11 @@ struct LogEntryView: View {
 
         self.originalNoteText = food.stickyNote?.text ?? ""
         _stickyNote = State(initialValue: originalNoteText)
-        _isOriginalNotePinned = State(initialValue: !originalNoteText.isEmpty)
-        _stickyNoteDate = State(
-            initialValue: food.stickyNote?.lastUpdated ?? Date()
-        )
+        self.stickyNoteDate = food.stickyNote?.lastUpdated
 
-        let loggedNote = previousEntry?.logNote ?? ""
-        let hasDistinctLoggedNote =
-            !loggedNote.isEmpty && loggedNote != originalNoteText
-        _newNote = State(initialValue: hasDistinctLoggedNote ? loggedNote : "")
-        _isAddingNewNote = State(initialValue: hasDistinctLoggedNote)
+        _newNote = State(initialValue: "")
 
-        _selectedPhotos = State(
-            initialValue: EntryHelper.loggedPhotos(from: previousEntry?.photos)
-        )
+        _selectedPhotos = State(initialValue: [])
 
         _dateAdded = State(initialValue: food.dateAdded)
 
@@ -681,11 +671,6 @@ struct LogEntryView: View {
 
             _stickyNote = State(initialValue: state.notes.stickyNote)
             _newNote = State(initialValue: state.notes.newNote)
-            _isAddingNewNote = State(initialValue: state.notes.isAddingNewNote)
-            _isNewNotePinned = State(initialValue: state.notes.isNewNotePinned)
-            _isOriginalNotePinned = State(
-                initialValue: state.notes.isOriginalNotePinned
-            )
 
             _selectedPhotos = State(
                 initialValue: EntryHelper.loggedPhotos(from: draft.photos)
@@ -761,125 +746,12 @@ struct LogEntryView: View {
                         }
                         .padding([.leading, .trailing])
 
-                        // TODO: make view all notes button only appear if there is previously logged entries with notes (TODO after logging implemented)
-
-                        // TODO: think deeply about how to handle time stamps and editing pinned / previous notes. Very complex problem. Like if i edit sticky note does timestamp update to latest? does it stay old? also, do we grey it out and have them swipe on row to edit / unpin
-
-                        Card {
-                            RowGroup(.divider) {
-                                if !stickyNote.isEmpty {
-                                    let deleteOriginalNoteAction: () -> Void = {
-                                        withAnimation(
-                                            .spring(
-                                                response: 0.3,
-                                                dampingFraction: 0.8
-                                            )
-                                        ) {
-                                            stickyNote = ""
-                                            isOriginalNotePinned = false
-                                        }
-                                    }
-
-                                    let pinOriginalNoteAction: () -> Void = {
-                                        withAnimation {
-                                            isOriginalNotePinned.toggle()
-                                            if isOriginalNotePinned {
-                                                isNewNotePinned = false
-                                            }
-                                        }
-                                    }
-
-                                    CustomSwipeRow(
-                                        content: {
-                                            WrappedInputRow(
-                                                placeholder: "Sticky Note",
-                                                text: $stickyNote,
-                                                isSticky: isOriginalNotePinned,
-                                                timestamp: stickyNoteDate
-                                            )
-                                        },
-                                        onDelete: deleteOriginalNoteAction,
-                                        onPin: pinOriginalNoteAction,
-                                        isPinned: isOriginalNotePinned
-                                    )
-                                    .transition(
-                                        .opacity.combined(
-                                            with: .move(edge: .top)
-                                        )
-                                    )
-                                }
-
-                                if isAddingNewNote {
-                                    let deleteNoteAction: () -> Void = {
-                                        withAnimation(
-                                            .spring(
-                                                response: 0.3,
-                                                dampingFraction: 0.8
-                                            )
-                                        ) {
-                                            isAddingNewNote = false
-                                            newNote = ""
-                                            isNewNotePinned = false
-                                        }
-                                    }
-
-                                    let pinNoteAction: () -> Void = {
-                                        withAnimation {
-                                            isNewNotePinned.toggle()
-                                            if isNewNotePinned {
-                                                isOriginalNotePinned = false
-                                            }
-                                        }
-                                    }
-
-                                    CustomSwipeRow(
-                                        content: {
-                                            WrappedInputRow(
-                                                placeholder: "Add a note...",
-                                                text: $newNote,
-                                                isSticky: isNewNotePinned,
-                                                timestamp: Date()
-                                            )
-                                        },
-                                        onDelete: deleteNoteAction,
-                                        onPin: pinNoteAction,
-                                        isPinned: isNewNotePinned
-                                    )
-                                    .transition(
-                                        .opacity.combined(
-                                            with: .move(edge: .top)
-                                        )
-                                    )
-
-                                    ButtonRow(
-                                        title: "View All Notes",
-                                        topPadding: 16,
-                                        action: { showingAllNotes = true }
-                                    )
-                                    .transition(.opacity)
-
-                                } else {
-                                    DoubleButtonRow(
-                                        topPadding: 16,
-                                        leftTitle: "Add New Note",
-                                        leftAction: {
-                                            withAnimation(
-                                                .spring(
-                                                    response: 0.3,
-                                                    dampingFraction: 0.8
-                                                )
-                                            ) {
-                                                isAddingNewNote = true
-                                            }
-                                        },
-                                        rightTitle: "View All Notes",
-                                        rightAction: {
-                                            showingAllNotes = true
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        NotesCard(
+                            pinnedNote: $stickyNote,
+                            logNote: $newNote,
+                            pinnedUpdated: pinnedNoteUpdated,
+                            onViewAll: { showingAllNotes = true }
+                        )
                         .padding([.top, .leading, .trailing])
 
                         Card {
@@ -904,7 +776,7 @@ struct LogEntryView: View {
                                 TextInputRow(
                                     icon: .calorie,
                                     title: "Calories",
-                                    titleExtension: "(Kcal)",
+                                    titleExtension: "(kcal)",
                                     text: $calorie,
                                     keyboardType: .decimalPad,
                                     isEnabled: manualOverrideToggle
@@ -1076,11 +948,7 @@ struct LogEntryView: View {
                                         fiberDynamic = fiber
 
                                         stickyNote = originalNoteText
-                                        isOriginalNotePinned =
-                                            !originalNoteText.isEmpty
-                                        isAddingNewNote = false
                                         newNote = ""
-                                        isNewNotePinned = false
 
                                         selectedPhotos = []
 
@@ -1219,7 +1087,6 @@ struct LogEntryView: View {
                 }
             }
         }
-        .environment(focusManager)
         .onAppear {
             if initialDraftState == nil {
                 initialDraftState = draftState
@@ -1241,18 +1108,7 @@ struct LogEntryView: View {
             }
         }
         .sheet(isPresented: $showingAllNotes) {
-            NavigationStack {
-                VStack(spacing: 20) {
-                    Image(systemName: "note.text")
-                        .font(.system(size: 40))
-                        .foregroundStyle(.secondary)
-                    Text("TODO: View All Notes Implementation")
-                        .foregroundStyle(.secondary)
-                }
-                .navigationTitle("All Notes")
-                .navigationBarTitleDisplayMode(.inline)
-            }
-            .presentationDetents([.medium, .large])
+            NotesHistoryView(food: food)
         }
     }
 }

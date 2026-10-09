@@ -97,8 +97,7 @@ enum QuickLogger {
             protein: food.protein * multiplier,
             carbs: food.carbs * multiplier,
             fat: food.fat * multiplier,
-            fiber: food.fiber * multiplier,
-            logNote: food.stickyNote?.text
+            fiber: food.fiber * multiplier
         )
         context.insert(entry)
         return entry
@@ -127,8 +126,7 @@ enum QuickLogger {
             protein: ingredients.reduce(0) { $0 + $1.activeProtein } * multiplier,
             carbs: ingredients.reduce(0) { $0 + $1.activeCarbs } * multiplier,
             fat: ingredients.reduce(0) { $0 + $1.activeFat } * multiplier,
-            fiber: ingredients.reduce(0) { $0 + $1.activeFiber } * multiplier,
-            logNote: recipe.stickyNote?.text
+            fiber: ingredients.reduce(0) { $0 + $1.activeFiber } * multiplier
         )
         context.insert(entry)
 

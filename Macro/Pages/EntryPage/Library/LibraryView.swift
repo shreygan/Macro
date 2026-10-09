@@ -507,7 +507,10 @@ struct LibraryView<Header: View>: View {
     @ViewBuilder
     private func addEntrySheet(for type: EntryType) -> some View {
         if type == .recipe {
-            AddRecipeView(prefill: .named(newEntryName))
+            AddRecipeView(
+                offersLogNow: onSelect == nil,
+                prefill: .named(newEntryName)
+            )
         } else {
             AddEntryView(
                 entryType: type,
@@ -517,6 +520,7 @@ struct LibraryView<Header: View>: View {
                         select(food)
                     }
                 },
+                offersLogNow: onSelect == nil,
                 prefill: .named(newEntryName)
             )
         }
