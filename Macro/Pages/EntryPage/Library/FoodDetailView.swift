@@ -9,24 +9,38 @@ import SwiftData
 import SwiftUI
 
 struct FoodDetailView: View {
+    let food: FoodItem
+    var isPushedView: Bool = true
+
+    var body: some View {
+        FoodDetailContent(food: food, isPushedView: isPushedView)
+    }
+}
+
+private struct FoodDetailContent: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.tabBarHeight) private var tabBarHeight
+    @Environment(\.toastCenter) private var toastCenter
 
     let food: FoodItem
     var isPushedView: Bool = true
 
     @Query private var logs: [LoggedEntry]
+    @Query private var drafts: [EntryDraft]
     @Query private var recipeUses: [RecipeIngredient]
     @Query(sort: \ServingSizeUnit.displayOrder) private var portionUnitOptions:
         [ServingSizeUnit]
 
     @State private var foodToLog: FoodItem? = nil
+    @State private var draftToResume: EntryDraft? = nil
     @State private var foodToEdit: FoodItem? = nil
     @State private var foodToDelete: FoodItem? = nil
-    @State private var showDeleteAlert = false
     @State private var showingAllNotes = false
     @State private var selectedEntry: LoggedEntry? = nil
+    @State private var entryToLogAgain: LoggedEntry? = nil
+    @State private var foodToShow: FoodItem? = nil
+    @State private var showingAllLogs = false
     @State private var isDismissing = false
 
     private let recentLogLimit = 5
@@ -37,6 +51,17 @@ struct FoodDetailView: View {
 
         let foodID = food.id
         _logs = Query(FoodItemStore.topLevelLogsDescriptor(for: food))
+        let logFood = DraftKind.logFood.rawValue
+        let logRecipe = DraftKind.logRecipe.rawValue
+        _drafts = Query(
+            filter: #Predicate<EntryDraft> {
+                $0.foodItem?.id == foodID
+                    && ($0.kindRawValue == logFood
+                        || $0.kindRawValue == logRecipe)
+            },
+            sort: \EntryDraft.updatedAt,
+            order: .reverse
+        )
         _recipeUses = Query(
             filter: #Predicate<RecipeIngredient> {
                 $0.ingredientItem?.id == foodID
@@ -78,13 +103,16 @@ struct FoodDetailView: View {
     }
 
     private var usualPortion: String? {
-        let portions = logs.map { portionText($0.loggedQuantity, $0.loggedUnit) }
-        let counts = portions.reduce(into: [String: Int]()) {
-            $0[$1, default: 0] += 1
+        let keys = logs.map {
+            PortionKey(quantity: $0.loggedQuantity, unit: $0.loggedUnit)
         }
-        return portions.max {
-            counts[$0, default: 0] < counts[$1, default: 0]
-        }
+        guard let usual = mostCommon(keys) else { return nil }
+        return portionText(usual.quantity, usual.unit)
+    }
+
+    private struct PortionKey: Hashable {
+        let quantity: Double
+        let unit: String
     }
 
     private var servingUnitName: String {
@@ -107,6 +135,18 @@ struct FoodDetailView: View {
         )
     }
 
+    private func deleteDraft(_ draft: EntryDraft) {
+        DispatchQueue.main.async {
+            EntryActions.delete(draft, in: modelContext, toastCenter: toastCenter)
+        }
+    }
+
+    private func deleteEntry(_ entry: LoggedEntry) {
+        DispatchQueue.main.async {
+            EntryActions.delete(entry, in: modelContext, toastCenter: toastCenter)
+        }
+    }
+
     private func dismissOnce() {
         guard !isDismissing else { return }
         isDismissing = true
@@ -124,6 +164,7 @@ struct FoodDetailView: View {
                     .onAppear { dismissOnce() }
             }
         }
+        .withGlobalSwipeDismissal()
         .navigationTitle(isAvailable ? food.name : "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -135,7 +176,6 @@ struct FoodDetailView: View {
                             onEdit: { foodToEdit = food },
                             onDelete: {
                                 foodToDelete = food
-                                showDeleteAlert = true
                             }
                         )
                     } label: {
@@ -155,8 +195,19 @@ struct FoodDetailView: View {
                 }
             }
         }
+        .navigationDestination(item: $foodToShow) { food in
+            FoodDetailView(food: food)
+        }
+        .navigationDestination(isPresented: $showingAllLogs) {
+            FoodLogsView(food: food)
+        }
         .sheet(item: $foodToLog) { food in
             LogFoodSheet(food: food)
+        }
+        .sheet(item: $draftToResume) { draft in
+            if draft.isAvailable {
+                LogFoodSheet(food: food, draft: draft)
+            }
         }
         .sheet(item: $foodToEdit) { food in
             if food.type == .recipe {
@@ -170,6 +221,9 @@ struct FoodDetailView: View {
                 LoggedEntryDetailView(entry: entry, isPushedView: false)
             }
             .environment(\.tabBarHeight, 0)
+        }
+        .sheet(item: $entryToLogAgain) { entry in
+            LogAgainSheet(entry: entry)
         }
         .sheet(isPresented: $showingAllNotes) {
             NavigationStack {
@@ -186,7 +240,6 @@ struct FoodDetailView: View {
             .presentationDetents([.medium, .large])
         }
         .deleteFoodAlert(
-            isPresented: $showDeleteAlert,
             food: $foodToDelete,
             onWillDelete: { dismissOnce() }
         )
@@ -293,8 +346,8 @@ struct FoodDetailView: View {
                     Card("Used In") {
                         RowGroup(.divider) {
                             ForEach(usedInRecipes) { recipe in
-                                NavigationLink {
-                                    FoodDetailView(food: recipe)
+                                Button {
+                                    foodToShow = recipe
                                 } label: {
                                     NavigationRow(
                                         icon: .appSymbol(.recipe),
@@ -309,12 +362,21 @@ struct FoodDetailView: View {
                     .padding([.top, .horizontal])
                 }
 
-                if let lastLog = logs.first {
-                    historyCard(lastLog: lastLog)
+                if !drafts.isEmpty {
+                    draftsCard
                         .padding([.top, .horizontal])
+                        .transition(.opacity)
+                }
+
+                if !logs.isEmpty {
+                    historyCard
+                        .padding([.top, .horizontal])
+                        .transition(.opacity)
                 }
             }
             .padding(.bottom)
+            .animation(.easeInOut(duration: 0.25), value: drafts.isEmpty)
+            .animation(.easeInOut(duration: 0.25), value: logs.isEmpty)
         }
         .contentMargins(
             .bottom,
@@ -353,41 +415,145 @@ struct FoodDetailView: View {
         }
     }
 
-    private func historyCard(lastLog: LoggedEntry) -> some View {
-        Card("History") {
-            RowGroup(.divider) {
-                detailRow("Times Logged", value: logs.count.formatted())
-
-                BaseRowLayout(title: "Last Logged") {
-                    Text(lastLog.timestamp, format: .relative(presentation: .named))
-                        .font(.system(size: 16))
-                        .foregroundStyle(.secondary)
-                }
-
-                if let usualPortion {
-                    detailRow("Usual Portion", value: usualPortion)
-                }
-
-                ForEach(Array(logs.prefix(recentLogLimit))) { entry in
-                    LoggedEntrySummaryRow(
-                        entry: entry,
-                        servingUnits: portionUnitOptions
+    private var draftsCard: some View {
+        Card("Drafts", titleBottomPadding: -4) {
+            EntryList(
+                items: drafts,
+                allowSwipeActions: true,
+                showCard: false,
+                isLazy: false,
+                rowContent: { draft in
+                    DraftRow(
+                        draft: draft,
+                        servingUnits: portionUnitOptions,
+                        showsFoodName: false
                     ) {
-                        selectedEntry = entry
+                        draftToResume = draft
                     }
-                }
+                    .contextMenu {
+                        Button {
+                            draftToResume = draft
+                        } label: {
+                            Label("Resume Draft", systemImage: "square.and.pencil")
+                        }
 
-                if logs.count > recentLogLimit {
-                    NavigationLink {
-                        FoodLogsView(food: food)
-                    } label: {
-                        NavigationRow(title: "See All Logs")
-                            .contentShape(Rectangle())
+                        Divider()
+
+                        Button(role: .destructive) {
+                            deleteDraft(draft)
+                        } label: {
+                            Label("Delete Draft", systemImage: "trash")
+                        }
                     }
-                    .buttonStyle(.plain)
+                },
+                onDelete: { draft in
+                    deleteDraft(draft)
+                }
+            )
+        }
+    }
+
+    private var historyCard: some View {
+        Card("History") {
+            statStrip
+
+            Divider()
+                .padding(.horizontal, 16)
+
+            LogHistoryList(
+                logs: Array(logs.prefix(recentLogLimit)),
+                servingUnits: portionUnitOptions,
+                onSelect: { selectedEntry = $0 },
+                onLogAgain: { entryToLogAgain = $0 },
+                onDelete: deleteEntry
+            )
+
+            if logs.count > recentLogLimit {
+                ButtonRow(
+                    icon: .customSymbol("clock.arrow.circlepath"),
+                    title: "See All Logs (\(logs.count))"
+                ) {
+                    showingAllLogs = true
                 }
             }
         }
+    }
+
+    private var statStrip: some View {
+        HStack(spacing: 0) {
+            statColumn(
+                value: logs.count.formatted(),
+                label: logs.count == 1 ? "Log" : "Logs"
+            )
+
+            if let usualMeal {
+                Divider().frame(height: 32)
+
+                statColumn(value: usualMeal.value, label: usualMeal.label)
+            }
+
+            if let usualPortion {
+                Divider().frame(height: 32)
+
+                statColumn(value: usualPortion, label: "Usual Portion")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 12)
+    }
+
+    private func statColumn(value: String, label: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 4)
+    }
+
+    private var usualMeal: (value: String, label: String)? {
+        let categories = logs.compactMap { entry -> String? in
+            guard let category = entry.category?.category, !category.isEmpty
+            else { return nil }
+            return category
+        }
+        if let category = mostCommon(categories) {
+            return (category, "Usual Meal")
+        }
+
+        let times = logs.map { entry -> String in
+            switch Calendar.current.component(.hour, from: entry.timestamp) {
+            case 5..<11: "Mornings"
+            case 11..<17: "Afternoons"
+            case 17..<22: "Evenings"
+            default: "Late Nights"
+            }
+        }
+        guard let time = mostCommon(times) else { return nil }
+        return (time, "Usual Time")
+    }
+
+    private func mostCommon<Value: Hashable>(_ values: [Value]) -> Value? {
+        var counts: [Value: Int] = [:]
+        var best: Value?
+        var bestCount = 0
+        for value in values {
+            let count = counts[value, default: 0] + 1
+            counts[value] = count
+            if count > bestCount {
+                best = value
+                bestCount = count
+            }
+        }
+        return best
     }
 
     @ViewBuilder
@@ -424,8 +590,8 @@ struct FoodDetailView: View {
         }
 
         if let item = ingredient.ingredientItem {
-            NavigationLink {
-                FoodDetailView(food: item)
+            Button {
+                foodToShow = item
             } label: {
                 row.contentShape(Rectangle())
             }
@@ -445,78 +611,175 @@ struct FoodDetailView: View {
     }
 }
 
-private struct LoggedEntrySummaryRow: View {
-    let entry: LoggedEntry
-    let servingUnits: [ServingSizeUnit]
-    var action: () -> Void
+private struct FoodLogsView: View {
+    let food: FoodItem
 
     var body: some View {
-        Button(action: action) {
-            BaseRowLayout(
-                title: entry.timestamp.formatted(
-                    date: .abbreviated,
-                    time: .shortened
-                ),
-                subtitle: EntryHelper.portionText(
-                    quantity: entry.loggedQuantity,
-                    unit: entry.loggedUnit,
-                    servingUnits: servingUnits
-                )
-            ) {
-                HStack(spacing: 8) {
-                    Text("\(EntryHelper.formatMacro(entry.calories)) kcal")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        FoodLogsContent(food: food)
     }
 }
 
-private struct FoodLogsView: View {
+private struct FoodLogsContent: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.tabBarHeight) private var tabBarHeight
+    @Environment(\.toastCenter) private var toastCenter
+
     @Query private var logs: [LoggedEntry]
     @Query(sort: \ServingSizeUnit.displayOrder) private var portionUnitOptions:
         [ServingSizeUnit]
 
     @State private var selectedEntry: LoggedEntry? = nil
+    @State private var entryToLogAgain: LoggedEntry? = nil
 
     init(food: FoodItem) {
         _logs = Query(FoodItemStore.topLevelLogsDescriptor(for: food))
     }
 
+    private struct LogMonth: Identifiable {
+        let id: Date
+        var logs: [LoggedEntry]
+    }
+
+    private var months: [LogMonth] {
+        let calendar = Calendar.current
+        var result: [LogMonth] = []
+        for entry in logs {
+            let month =
+                calendar.dateInterval(of: .month, for: entry.timestamp)?.start
+                ?? entry.timestamp
+            if result.last?.id == month {
+                result[result.count - 1].logs.append(entry)
+            } else {
+                result.append(LogMonth(id: month, logs: [entry]))
+            }
+        }
+        return result
+    }
+
+    private func deleteEntry(_ entry: LoggedEntry) {
+        DispatchQueue.main.async {
+            EntryActions.delete(entry, in: modelContext, toastCenter: toastCenter)
+        }
+    }
+
     var body: some View {
+        let months = months
+
         ZStack {
             Color.background.ignoresSafeArea()
 
             ScrollView {
-                Card {
-                    RowGroup(.divider) {
-                        ForEach(logs) { entry in
-                            LoggedEntrySummaryRow(
-                                entry: entry,
-                                servingUnits: portionUnitOptions
-                            ) {
-                                selectedEntry = entry
-                            }
+                LazyVStack {
+                    ForEach(months) { month in
+                        Card(
+                            month.id.formatted(.dateTime.month(.wide).year()),
+                            titleBottomPadding: -4
+                        ) {
+                            LogHistoryList(
+                                logs: month.logs,
+                                servingUnits: portionUnitOptions,
+                                onSelect: { selectedEntry = $0 },
+                                onLogAgain: { entryToLogAgain = $0 },
+                                onDelete: deleteEntry
+                            )
                         }
+                        .padding(.horizontal)
+                        .padding(.top, month.id == months.first?.id ? 0 : nil)
+                        .transition(.opacity)
                     }
                 }
-                .padding([.horizontal, .bottom])
+                .padding(.bottom)
+                .animation(.easeInOut(duration: 0.25), value: months.map(\.id))
             }
+            .contentMargins(
+                .bottom,
+                tabBarHeight > 0 ? tabBarHeight + 12 : 0,
+                for: .scrollContent
+            )
+            .contentMargins(.bottom, tabBarHeight, for: .scrollIndicators)
+            .ignoresSafeArea(edges: tabBarHeight > 0 ? .bottom : [])
         }
+        .withGlobalSwipeDismissal()
         .navigationTitle("All Logs")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedEntry) { entry in
             NavigationStack {
                 LoggedEntryDetailView(entry: entry, isPushedView: false)
             }
+            .environment(\.tabBarHeight, 0)
         }
+        .sheet(item: $entryToLogAgain) { entry in
+            LogAgainSheet(entry: entry)
+        }
+    }
+}
+
+private struct LogHistoryList: View {
+    let logs: [LoggedEntry]
+    let servingUnits: [ServingSizeUnit]
+    var onSelect: (LoggedEntry) -> Void
+    var onLogAgain: (LoggedEntry) -> Void
+    var onDelete: (LoggedEntry) -> Void
+
+    var body: some View {
+        EntryList(
+            items: logs,
+            allowSwipeActions: true,
+            showCard: false,
+            isLazy: false,
+            rowContent: { entry in
+                LogHistoryRow(entry: entry, servingUnits: servingUnits) {
+                    onSelect(entry)
+                }
+                .contextMenu {
+                    Button {
+                        onLogAgain(entry)
+                    } label: {
+                        Label("Log Again", systemImage: "plus.square.on.square")
+                    }
+
+                    Button {
+                        onSelect(entry)
+                    } label: {
+                        Label("Edit Entry", systemImage: "pencil")
+                    }
+
+                    Divider()
+
+                    Button(role: .destructive) {
+                        onDelete(entry)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            },
+            onDelete: onDelete
+        )
+    }
+}
+
+private struct LogAgainSheet: View {
+    let entry: LoggedEntry
+
+    var body: some View {
+        Group {
+            if let food = entry.originalFoodItem {
+                if food.type == .recipe {
+                    LogRecipeView(
+                        recipe: food,
+                        previousEntry: entry,
+                        isPushedView: false
+                    )
+                } else {
+                    LogEntryView(
+                        food: food,
+                        previousEntry: entry,
+                        isPushedView: false
+                    )
+                }
+            }
+        }
+        .environment(\.rootDismiss, nil)
     }
 }
 
