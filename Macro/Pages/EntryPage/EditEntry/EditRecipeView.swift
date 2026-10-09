@@ -26,6 +26,7 @@ enum EditRecipeSaveMode: String, CaseIterable {
 struct EditRecipeView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
 
     var onSaveInstantly: ((FoodItem) -> Void)?
     @State private var showSuccessAlert: Bool = false
@@ -61,7 +62,7 @@ struct EditRecipeView: View {
     @State private var draftIngredients: [DraftRecipeIngredient]
     @State private var showIngredientSelectionSheet = false
 
-    @State private var saveMode: EditRecipeSaveMode = .update
+    @State private var saveMode: EditRecipeSaveMode = .updateWithLogs
 
     @State private var focusManager = SwipeFocusManager()
 
@@ -406,9 +407,10 @@ struct EditRecipeView: View {
                 onSaveInstantly?(recipe)
                 dismiss()
             } catch {
-                print(
-                    "Failed to save edited recipe: \(error.localizedDescription)"
+                toastCenter?.show(
+                    .failure(String(localized: "Couldn't Save Changes"), message: name)
                 )
+                modelContext.rollback()
             }
 
         } else {
@@ -452,9 +454,22 @@ struct EditRecipeView: View {
             do {
                 try modelContext.save()
                 onSaveInstantly?(newRecipe)
+                if let toastCenter {
+                    toastCenter.show(
+                        .foodSaved(
+                            newRecipe,
+                            title: String(localized: "Saved as Copy"),
+                            in: modelContext,
+                            presenter: toastCenter
+                        )
+                    )
+                }
                 dismiss()
             } catch {
-                print("Failed to clone recipe: \(error.localizedDescription)")
+                toastCenter?.show(
+                    .failure(String(localized: "Couldn't Save Copy"), message: name)
+                )
+                modelContext.rollback()
             }
         }
     }

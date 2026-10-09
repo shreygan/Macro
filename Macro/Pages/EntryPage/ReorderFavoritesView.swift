@@ -11,6 +11,7 @@ import SwiftUI
 struct ReorderFavoritesView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.toastCenter) private var toastCenter
 
     @Query(sort: \FavoriteEntry.orderIndex) private var favoriteEntries:
         [FavoriteEntry]
@@ -60,7 +61,7 @@ struct ReorderFavoritesView: View {
             entry.orderIndex = index
         }
 
-        try? modelContext.save()
+        save(failureTitle: String(localized: "Couldn't Reorder Favorites"))
     }
 
     private func deleteItems(at offsets: IndexSet) {
@@ -74,7 +75,16 @@ struct ReorderFavoritesView: View {
             entry.orderIndex = index
         }
 
-        try? modelContext.save()
+        save(failureTitle: String(localized: "Couldn't Remove Favorite"))
+    }
+
+    private func save(failureTitle: String) {
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            toastCenter?.show(.failure(failureTitle))
+        }
     }
 }
 
