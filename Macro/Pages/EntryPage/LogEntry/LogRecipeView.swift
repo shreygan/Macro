@@ -751,9 +751,11 @@ struct LogRecipeView: View {
                                                     where: { $0.id == draft.id }
                                                 )
                                             {
-                                                draftIngredients.remove(
-                                                    at: index
-                                                )
+                                                withAnimation(.snappy) {
+                                                    _ = draftIngredients.remove(
+                                                        at: index
+                                                    )
+                                                }
                                             }
                                         }
                                     )
@@ -776,11 +778,17 @@ struct LogRecipeView: View {
                 .navigationTitle("Log Recipe")
                 .navigationBarTitleDisplayMode(.inline)
                 .sheet(isPresented: $showIngredientSelectionSheet) {
-                    IngredientSelectionView { selectedItem in
+                    IngredientSelectionView(
+                        inRecipeIDs: Set(
+                            draftIngredients.compactMap(\.ingredientItem?.id)
+                        ),
+                        excludedRecipe: recipe
+                    ) { selectedItems in
                         draftIngredients.append(
-                            LogRecipeIngredient(item: selectedItem)
+                            contentsOf: selectedItems.map {
+                                LogRecipeIngredient(item: $0)
+                            }
                         )
-                        showIngredientSelectionSheet = false
                     }
                 }
                 .toolbar {
