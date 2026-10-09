@@ -20,6 +20,8 @@ struct MealRow<Content: View>: View {
     var fiber: String?
 
     var action: (() -> Void)?
+    var isSelected: Bool?
+    var tag: LocalizedStringKey?
 
     let content: Content
 
@@ -163,6 +165,19 @@ struct MealRow<Content: View>: View {
                                 .font(.system(size: 13))
                                 .foregroundColor(.tertiary)
                         }
+
+                        if let tag {
+                            Text(tag)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Color.secondary.opacity(0.15),
+                                    in: Capsule()
+                                )
+                                .fixedSize()
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -201,7 +216,14 @@ struct MealRow<Content: View>: View {
                 .layoutPriority(1)
                 .padding(.leading, -10)
 
-            if action != nil {
+            if let isSelected {
+                Image(
+                    systemName: isSelected ? "checkmark.circle.fill" : "circle"
+                )
+                .font(.system(size: 22))
+                .foregroundStyle(isSelected ? Color.accentColor : .tertiary)
+                .contentTransition(.symbolEffect(.replace))
+            } else if action != nil {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.tertiary)
@@ -212,7 +234,16 @@ struct MealRow<Content: View>: View {
         .padding(.vertical, 14)
         .contentShape(Rectangle())
 
-        if let action = action {
+        if let action, let isSelected {
+            rowContent
+                .onTapGesture {
+                    action()
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(
+                    isSelected ? [.isButton, .isSelected] : .isButton
+                )
+        } else if let action = action {
             rowContent
                 .onTapGesture {
                     action()
@@ -284,6 +315,18 @@ struct MealRow<Content: View>: View {
         }
 
         return resultText
+    }
+
+    func selectionState(_ isSelected: Bool) -> Self {
+        var row = self
+        row.isSelected = isSelected
+        return row
+    }
+
+    func nameTag(_ tag: LocalizedStringKey?) -> Self {
+        var row = self
+        row.tag = tag
+        return row
     }
 }
 
