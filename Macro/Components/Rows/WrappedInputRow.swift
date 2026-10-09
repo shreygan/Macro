@@ -10,44 +10,25 @@ import SwiftUI
 struct WrappedInputRow: View {
     var placeholder: String
     @Binding var text: String
+    var caption: String? = nil
+    var captionSymbol: String? = nil
+    var captionTint: Color = .secondary
     var keyboardType: UIKeyboardType = .default
 
-    var isSticky: Bool = false
-    var timestamp: Date? = nil
     var isEditable: Bool = true
 
     var characterLimit: Int? = nil
+    var topPadding: CGFloat = 14
+    var bottomPadding: CGFloat = 14
+    var focusOnAppear: Bool = false
+    var onFocusChange: ((Bool) -> Void)? = nil
 
     @FocusState private var isFocused: Bool
     @State private var draft = ""
     @State private var selection: TextSelection?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-
-            if isSticky || timestamp != nil {
-                HStack(alignment: .top) {
-                    if let timestamp = timestamp {
-                        Text(
-                            timestamp.formatted(
-                                date: .abbreviated,
-                                time: .shortened
-                            )
-                        )
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-
-                    if isSticky {
-                        Image(systemName: "pin.fill")
-                            .foregroundColor(.orange)
-                            .font(.caption)
-                    }
-                }
-            }
-
+        VStack(alignment: .leading, spacing: 4) {
             if isEditable {
                 TextField(
                     placeholder,
@@ -80,6 +61,20 @@ struct WrappedInputRow: View {
                     .lineLimit(nil)
                     .frame(minHeight: 22, alignment: .topLeading)
             }
+
+            if caption != nil || captionSymbol != nil {
+                HStack(spacing: 4) {
+                    if let captionSymbol {
+                        Image(systemName: captionSymbol)
+                            .foregroundStyle(captionTint)
+                    }
+                    if let caption {
+                        Text(caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.caption)
+            }
         }
         .overlay(alignment: .bottomTrailing) {
             if isEditable, let limit = characterLimit {
@@ -96,12 +91,21 @@ struct WrappedInputRow: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.top, topPadding)
+        .padding(.bottom, bottomPadding)
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .onAppear {
+            if focusOnAppear && isEditable {
+                isFocused = true
+            }
+        }
         .onChange(of: isEditable) { _, newValue in
             if newValue {
                 isFocused = true
             }
+        }
+        .onChange(of: isFocused) { _, focused in
+            onFocusChange?(focused)
         }
     }
 }
@@ -124,7 +128,7 @@ struct WrappedInputRow: View {
 
                     Card {
                         WrappedInputRow(
-                            placeholder: "Add a sticky note...",
+                            placeholder: "Add a note...",
                             text: $newNoteText,
                             isEditable: true,
                             characterLimit: 2000
@@ -134,66 +138,35 @@ struct WrappedInputRow: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("NEW ENTRY NOTE PINNED")
+                    Text("PINNED NOTE")
                         .font(.caption).bold().foregroundColor(.secondary)
                         .padding(.horizontal)
 
                     Card {
                         WrappedInputRow(
-                            placeholder: "Add a sticky note...",
-                            text: $newNoteText,
-                            isSticky: true,
-                            timestamp: Date().addingTimeInterval(
-                                -86400 * 2
-                            ),
-                            isEditable: true
+                            placeholder: "Add a pinned note...",
+                            text: $editingNoteText,
+                            caption: "Updated 2 days ago",
+                            captionSymbol: "pin.fill",
+                            captionTint: .orange
                         )
                     }
                     .padding(.horizontal)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("PREVIOUS NOTES")
+                    Text("READ ONLY")
                         .font(.caption).bold().foregroundColor(.secondary)
                         .padding(.horizontal)
 
                     Card {
-                        RowGroup(.divider) {
-
-                            WrappedInputRow(
-                                placeholder: "Sticky Note",
-                                text: .constant(
-                                    "Remember to ask the chef to hold the oil next time. Felt a bit sluggish after this meal."
-                                ),
-                                isSticky: true,
-                                timestamp: Date().addingTimeInterval(
-                                    -86400 * 2
-                                ),
-                                isEditable: false
-                            )
-
-                            WrappedInputRow(
-                                placeholder: "Sticky Note",
-                                text: .constant(
-                                    "Tasted amazing. Added an extra scoop of protein."
-                                ),
-                                isSticky: false,
-                                timestamp: Date().addingTimeInterval(
-                                    -86400 * 5
-                                ),
-                                isEditable: false
-                            )
-
-                            WrappedInputRow(
-                                placeholder: "Sticky Note",
-                                text: $editingNoteText,
-                                isSticky: false,
-                                timestamp: Date().addingTimeInterval(
-                                    -86400 * 10
-                                ),
-                                isEditable: true
-                            )
-                        }
+                        WrappedInputRow(
+                            placeholder: "Add a note...",
+                            text: .constant(
+                                "Tasted amazing. Added an extra scoop of protein."
+                            ),
+                            isEditable: false
+                        )
                     }
                     .padding(.horizontal)
                 }

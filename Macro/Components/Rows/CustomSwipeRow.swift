@@ -388,8 +388,6 @@ struct CustomSwipeRow<Content: View>: View {
                                     placeholder: "Add a note...",
                                     text: .constant("test"),
                                     //                                    text: $text,
-                                    isSticky: true,
-                                    timestamp: Date()
                                 )
                             } onDelete: {
                                 print("Custom delete chips")
