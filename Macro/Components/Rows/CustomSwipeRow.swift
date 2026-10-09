@@ -20,6 +20,9 @@ struct CustomSwipeRow<Content: View>: View {
     var onPin: (() -> Void)? = nil
     var isPinned: Bool = false
 
+    var onHide: (() -> Void)? = nil
+    var isHidden: Bool = false
+
     @Environment(SwipeFocusManager.self) private var focusManager
 
     @State private var horizontalOffset: CGFloat = 0
@@ -37,6 +40,7 @@ struct CustomSwipeRow<Content: View>: View {
         let buttonCount =
             (onDelete != nil ? 1 : 0) + (onEdit != nil ? 1 : 0)
             + (onFavorite != nil ? 1 : 0) + (onPin != nil ? 1 : 0)
+            + (onHide != nil ? 1 : 0)
 
         if buttonCount == 0 { return 0 }
 
@@ -57,7 +61,7 @@ struct CustomSwipeRow<Content: View>: View {
                 if let onFavAction = onFavorite {
                     let favPos =
                         (onDelete != nil ? 1 : 0) + (onEdit != nil ? 1 : 0)
-                        + (onPin != nil ? 1 : 0)
+                        + (onPin != nil ? 1 : 0) + (onHide != nil ? 1 : 0)
                     let favScale = computeButtonScale(positionFromRight: favPos)
                     Button(action: {
                         closeRow()
@@ -94,6 +98,7 @@ struct CustomSwipeRow<Content: View>: View {
                 if let onPinAction = onPin {
                     let pinPos =
                         (onDelete != nil ? 1 : 0) + (onEdit != nil ? 1 : 0)
+                        + (onHide != nil ? 1 : 0)
                     let pinScale = computeButtonScale(positionFromRight: pinPos)
                     Button(action: {
                         closeRow()
@@ -128,7 +133,8 @@ struct CustomSwipeRow<Content: View>: View {
                 }
 
                 if let onEditAction = onEdit {
-                    let editPos = (onDelete != nil ? 1 : 0)
+                    let editPos =
+                        (onDelete != nil ? 1 : 0) + (onHide != nil ? 1 : 0)
                     let editScale = computeButtonScale(
                         positionFromRight: editPos
                     )
@@ -159,6 +165,41 @@ struct CustomSwipeRow<Content: View>: View {
                     }
                     .scaleEffect(editScale)
                     .opacity(editScale > 0.01 ? 1 : 0)
+                }
+
+                if let onHideAction = onHide {
+                    let hidePos = (onDelete != nil ? 1 : 0)
+                    let hideScale = computeButtonScale(positionFromRight: hidePos)
+                    Button(action: {
+                        closeRow()
+                        onHideAction()
+                    }) {
+                        VStack(spacing: 4) {
+                            Image(
+                                systemName: isHidden
+                                    ? "eye.fill" : "eye.slash.fill"
+                            )
+                            .font(
+                                .system(
+                                    size: 16,
+                                    weight: .semibold
+                                )
+                            )
+                            .foregroundColor(.white)
+                            .frame(
+                                width: buttonSize,
+                                height: buttonSize
+                            )
+                            .background(Color.indigo)
+                            .clipShape(Circle())
+
+                            Text(isHidden ? "Unhide" : "Hide")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .scaleEffect(hideScale)
+                    .opacity(hideScale > 0.01 ? 1 : 0)
                 }
 
                 if let onDeleteAction = onDelete {
