@@ -108,6 +108,23 @@ enum EntryHelper {
         return "\(quantityText) \(unitText)"
     }
 
+    static func logDateText(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let time = date.formatted(date: .omitted, time: .shortened)
+            .lowercased()
+
+        let day: String
+        if calendar.isDateInToday(date) {
+            day = "Today"
+        } else if calendar.isDateInYesterday(date) {
+            day = "Yesterday"
+        } else {
+            day = date.formatted(.dateTime.weekday(.abbreviated).month().day())
+        }
+
+        return "\(day), \(time)"
+    }
+
     static func formatMacro(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0...1)))
     }
