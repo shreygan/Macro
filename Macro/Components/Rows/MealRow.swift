@@ -352,7 +352,7 @@ extension MealRow where Content == EmptyView {
 
         self.init(
             name: food.name,
-            source: food.source?.source ?? "None",
+            source: food.source?.source ?? "",
             isCustomDefaultServing: food.isCustomDefaultServing,
             customServingSize: EntryHelper.format(food.customServingSize),
             servingSize: EntryHelper.format(displayPortion),

@@ -33,6 +33,7 @@ struct MacroProgressRow: View {
                         Text("\(Int(current)) \(unit)")
                             .font(.system(size: 14))
                             .foregroundColor(.secondary)
+                            .contentTransition(.numericText(value: current))
                     } else {
                         let modeText = mode == .floor ? "min" : "max"
 
@@ -41,6 +42,7 @@ struct MacroProgressRow: View {
                         )
                         .font(.system(size: 14))
                         .foregroundColor(.secondary)
+                        .contentTransition(.numericText(value: current))
 
                         statusIcon
                             .font(.system(size: 14))
