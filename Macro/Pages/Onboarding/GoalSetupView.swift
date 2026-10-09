@@ -11,6 +11,7 @@ import SwiftUI
 struct GoalSetupView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.toastCenter) private var toastCenter
 
     @Query private var users: [User]
 
@@ -198,7 +199,13 @@ struct GoalSetupView: View {
                     context.insert(newGoals)
                 }
 
-                try? context.save()
+                do {
+                    try context.save()
+                } catch {
+                    context.rollback()
+                    toastCenter?.show(.failure(String(localized: "Couldn't Save Goals")))
+                    return
+                }
 
                 dismiss()
 

@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 
 struct LogImportReviewView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
 
     @Query private var users: [User]
 
@@ -308,6 +309,7 @@ struct LogImportReviewView: View {
         )
 
         var replacedIDs = Set<UUID>()
+        var addedCount = 0
 
         for draft in entries {
             if let duplicateID = draft.duplicateOf {
@@ -338,6 +340,7 @@ struct LogImportReviewView: View {
             modelContext.insert(log)
             logsByID[log.id] = log
             insertComponents(of: draft, into: log, resolver: resolver, library: library)
+            addedCount += 1
         }
 
         do {
@@ -348,7 +351,16 @@ struct LogImportReviewView: View {
             return
         }
 
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        toastCenter?.show(
+            .importComplete(
+                title: String(localized: "Logs Imported"),
+                singular: "log",
+                plural: "logs",
+                added: addedCount,
+                updated: replacedIDs.count,
+                addedToLibrary: addMissingToLibrary ? missingFoods.count : 0
+            )
+        )
         onSaveComplete()
     }
 

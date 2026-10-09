@@ -10,13 +10,13 @@ import SwiftUI
 
 struct AddRecipeView: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.rootDismiss) var rootDismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.toastCenter) private var toastCenter
 
-    var onLogInstantly: ((FoodItem) -> Void)?
+    var offersLogNow: Bool
     var onCreate: ((FoodItem) -> Void)?
-    @State private var showSuccessAlert: Bool = false
-    @State private var newlySavedEntry: FoodItem? = nil
 
     @Query(sort: \EntrySource.displayOrder) var savedSources: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var savedCategories:
@@ -49,12 +49,12 @@ struct AddRecipeView: View {
     @State private var didFinishAdding = false
 
     init(
-        onLogInstantly: ((FoodItem) -> Void)? = nil,
+        offersLogNow: Bool = false,
         draft: EntryDraft? = nil,
         prefill: AddRecipePrefill? = nil,
         onCreate: ((FoodItem) -> Void)? = nil
     ) {
-        self.onLogInstantly = onLogInstantly
+        self.offersLogNow = offersLogNow
         self.onCreate = onCreate
 
         _draftID = State(initialValue: draft?.id ?? UUID())
@@ -124,21 +124,26 @@ struct AddRecipeView: View {
         )
     }
 
-    private func saveDraft() {
+    private func saveDraft(reportingFailure: Bool = true) {
         let state = draftState
         guard state != .empty else {
             DraftStore.delete(id: draftID, in: modelContext)
             return
         }
 
-        DraftStore.upsert(
-            id: draftID,
-            kind: .addRecipe,
-            type: .recipe,
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            state: state,
-            in: modelContext
-        )
+        do {
+            try DraftStore.upsert(
+                id: draftID,
+                kind: .addRecipe,
+                type: .recipe,
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                state: state,
+                in: modelContext
+            )
+        } catch {
+            guard reportingFailure else { return }
+            toastCenter?.show(.failure(String(localized: "Couldn't Save Draft")))
+        }
     }
 
     private func saveDraftAndClose() {
@@ -148,7 +153,20 @@ struct AddRecipeView: View {
     }
 
     private func discardAndClose() {
-        DraftStore.delete(id: draftID, in: modelContext)
+        if isResumedDraft {
+            if draftState != .empty { saveDraft(reportingFailure: false) }
+            do {
+                if let record = try EntryDeleter.deleteDraft(id: draftID, in: modelContext) {
+                    toastCenter?.show(
+                        .draftDeleted(record, in: modelContext, presenter: toastCenter)
+                    )
+                }
+            } catch {
+                toastCenter?.show(.failure(String(localized: "Couldn't Delete Draft")))
+            }
+        } else {
+            DraftStore.delete(id: draftID, in: modelContext)
+        }
         didFinishAdding = true
         dismiss()
     }
@@ -365,15 +383,22 @@ struct AddRecipeView: View {
             try modelContext.save()
             didFinishAdding = true
 
-            newlySavedEntry = newRecipe
+            if offersLogNow, let toastCenter {
+                toastCenter.show(
+                    .foodSaved(newRecipe, in: modelContext, presenter: toastCenter)
+                )
+            }
             onCreate?(newRecipe)
-            if onLogInstantly != nil {
-                showSuccessAlert = true
+            if let rootDismiss, offersLogNow {
+                rootDismiss()
             } else {
                 dismiss()
             }
         } catch {
-            print("Failed to save recipe: \(error.localizedDescription)")
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Save Recipe"), message: newRecipe.name)
+            )
+            modelContext.rollback()
         }
     }
 
@@ -682,22 +707,6 @@ struct AddRecipeView: View {
 
             }
             .environment(focusManager)
-        }
-        .alert(
-            "\(name) Saved!",
-            isPresented: $showSuccessAlert,
-            presenting: newlySavedEntry
-        ) { food in
-
-            Button("Log Now", role: .confirm) {
-                dismiss()
-                onLogInstantly?(food)
-            }
-
-            Button("Done", role: .cancel) {
-                dismiss()
-            }
-
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background && isDraftEnabled && !didFinishAdding {

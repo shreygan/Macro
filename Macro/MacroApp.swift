@@ -50,6 +50,7 @@ struct MacroApp: App {
         WindowGroup {
             MainView()
                 .textInputAutocapitalization(.never)
+                .toastHost()
         }
         .modelContainer(sharedModelContainer)
     }

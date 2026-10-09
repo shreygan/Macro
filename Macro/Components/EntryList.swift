@@ -18,6 +18,7 @@ struct EntryList<Item: Identifiable & Equatable, RowContent: View>: View {
     var items: [Item]
     var allowSwipeActions: Bool = true
     var showCard: Bool = true
+    var isLazy: Bool = true
 
     @ViewBuilder var rowContent: (Item) -> RowContent
 
@@ -26,9 +27,11 @@ struct EntryList<Item: Identifiable & Equatable, RowContent: View>: View {
     var editTitle: LocalizedStringKey = "Edit"
     var onFavorite: ((Item) -> Void)? = nil
     var isFavorited: ((Item) -> Bool)? = nil
+    var onHide: ((Item) -> Void)? = nil
+    var isHidden: ((Item) -> Bool)? = nil
 
     var body: some View {
-        let content = RowGroup(.divider, isLazy: true) {
+        let content = RowGroup(.divider, isLazy: isLazy) {
             ForEach(items) { item in
                 if allowSwipeActions {
                     let deleteAction: (() -> Void)? =
@@ -37,6 +40,8 @@ struct EntryList<Item: Identifiable & Equatable, RowContent: View>: View {
                         onEdit != nil ? { onEdit?(item) } : nil
                     let favoriteAction: (() -> Void)? =
                         onFavorite != nil ? { onFavorite?(item) } : nil
+                    let hideAction: (() -> Void)? =
+                        onHide != nil ? { onHide?(item) } : nil
 
                     CustomSwipeRow(
                         content: { rowContent(item) },
@@ -45,6 +50,8 @@ struct EntryList<Item: Identifiable & Equatable, RowContent: View>: View {
                         editTitle: editTitle,
                         onFavorite: favoriteAction,
                         isFavorited: isFavorited?(item) ?? false,
+                        onHide: hideAction,
+                        isHidden: isHidden?(item) ?? false
                     )
                     .transition(
                         .asymmetric(

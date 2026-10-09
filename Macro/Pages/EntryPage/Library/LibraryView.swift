@@ -52,6 +52,7 @@ nonisolated enum SwipeAction: Hashable, Sendable {
 
 struct LibraryView<Header: View>: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
 
     var title: String
     var searchPrompt: String
@@ -86,8 +87,6 @@ struct LibraryView<Header: View>: View {
     @State private var selectedTypes: Set<String>
     @State private var selectedSources: Set<String> = []
     @State private var selectedCategories: Set<String> = []
-
-    @State private var showDeleteAlert = false
     @State private var foodToDelete: FoodItem?
 
     @State private var foodToEdit: FoodItem?
@@ -283,9 +282,10 @@ struct LibraryView<Header: View>: View {
                                 } : nil,
                             onFavorite: swipeActions.contains(.favorite)
                                 ? { food in
-                                    FoodItemStore.toggleFavorite(
+                                    EntryActions.toggleFavorite(
                                         food,
-                                        in: modelContext
+                                        in: modelContext,
+                                        toastCenter: toastCenter
                                     )
                                 } : nil,
                             isFavorited: { food in
@@ -392,7 +392,7 @@ struct LibraryView<Header: View>: View {
                 }
             }
         }
-        .deleteFoodAlert(isPresented: $showDeleteAlert, food: $foodToDelete)
+        .deleteFoodAlert(food: $foodToDelete)
     }
 
     private func foodRow(for food: FoodItem) -> some View {
@@ -419,7 +419,6 @@ struct LibraryView<Header: View>: View {
 
     private func confirmDelete(_ food: FoodItem) {
         foodToDelete = food
-        showDeleteAlert = true
     }
 
     @ViewBuilder

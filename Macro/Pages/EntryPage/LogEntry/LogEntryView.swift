@@ -13,6 +13,7 @@ struct LogEntryView: View {
     @Environment(\.rootDismiss) var rootDismiss
     @Environment(\.dismiss) var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.toastCenter) private var toastCenter
 
     @State private var focusManager = SwipeFocusManager()
 
@@ -193,6 +194,10 @@ struct LogEntryView: View {
         )
         let resolvedNote = trimmedNote.isEmpty ? nil : trimmedNote
 
+        let originalFood = saveOption == .updateOriginal ? MacroBackup.foodRecord(food) : nil
+        var createdListItems: [any PersistentModel] = []
+        var createdFood: FoodItem? = nil
+
         var resolvedSource: EntrySource? = nil
         let trimmedSource = sourceSelection.trimmingCharacters(
             in: .whitespacesAndNewlines
@@ -210,6 +215,7 @@ struct LogEntryView: View {
                     displayOrder: nextOrder
                 )
                 modelContext.insert(newSource)
+                createdListItems.append(newSource)
                 resolvedSource = newSource
             }
         }
@@ -231,6 +237,7 @@ struct LogEntryView: View {
                     displayOrder: nextOrder
                 )
                 modelContext.insert(newCategory)
+                createdListItems.append(newCategory)
                 resolvedCategory = newCategory
             }
         }
@@ -253,6 +260,7 @@ struct LogEntryView: View {
                     displayOrder: nextOrder
                 )
                 modelContext.insert(newGroup)
+                createdListItems.append(newGroup)
                 resolvedFoodGroup = newGroup
             }
         }
@@ -355,16 +363,36 @@ struct LogEntryView: View {
                         ? Note(text: resolvedNote!) : nil
                 )
                 modelContext.insert(newFood)
+                createdFood = newFood
 
                 newLog.originalFoodItem = newFood
             }
         }
 
+        let draftRecord = DraftStore.fetch(id: draftID, in: modelContext)
+            .map(MacroBackup.draftRecord)
         DraftStore.delete(id: draftID, in: modelContext, save: false)
 
         do {
             try modelContext.save()
             didFinishLogging = true
+
+            if let toastCenter {
+                toastCenter.show(
+                    .entryLogged(
+                        LogUndoRecord(
+                            entry: newLog,
+                            originalFood: originalFood,
+                            createdFood: createdFood,
+                            createdListItems: createdListItems,
+                            draft: draftRecord
+                        ),
+                        title: String(localized: "\(food.type.rawValue.capitalized) Logged"),
+                        in: modelContext,
+                        presenter: toastCenter
+                    )
+                )
+            }
 
             if let rootDismiss {
                 rootDismiss()
@@ -372,7 +400,10 @@ struct LogEntryView: View {
                 dismiss()
             }
         } catch {
-            print("Failed to save logged entry: \(error.localizedDescription)")
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Log Entry"), message: newLog.name)
+            )
+            modelContext.rollback()
         }
     }
 
@@ -413,18 +444,23 @@ struct LogEntryView: View {
         )
     }
 
-    private func saveDraft() {
-        DraftStore.upsert(
-            id: draftID,
-            kind: .logFood,
-            type: food.type,
-            name: name.isEmpty ? food.name : name,
-            timestamp: combineDateAndTime(date: date, time: time),
-            foodItem: food,
-            state: draftState,
-            photos: selectedPhotos,
-            in: modelContext
-        )
+    private func saveDraft(reportingFailure: Bool = true) {
+        do {
+            try DraftStore.upsert(
+                id: draftID,
+                kind: .logFood,
+                type: food.type,
+                name: name.isEmpty ? food.name : name,
+                timestamp: combineDateAndTime(date: date, time: time),
+                foodItem: food,
+                state: draftState,
+                photos: selectedPhotos,
+                in: modelContext
+            )
+        } catch {
+            guard reportingFailure else { return }
+            toastCenter?.show(.failure(String(localized: "Couldn't Save Draft")))
+        }
     }
 
     private var hasDraftChanges: Bool {
@@ -448,7 +484,20 @@ struct LogEntryView: View {
     }
 
     private func discardAndClose() {
-        DraftStore.delete(id: draftID, in: modelContext)
+        if isResumedDraft {
+            saveDraft(reportingFailure: false)
+            do {
+                if let record = try EntryDeleter.deleteDraft(id: draftID, in: modelContext) {
+                    toastCenter?.show(
+                        .draftDeleted(record, in: modelContext, presenter: toastCenter)
+                    )
+                }
+            } catch {
+                toastCenter?.show(.failure(String(localized: "Couldn't Delete Draft")))
+            }
+        } else {
+            DraftStore.delete(id: draftID, in: modelContext)
+        }
         didFinishLogging = true
         dismiss()
     }
@@ -518,16 +567,23 @@ struct LogEntryView: View {
         self.fatStatic = fatStr
         self.fiberStatic = fibStr
 
+        let defaultMultiplier = EntryHelper.defaultPortionMultiplier(for: food)
+
         let initialCalorie =
-            previousEntry.map { EntryHelper.format($0.calories) } ?? calStr
+            previousEntry.map { EntryHelper.format($0.calories) }
+            ?? EntryHelper.scale(calStr, by: defaultMultiplier)
         let initialProtein =
-            previousEntry.map { EntryHelper.format($0.protein) } ?? proStr
+            previousEntry.map { EntryHelper.format($0.protein) }
+            ?? EntryHelper.scale(proStr, by: defaultMultiplier)
         let initialCarbs =
-            previousEntry.map { EntryHelper.format($0.carbs) } ?? carbStr
+            previousEntry.map { EntryHelper.format($0.carbs) }
+            ?? EntryHelper.scale(carbStr, by: defaultMultiplier)
         let initialFat =
-            previousEntry.map { EntryHelper.format($0.fat) } ?? fatStr
+            previousEntry.map { EntryHelper.format($0.fat) }
+            ?? EntryHelper.scale(fatStr, by: defaultMultiplier)
         let initialFiber =
-            previousEntry.map { EntryHelper.format($0.fiber) } ?? fibStr
+            previousEntry.map { EntryHelper.format($0.fiber) }
+            ?? EntryHelper.scale(fibStr, by: defaultMultiplier)
 
         _calorieDynamic = State(initialValue: initialCalorie)
         _proteinDynamic = State(initialValue: initialProtein)

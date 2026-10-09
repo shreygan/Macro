@@ -184,9 +184,7 @@ struct ImportView: View {
         }
         .navigationDestination(isPresented: $showBackupRestore) {
             if let loadedBackup {
-                BackupRestoreView(backup: loadedBackup) {
-                    dismiss()
-                }
+                BackupRestoreView(backup: loadedBackup)
             }
         }
     }

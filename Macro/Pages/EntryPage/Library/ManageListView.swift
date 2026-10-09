@@ -10,6 +10,7 @@ import SwiftUI
 
 struct ManageListView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
 
     let kind: LibraryListKind
 
@@ -75,11 +76,17 @@ struct ManageListView: View {
                                 title: "Restore Defaults",
                                 topPadding: defaults.isEmpty ? 12 : 8
                             ) {
-                                withAnimation {
-                                    LibraryListStore.restoreDefaults(
-                                        for: kind,
-                                        existing: items,
-                                        in: modelContext
+                                do {
+                                    try withAnimation {
+                                        try LibraryListStore.restoreDefaults(
+                                            for: kind,
+                                            existing: items,
+                                            in: modelContext
+                                        )
+                                    }
+                                } catch {
+                                    toastCenter?.show(
+                                        .failure(String(localized: "Couldn't Restore Defaults"))
                                     )
                                 }
                             }
@@ -199,12 +206,16 @@ struct ManageListView: View {
                     itemRow(item, usage: usageByName[item.name], allItems: allItems)
                 },
                 onDelete: { item in
-                    itemToDelete = item
+                    requestDelete(item)
                 },
                 onEdit: { item in
                     startRename(item, allItems: allItems)
                 },
-                editTitle: "Rename"
+                editTitle: "Rename",
+                onHide: { item in
+                    setHidden(item, !item.isHidden)
+                },
+                isHidden: \.isHidden
             )
         }
     }
@@ -273,7 +284,7 @@ struct ManageListView: View {
                 Divider()
 
                 Button(role: .destructive) {
-                    itemToDelete = item
+                    requestDelete(item)
                 } label: {
                     Label("Delete \(kind.itemName)", systemImage: "trash")
                 }
@@ -420,12 +431,18 @@ struct ManageListView: View {
         focusedField = nil
 
         guard shouldSave else { return }
-        withAnimation {
-            LibraryListStore.rename(
-                item.id,
-                to: name,
-                in: kind,
-                context: modelContext
+        do {
+            try withAnimation {
+                try LibraryListStore.rename(
+                    item.id,
+                    to: name,
+                    in: kind,
+                    context: modelContext
+                )
+            }
+        } catch {
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Rename \(kind.itemName)"), message: item.name)
             )
         }
     }
@@ -438,38 +455,63 @@ struct ManageListView: View {
         focusedField = nil
         let nextOrder = (allItems.map(\.displayOrder).max() ?? -1) + 1
 
-        withAnimation(Self.listAnimation) {
-            isAdding = false
-            guard shouldSave else { return }
-            LibraryListStore.add(
-                name,
-                to: kind,
-                displayOrder: nextOrder,
-                in: modelContext
+        do {
+            try withAnimation(Self.listAnimation) {
+                isAdding = false
+                guard shouldSave else { return }
+                try LibraryListStore.add(
+                    name,
+                    to: kind,
+                    displayOrder: nextOrder,
+                    in: modelContext
+                )
+            }
+        } catch {
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Add \(kind.itemName)"), message: name)
             )
         }
     }
 
     @ViewBuilder
     private func deleteActions(for item: LibraryListItem) -> some View {
-        let isUsed = usage(of: item).isUsed
-
-        if isUsed && !item.isHidden {
+        if !item.isHidden {
             Button("Hide from Dropdowns") {
                 setHidden(item, true)
             }
         }
 
-        Button(
-            isUsed ? "Delete from All Items" : "Delete",
-            role: .destructive
-        ) {
-            withAnimation {
-                LibraryListStore.delete(item.id, in: modelContext)
-            }
+        Button("Delete from All Items", role: .destructive) {
+            delete(item)
         }
 
         Button("Cancel", role: .cancel) {}
+    }
+
+    private func requestDelete(_ item: LibraryListItem) {
+        let usage = LibraryListStore.usage(of: item.name, in: kind, context: modelContext)
+        if usage.isUsed {
+            itemToDelete = item
+        } else {
+            delete(item)
+        }
+    }
+
+    private func delete(_ item: LibraryListItem) {
+        if renamingItem?.id == item.id {
+            cancelEditing()
+        }
+        do {
+            let record = try withAnimation {
+                try LibraryListStore.delete(item.id, in: modelContext)
+            }
+            guard let record else { return }
+            toastCenter?.show(.listItemDeleted(record, in: modelContext, presenter: toastCenter))
+        } catch {
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Delete \(kind.itemName)"), message: item.name)
+            )
+        }
     }
 
     private func usage(of item: LibraryListItem) -> LibraryListUsage {
@@ -494,18 +536,20 @@ struct ManageListView: View {
     }
 
     private func setHidden(_ item: LibraryListItem, _ isHidden: Bool) {
-        withAnimation {
-            LibraryListStore.setHidden(item.id, isHidden, in: modelContext)
+        do {
+            try withAnimation {
+                try LibraryListStore.setHidden(item.id, isHidden, in: modelContext)
+            }
+        } catch {
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Update \(kind.itemName)"), message: item.name)
+            )
         }
     }
 
     private func deleteMessage(for item: LibraryListItem) -> Text {
         let usage = usage(of: item)
         let itemName = kind.itemName.lowercased()
-
-        guard usage.isUsed else {
-            return Text("Are you sure you want to delete \(item.name)?")
-        }
 
         if item.isHidden {
             return Text(
@@ -521,6 +565,7 @@ struct ManageListView: View {
 private struct ReorderListView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.toastCenter) private var toastCenter
 
     let kind: LibraryListKind
 
@@ -569,7 +614,11 @@ private struct ReorderListView: View {
     private func moveItems(from source: IndexSet, to destination: Int) {
         var ids = items.map(\.id)
         ids.move(fromOffsets: source, toOffset: destination)
-        LibraryListStore.reorder(ids, in: modelContext)
+        do {
+            try LibraryListStore.reorder(ids, in: modelContext)
+        } catch {
+            toastCenter?.show(.failure(String(localized: "Couldn't Reorder \(kind.title)")))
+        }
     }
 }
 

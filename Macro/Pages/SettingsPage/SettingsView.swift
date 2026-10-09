@@ -8,10 +8,15 @@
 import SwiftData
 import SwiftUI
 
+extension EnvironmentValues {
+    @Entry var dismissSettings: () -> Void = {}
+}
+
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.eraseAllData) private var eraseAllData
+    @Environment(\.toastCenter) private var toastCenter
 
     @Query private var users: [User]
 
@@ -49,7 +54,12 @@ struct SettingsView: View {
                 let minutes =
                     (components.hour ?? 0) * 60 + (components.minute ?? 0)
                 user.dayStartMinutes = min(minutes, maxDayStartMinutes)
-                try? modelContext.save()
+                do {
+                    try modelContext.save()
+                } catch {
+                    modelContext.rollback()
+                    toastCenter?.show(.failure(String(localized: "Couldn't Save Day Start")))
+                }
             }
         )
     }
@@ -194,6 +204,7 @@ struct SettingsView: View {
                 )
             }
         }
+        .environment(\.dismissSettings, { dismiss() })
     }
 }
 

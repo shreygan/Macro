@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 
 struct ImportReviewView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
 
     @Binding var items: [DraftFoodItem]
     @Binding var issues: [ImportIssue]
@@ -507,7 +508,15 @@ struct ImportReviewView: View {
             return
         }
 
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        toastCenter?.show(
+            .importComplete(
+                title: String(localized: "Entries Imported"),
+                singular: "entry",
+                plural: "entries",
+                added: saved.count - replacedIDs.count,
+                updated: replacedIDs.count
+            )
+        )
         onSaveComplete()
     }
 

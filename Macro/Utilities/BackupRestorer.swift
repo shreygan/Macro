@@ -25,30 +25,22 @@ struct BackupRestoreSummary: Identifiable {
     var drafts = 0
     var skippedExisting = 0
 
-    var message: String {
-        func count(_ value: Int, _ singular: String, _ plural: String) -> String {
-            "\(value) \(value == 1 ? singular : plural)"
-        }
+    var message: String? {
+        let parts = [
+            (foods, "entry", "entries"),
+            (logs, "log", "logs"),
+            (goals, "goal", "goals"),
+            (photos, "photo", "photos"),
+            (favorites, "favorite", "favorites"),
+            (lists, "list item", "list items"),
+            (drafts, "draft", "drafts"),
+        ]
+        .filter { $0.0 > 0 }
+        .map { "\($0.0) \($0.0 == 1 ? $0.1 : $0.2)" }
 
-        var lines: [String] = []
-        if foods > 0 {
-            lines.append(
-                "Restored \(count(foods, "library entry", "library entries"))"
-                    + (recipes > 0 ? " (\(count(recipes, "recipe", "recipes")))." : ".")
-            )
-        }
-        if logs > 0 { lines.append("Restored \(count(logs, "log", "logs")).") }
-        if photos > 0 { lines.append("Restored \(count(photos, "photo", "photos")).") }
-        if goals > 0 { lines.append("Restored \(count(goals, "goal", "goals")).") }
-        if favorites > 0 { lines.append("Restored \(count(favorites, "favorite", "favorites")).") }
-        if lists > 0 { lines.append("Restored \(count(lists, "custom list item", "custom list items")).") }
-        if drafts > 0 { lines.append("Restored \(count(drafts, "draft", "drafts")).") }
-        if skippedExisting > 0 {
-            lines.append("Kept \(count(skippedExisting, "item", "items")) you already had.")
-        }
-        return lines.isEmpty
-            ? "Everything in this backup is already on this device."
-            : lines.joined(separator: "\n")
+        guard !parts.isEmpty else { return nil }
+        guard parts.count > 3 else { return parts.joined(separator: " · ") }
+        return (parts.prefix(2) + ["+\(parts.count - 2) more"]).joined(separator: " · ")
     }
 }
 
@@ -252,6 +244,13 @@ struct BackupRestorer {
             existingFoods.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
+        let relationships = RecordRelationships(
+            food: { foodsByID[$0] },
+            source: sourceFor,
+            category: categoryFor,
+            foodGroup: foodGroupFor,
+            unit: unitFor
+        )
         var restoredFoods: [(record: MacroBackup.FoodRecord, item: FoodItem)] = []
 
         for record in backup.foods {
@@ -260,31 +259,7 @@ struct BackupRestorer {
                 continue
             }
 
-            let food = FoodItem(
-                id: record.id,
-                name: record.name,
-                type: EntryType(rawValue: record.type) ?? .food,
-                source: sourceFor(record.source),
-                category: categoryFor(record.category),
-                foodGroup: foodGroupFor(record.foodGroup),
-                servingSize: record.servingSize,
-                servingUnit: unitFor(record.servingUnit),
-                servingWeight: record.servingWeight,
-                servingWeightUnit: record.servingWeightUnit,
-                isAIEstimated: record.isAIEstimated,
-                calories: record.calories,
-                protein: record.protein,
-                carbs: record.carbs,
-                fat: record.fat,
-                fiber: record.fiber,
-                isCustomDefaultServing: record.isCustomDefaultServing,
-                customServingSize: record.customServingSize,
-                stickyNote: record.note.map {
-                    Note(text: $0.text, lastUpdated: $0.lastUpdated)
-                },
-                dateAdded: record.dateAdded
-            )
-            context.insert(food)
+            let food = record.insert(relationships: relationships, in: context)
             foodsByID[food.id] = food
             restoredFoods.append((record, food))
 
@@ -293,29 +268,7 @@ struct BackupRestorer {
         }
 
         for (record, recipe) in restoredFoods {
-            for ingredientRecord in record.ingredients {
-                let ingredient = RecipeIngredient(
-                    id: ingredientRecord.id,
-                    quantity: ingredientRecord.quantity,
-                    unit: ingredientRecord.unit,
-                    displayOrder: ingredientRecord.displayOrder,
-                    name: ingredientRecord.name,
-                    baseServingSize: ingredientRecord.baseServingSize,
-                    baseServingUnitName: ingredientRecord.baseServingUnitName,
-                    baseServingWeight: ingredientRecord.baseServingWeight,
-                    baseServingWeightUnit: ingredientRecord.baseServingWeightUnit,
-                    baseCalories: ingredientRecord.baseCalories,
-                    baseProtein: ingredientRecord.baseProtein,
-                    baseCarbs: ingredientRecord.baseCarbs,
-                    baseFat: ingredientRecord.baseFat,
-                    baseFiber: ingredientRecord.baseFiber
-                )
-                ingredient.ingredientItem = ingredientRecord.ingredientItemID.flatMap {
-                    foodsByID[$0]
-                }
-                ingredient.parentRecipe = recipe
-                context.insert(ingredient)
-            }
+            record.insertIngredients(into: recipe, relationships: relationships, in: context)
         }
 
         let restoredIDs = Set(restoredFoods.map(\.item.id))
@@ -338,85 +291,27 @@ struct BackupRestorer {
             ((try? context.fetch(FetchDescriptor<LoggedEntry>())) ?? []).map(\.id)
         )
 
-        func insertLog(_ record: MacroBackup.LogRecord, parent: LoggedEntry?) {
-            let log = LoggedEntry(
-                id: record.id,
-                name: record.name,
-                typeRawValue: record.typeRawValue,
-                originalFoodItem: record.originalFoodID.flatMap { foodsByID[$0] },
-                parentEntry: parent,
-                source: sourceFor(record.source),
-                category: categoryFor(record.category),
-                foodGroup: foodGroupFor(record.foodGroup),
-                timestamp: record.timestamp,
-                location: record.location,
-                loggedQuantity: record.loggedQuantity,
-                loggedUnit: record.loggedUnit,
-                calories: record.calories,
-                protein: record.protein,
-                carbs: record.carbs,
-                fat: record.fat,
-                fiber: record.fiber,
-                isManualOverride: record.isManualOverride,
-                logNote: record.logNote,
-                displayOrder: record.displayOrder
-            )
-            log.photos = makePhotos(record.photos)
-            summary.photos += record.photos.count
-            context.insert(log)
-
-            for child in record.children {
-                insertLog(child, parent: log)
-            }
-        }
-
         for record in backup.logs {
             if existingLogIDs.contains(record.id) {
                 summary.skippedExisting += 1
                 continue
             }
-            insertLog(record, parent: nil)
+            record.insert(relationships: relationships, in: context)
             summary.logs += 1
+            summary.photos += record.photoCount
         }
 
         let existingDraftIDs = Set(
             ((try? context.fetch(FetchDescriptor<EntryDraft>())) ?? []).map(\.id)
         )
         for record in backup.drafts where !existingDraftIDs.contains(record.id) {
-            guard let kind = DraftKind(rawValue: record.kindRawValue),
-                let type = EntryType(rawValue: record.typeRawValue)
-            else { continue }
-
-            let draft = EntryDraft(
-                id: record.id,
-                kind: kind,
-                type: type,
-                name: record.name,
-                timestamp: record.timestamp,
-                foodItem: record.foodItemID.flatMap { foodsByID[$0] },
-                payload: record.payload,
-                createdAt: record.createdAt
-            )
-            draft.updatedAt = record.updatedAt
-            draft.photos = makePhotos(record.photos)
+            let food = record.foodItemID.flatMap { foodsByID[$0] }
+            guard record.insert(foodItem: food, in: context) != nil else { continue }
             summary.photos += record.photos.count
-            context.insert(draft)
             summary.drafts += 1
         }
 
         return summary
-    }
-
-    private func makePhotos(_ records: [MacroBackup.PhotoRecord]) -> [EntryPhoto] {
-        records.map {
-            EntryPhoto(
-                imageData: $0.imageData,
-                scale: $0.scale,
-                offsetX: $0.offsetX,
-                offsetY: $0.offsetY,
-                displayOrder: $0.displayOrder
-            )
-        }
     }
 
     private func restoreUser(
@@ -493,5 +388,213 @@ struct BackupRestorer {
             if !isDefault(record) { summary.lists += 1 }
         }
         return byName
+    }
+}
+
+@MainActor
+struct RecordRelationships {
+    var food: (UUID) -> FoodItem?
+    var source: (String?) -> EntrySource?
+    var category: (String?) -> CategorySource?
+    var foodGroup: (String?) -> FoodGroupSource?
+    var unit: (String?) -> ServingSizeUnit?
+
+    static func resolving(in context: ModelContext) -> RecordRelationships {
+        let resolver = ImportResolver(context: context)
+        return RecordRelationships(
+            food: { id in
+                try? context.fetch(
+                    FetchDescriptor<FoodItem>(predicate: #Predicate { $0.id == id })
+                ).first
+            },
+            source: { $0.flatMap(resolver.source) },
+            category: { $0.flatMap(resolver.category) },
+            foodGroup: { $0.flatMap(resolver.foodGroup) },
+            unit: { name in
+                guard let name, !name.isEmpty else { return nil }
+                return resolver.unit(name, plural: nil)
+            }
+        )
+    }
+}
+
+extension MacroBackup.FoodRecord {
+    @MainActor
+    @discardableResult
+    func insert(relationships: RecordRelationships, in context: ModelContext) -> FoodItem {
+        let food = FoodItem(
+            id: id,
+            name: name,
+            type: EntryType(rawValue: type) ?? .food,
+            source: relationships.source(source),
+            category: relationships.category(category),
+            foodGroup: relationships.foodGroup(foodGroup),
+            servingSize: servingSize,
+            servingUnit: relationships.unit(servingUnit),
+            servingWeight: servingWeight,
+            servingWeightUnit: servingWeightUnit,
+            isAIEstimated: isAIEstimated,
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            fiber: fiber,
+            isCustomDefaultServing: isCustomDefaultServing,
+            customServingSize: customServingSize,
+            stickyNote: note.map { Note(text: $0.text, lastUpdated: $0.lastUpdated) },
+            dateAdded: dateAdded
+        )
+        context.insert(food)
+        return food
+    }
+
+    @MainActor
+    func apply(to food: FoodItem, relationships: RecordRelationships, in context: ModelContext) {
+        food.name = name
+        food.type = EntryType(rawValue: type) ?? food.type
+        food.source = relationships.source(source)
+        food.category = relationships.category(category)
+        food.foodGroup = relationships.foodGroup(foodGroup)
+        food.servingSize = servingSize
+        food.servingUnit = relationships.unit(servingUnit)
+        food.servingWeight = servingWeight
+        food.servingWeightUnit = servingWeightUnit
+        food.isAIEstimated = isAIEstimated
+        food.calories = calories
+        food.protein = protein
+        food.carbs = carbs
+        food.fat = fat
+        food.fiber = fiber
+        food.isCustomDefaultServing = isCustomDefaultServing
+        food.customServingSize = customServingSize
+        food.dateAdded = dateAdded
+
+        if let note {
+            if let existing = food.stickyNote {
+                existing.text = note.text
+                existing.lastUpdated = note.lastUpdated
+            } else {
+                food.stickyNote = Note(text: note.text, lastUpdated: note.lastUpdated)
+            }
+        } else if let existing = food.stickyNote {
+            context.delete(existing)
+            food.stickyNote = nil
+        }
+
+        for ingredient in food.recipeIngredients ?? [] {
+            context.delete(ingredient)
+        }
+        food.recipeIngredients = []
+        insertIngredients(into: food, relationships: relationships, in: context)
+    }
+
+    @MainActor
+    func insertIngredients(
+        into recipe: FoodItem,
+        relationships: RecordRelationships,
+        in context: ModelContext
+    ) {
+        for record in ingredients {
+            let ingredient = RecipeIngredient(
+                id: record.id,
+                quantity: record.quantity,
+                unit: record.unit,
+                displayOrder: record.displayOrder,
+                name: record.name,
+                baseServingSize: record.baseServingSize,
+                baseServingUnitName: record.baseServingUnitName,
+                baseServingWeight: record.baseServingWeight,
+                baseServingWeightUnit: record.baseServingWeightUnit,
+                baseCalories: record.baseCalories,
+                baseProtein: record.baseProtein,
+                baseCarbs: record.baseCarbs,
+                baseFat: record.baseFat,
+                baseFiber: record.baseFiber
+            )
+            ingredient.ingredientItem = record.ingredientItemID.flatMap(relationships.food)
+            ingredient.parentRecipe = recipe
+            context.insert(ingredient)
+        }
+    }
+}
+
+extension MacroBackup.LogRecord {
+    var photoCount: Int {
+        children.reduce(photos.count) { $0 + $1.photoCount }
+    }
+
+    @MainActor
+    @discardableResult
+    func insert(
+        parent: LoggedEntry? = nil,
+        relationships: RecordRelationships,
+        in context: ModelContext
+    ) -> LoggedEntry {
+        let log = LoggedEntry(
+            id: id,
+            name: name,
+            typeRawValue: typeRawValue,
+            originalFoodItem: originalFoodID.flatMap(relationships.food),
+            parentEntry: parent,
+            source: relationships.source(source),
+            category: relationships.category(category),
+            foodGroup: relationships.foodGroup(foodGroup),
+            timestamp: timestamp,
+            location: location,
+            loggedQuantity: loggedQuantity,
+            loggedUnit: loggedUnit,
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            fiber: fiber,
+            isManualOverride: isManualOverride,
+            logNote: logNote,
+            displayOrder: displayOrder
+        )
+        log.photos = photos.map { $0.makePhoto() }
+        context.insert(log)
+
+        for child in children {
+            child.insert(parent: log, relationships: relationships, in: context)
+        }
+        return log
+    }
+}
+
+extension MacroBackup.DraftRecord {
+    @MainActor
+    @discardableResult
+    func insert(foodItem: FoodItem?, in context: ModelContext) -> EntryDraft? {
+        guard let kind = DraftKind(rawValue: kindRawValue),
+            let type = EntryType(rawValue: typeRawValue)
+        else { return nil }
+
+        let draft = EntryDraft(
+            id: id,
+            kind: kind,
+            type: type,
+            name: name,
+            timestamp: timestamp,
+            foodItem: foodItem,
+            payload: payload,
+            createdAt: createdAt
+        )
+        draft.updatedAt = updatedAt
+        draft.photos = photos.map { $0.makePhoto() }
+        context.insert(draft)
+        return draft
+    }
+}
+
+extension MacroBackup.PhotoRecord {
+    func makePhoto() -> EntryPhoto {
+        EntryPhoto(
+            imageData: imageData,
+            scale: scale,
+            offsetX: offsetX,
+            offsetY: offsetY,
+            displayOrder: displayOrder
+        )
     }
 }

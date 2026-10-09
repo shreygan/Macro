@@ -17,6 +17,7 @@ enum EditSaveMode: String, CaseIterable {
 struct EditEntryView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
 
     let foodItem: FoodItem
     var isPushedView: Bool = false
@@ -61,7 +62,7 @@ struct EditEntryView: View {
 
     @State private var stickyNote: String
 
-    @State private var saveMode: EditSaveMode = .update
+    @State private var saveMode: EditSaveMode = .updateWithLogs
     @State private var showUpdateRecipesAlert: Bool = false
     @State private var uniqueRecipesCount: Int = 0
 
@@ -352,7 +353,10 @@ struct EditEntryView: View {
                 onSaveInstantly?(foodItem)
                 dismiss()
             } catch {
-                print("Error saving edited entry")
+                toastCenter?.show(
+                    .failure(String(localized: "Couldn't Save Changes"), message: name)
+                )
+                modelContext.rollback()
             }
         } else {
             let resolvedStickyNote =
@@ -383,9 +387,22 @@ struct EditEntryView: View {
             do {
                 try modelContext.save()
                 onSaveInstantly?(copiedEntry)
+                if let toastCenter {
+                    toastCenter.show(
+                        .foodSaved(
+                            copiedEntry,
+                            title: String(localized: "Saved as Copy"),
+                            in: modelContext,
+                            presenter: toastCenter
+                        )
+                    )
+                }
                 dismiss()
             } catch {
-                print("Error saving cloned entry")
+                toastCenter?.show(
+                    .failure(String(localized: "Couldn't Save Copy"), message: name)
+                )
+                modelContext.rollback()
             }
         }
     }

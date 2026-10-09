@@ -98,7 +98,7 @@ struct TimelineCard<MenuContent: View>: View {
     private func entryRow(_ entry: LoggedEntry) -> some View {
         let mealRow = MealRow(
             name: entry.name,
-            source: entry.source?.source ?? "None",
+            source: entry.source?.source ?? "",
             isCustomDefaultServing: false,
             customServingSize: "",
             servingSize: EntryHelper.format(

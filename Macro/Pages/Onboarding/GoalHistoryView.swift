@@ -11,6 +11,7 @@ import SwiftUI
 struct GoalHistoryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.toastCenter) private var toastCenter
 
     let user: User
     var onSelect: ((UserGoals) -> Void)?
@@ -125,7 +126,13 @@ struct GoalHistoryView: View {
             owner: user
         )
         modelContext.insert(activatedGoals)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            toastCenter?.show(.failure(String(localized: "Couldn't Activate Goals")))
+            return
+        }
         activeGoals = activatedGoals
 
         let topID = history.first?.id

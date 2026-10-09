@@ -10,18 +10,18 @@ import SwiftUI
 
 struct AddEntryView: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.rootDismiss) var rootDismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.toastCenter) private var toastCenter
 
     let entryType: EntryType
     var isPushedView: Bool = false
 
     var onSelectInstantly: ((FoodItem) -> Void)?
 
-    var onLogInstantly: ((FoodItem) -> Void)?
+    var offersLogNow: Bool
     var onCreate: ((FoodItem) -> Void)?
-    @State private var showSuccessAlert: Bool = false
-    @State private var newlySavedEntry: FoodItem? = nil
 
     @Query(sort: \EntrySource.displayOrder) var savedSources: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var savedCategories:
@@ -63,7 +63,7 @@ struct AddEntryView: View {
         entryType: EntryType,
         isPushedView: Bool = false,
         onSelectInstantly: ((FoodItem) -> Void)? = nil,
-        onLogInstantly: ((FoodItem) -> Void)? = nil,
+        offersLogNow: Bool = false,
         draft: EntryDraft? = nil,
         prefill: AddEntryDraftState? = nil,
         onCreate: ((FoodItem) -> Void)? = nil
@@ -71,7 +71,7 @@ struct AddEntryView: View {
         self.entryType = entryType
         self.isPushedView = isPushedView
         self.onSelectInstantly = onSelectInstantly
-        self.onLogInstantly = onLogInstantly
+        self.offersLogNow = offersLogNow
         self.onCreate = onCreate
 
         _draftID = State(initialValue: draft?.id ?? UUID())
@@ -128,21 +128,26 @@ struct AddEntryView: View {
         )
     }
 
-    private func saveDraft() {
+    private func saveDraft(reportingFailure: Bool = true) {
         let state = draftState
         guard state != .empty else {
             DraftStore.delete(id: draftID, in: modelContext)
             return
         }
 
-        DraftStore.upsert(
-            id: draftID,
-            kind: .addFood,
-            type: entryType,
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            state: state,
-            in: modelContext
-        )
+        do {
+            try DraftStore.upsert(
+                id: draftID,
+                kind: .addFood,
+                type: entryType,
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                state: state,
+                in: modelContext
+            )
+        } catch {
+            guard reportingFailure else { return }
+            toastCenter?.show(.failure(String(localized: "Couldn't Save Draft")))
+        }
     }
 
     private func saveDraftAndClose() {
@@ -152,7 +157,20 @@ struct AddEntryView: View {
     }
 
     private func discardAndClose() {
-        DraftStore.delete(id: draftID, in: modelContext)
+        if isResumedDraft {
+            if draftState != .empty { saveDraft(reportingFailure: false) }
+            do {
+                if let record = try EntryDeleter.deleteDraft(id: draftID, in: modelContext) {
+                    toastCenter?.show(
+                        .draftDeleted(record, in: modelContext, presenter: toastCenter)
+                    )
+                }
+            } catch {
+                toastCenter?.show(.failure(String(localized: "Couldn't Delete Draft")))
+            }
+        } else {
+            DraftStore.delete(id: draftID, in: modelContext)
+        }
         didFinishAdding = true
         dismiss()
     }
@@ -351,16 +369,28 @@ struct AddEntryView: View {
             try modelContext.save()
             didFinishAdding = true
 
-            newlySavedEntry = newEntry
+            if offersLogNow, let toastCenter {
+                toastCenter.show(
+                    .foodSaved(newEntry, in: modelContext, presenter: toastCenter)
+                )
+            }
             onCreate?(newEntry)
-            if onLogInstantly != nil {
-                showSuccessAlert = true
-            } else if onSelectInstantly != nil {
-                onSelectInstantly?(newlySavedEntry!)
+            if offersLogNow {
+                if let rootDismiss {
+                    rootDismiss()
+                } else {
+                    dismiss()
+                }
+            } else if let onSelectInstantly {
+                onSelectInstantly(newEntry)
             } else {
                 dismiss()
             }
         } catch {
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Save Food"), message: newEntry.name)
+            )
+            modelContext.rollback()
         }
     }
 
@@ -636,22 +666,6 @@ struct AddEntryView: View {
                 .padding([.leading, .trailing])
                 .padding(.bottom, 16)
                 .background(.ultraThinMaterial)
-            }
-
-        }
-        .alert(
-            "\(name) Saved!",
-            isPresented: $showSuccessAlert,
-            presenting: newlySavedEntry
-        ) { food in
-
-            Button("Log Now", role: .confirm) {
-                dismiss()
-                onLogInstantly?(food)
-            }
-
-            Button("Done", role: .cancel) {
-                dismiss()
             }
 
         }

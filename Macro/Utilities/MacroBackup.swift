@@ -257,7 +257,7 @@ extension MacroBackup {
     }
 
     @MainActor
-    private static func foodRecord(_ food: FoodItem) -> FoodRecord {
+    static func foodRecord(_ food: FoodItem) -> FoodRecord {
         FoodRecord(
             id: food.id,
             name: food.name,
@@ -321,7 +321,7 @@ extension MacroBackup {
     }
 
     @MainActor
-    private static func logRecord(_ log: LoggedEntry) -> LogRecord {
+    static func logRecord(_ log: LoggedEntry) -> LogRecord {
         LogRecord(
             id: log.id,
             name: log.name,
@@ -350,7 +350,7 @@ extension MacroBackup {
     }
 
     @MainActor
-    private static func draftRecord(_ draft: EntryDraft) -> DraftRecord {
+    static func draftRecord(_ draft: EntryDraft) -> DraftRecord {
         DraftRecord(
             id: draft.id,
             kindRawValue: draft.kindRawValue,

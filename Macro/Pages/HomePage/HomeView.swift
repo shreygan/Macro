@@ -10,6 +10,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
 
     @Query private var users: [User]
     @Query(filter: EntryDraft.logDraftsPredicate) private var logDrafts:
@@ -21,17 +22,11 @@ struct HomeView: View {
 
     @State private var entryToLogAgain: LoggedEntry? = nil
     @State private var entryToAddToLibrary: LoggedEntry? = nil
-    @State private var foodToLog: FoodItem? = nil
     @State private var foodToView: FoodItem? = nil
-
-    @State private var entryToDelete: LoggedEntry? = nil
-    @State private var showEntryDeleteConfirmation = false
 
     @State private var clickedEntry: LoggedEntry? = nil
 
     @State private var clickedDraft: EntryDraft? = nil
-    @State private var draftToDelete: EntryDraft? = nil
-    @State private var showDraftDeleteConfirmation = false
 
     @State private var swapTargetDate: Date? = nil
     @State private var swapSubstituteDate: Date? = nil
@@ -123,12 +118,27 @@ struct HomeView: View {
 
     private func link(_ entry: LoggedEntry, to food: FoodItem) {
         entry.originalFoodItem = food
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Link to Library"), message: food.name)
+            )
+        }
     }
 
     private func toggleFavorite(for entry: LoggedEntry) {
         guard let food = entry.originalFoodItem else { return }
-        FoodItemStore.toggleFavorite(food, in: modelContext)
+        EntryActions.toggleFavorite(food, in: modelContext, toastCenter: toastCenter)
+    }
+
+    private func deleteEntry(_ entry: LoggedEntry) {
+        EntryActions.delete(entry, in: modelContext, toastCenter: toastCenter)
+    }
+
+    private func deleteDraft(_ draft: EntryDraft) {
+        EntryActions.delete(draft, in: modelContext, toastCenter: toastCenter)
     }
 
     private func currDate(for date: Date) -> String {
@@ -345,8 +355,7 @@ struct HomeView: View {
                                     clickedEntry: $clickedEntry,
                                     clickedDraft: $clickedDraft,
                                     onDeleteDraft: { draft in
-                                        draftToDelete = draft
-                                        showDraftDeleteConfirmation = true
+                                        deleteDraft(draft)
                                     }
                                 ) { entry in
                                     if entry.originalFoodItem != nil {
@@ -404,8 +413,7 @@ struct HomeView: View {
                                     Divider()
 
                                     Button(role: .destructive) {
-                                        entryToDelete = entry
-                                        showEntryDeleteConfirmation = true
+                                        deleteEntry(entry)
                                     } label: {
                                         Label("Delete", systemImage: "trash")
                                     }
@@ -633,14 +641,14 @@ struct HomeView: View {
             .sheet(item: $entryToAddToLibrary) { entry in
                 if entry.libraryEntryType == .recipe {
                     AddRecipeView(
-                        onLogInstantly: { food in foodToLog = food },
+                        offersLogNow: true,
                         prefill: entry.addRecipePrefill,
                         onCreate: { food in link(entry, to: food) }
                     )
                 } else {
                     AddEntryView(
                         entryType: entry.libraryEntryType,
-                        onLogInstantly: { food in foodToLog = food },
+                        offersLogNow: true,
                         prefill: entry.addEntryPrefill,
                         onCreate: { food in link(entry, to: food) }
                     )
@@ -649,15 +657,6 @@ struct HomeView: View {
             .sheet(item: $foodToView) { food in
                 NavigationStack {
                     FoodDetailView(food: food, isPushedView: false)
-                }
-            }
-            .sheet(item: $foodToLog) { food in
-                NavigationStack {
-                    if food.type == .recipe {
-                        LogRecipeView(recipe: food, isPushedView: false)
-                    } else {
-                        LogEntryView(food: food, isPushedView: false)
-                    }
                 }
             }
             .sheet(item: $entryToLogAgain) { previousEntry in
@@ -678,45 +677,6 @@ struct HomeView: View {
                         }
                     }
                 }
-            }
-            .alert(
-                "Delete Entry?",
-                isPresented: $showEntryDeleteConfirmation,
-                presenting: entryToDelete
-            ) { entry in
-                Button("Cancel", role: .cancel) {
-                    entryToDelete = nil
-                }
-                Button("Delete", role: .destructive) {
-                    withAnimation {
-                        modelContext.delete(entry)
-                        try? modelContext.save()
-                        entryToDelete = nil
-                    }
-                }
-            } message: { _ in
-                Text(
-                    "Are you sure you want to delete this entry? This action cannot be undone."
-                )
-            }
-            .alert(
-                "Delete Draft?",
-                isPresented: $showDraftDeleteConfirmation,
-                presenting: draftToDelete
-            ) { draft in
-                Button("Cancel", role: .cancel) {
-                    draftToDelete = nil
-                }
-                Button("Delete", role: .destructive) {
-                    withAnimation {
-                        DraftStore.delete(id: draft.id, in: modelContext)
-                        draftToDelete = nil
-                    }
-                }
-            } message: { _ in
-                Text(
-                    "This unfinished entry will be permanently deleted. This action cannot be undone."
-                )
             }
         }
     }
