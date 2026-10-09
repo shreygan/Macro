@@ -76,6 +76,7 @@ struct LogEntryView: View {
     @State private var showingAllNotes: Bool = false
 
     @State private var selectedPhotos: [LoggedPhoto]
+    @State private var isLoadingPhotos = false
 
     @State private var dateAdded: Date
 
@@ -754,6 +755,11 @@ struct LogEntryView: View {
                         )
                         .padding([.top, .leading, .trailing])
 
+                        PhotoPickerCard(
+                            images: $selectedPhotos,
+                            isLoading: $isLoadingPhotos
+                        )
+
                         Card {
                             BaseRowLayout(title: "Portion") {
                                 HStack(spacing: 8) {
@@ -769,7 +775,7 @@ struct LogEntryView: View {
                                 }
                             }
                         }
-                        .padding([.top, .leading, .trailing])
+                        .padding([.leading, .trailing])
 
                         Card {
                             RowGroup(.divider) {
@@ -826,8 +832,6 @@ struct LogEntryView: View {
                         }
                         .padding([.top, .leading, .trailing])
 
-                        PhotoPickerCard(images: $selectedPhotos)
-
                         Spacer()
                     }
                 }
@@ -867,6 +871,7 @@ struct LogEntryView: View {
                         ToolbarItem(placement: .topBarLeading) {
                             DraftCloseButton(
                                 isResumedDraft: isResumedDraft,
+                                canSaveDraft: !isLoadingPhotos,
                                 onClose: { dismiss() },
                                 onSaveDraft: saveDraftAndClose,
                                 onDiscard: discardAndClose
@@ -899,6 +904,7 @@ struct LogEntryView: View {
                                 systemImage: "square.and.arrow.down",
                                 action: saveDraftAndClose
                             )
+                            .disabled(isLoadingPhotos)
 
                             if hasChangedFromOriginal {
                                 Divider()
@@ -951,6 +957,7 @@ struct LogEntryView: View {
                                         newNote = ""
 
                                         selectedPhotos = []
+                                        isLoadingPhotos = false
 
                                         saveOption = .logOnly
                                     }
@@ -979,6 +986,7 @@ struct LogEntryView: View {
                         }
                         .tint(Color.blue)
                         .buttonStyle(.glassProminent)
+                        .disabled(isLoadingPhotos)
                     }
                 }
                 .onChange(of: isEdited) { oldVal, newVal in
