@@ -11,15 +11,15 @@ import UniformTypeIdentifiers
 
 struct BackupRestoreView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
+    @Environment(\.dismissSettings) private var dismissSettings
 
     let backup: MacroBackup
-    var onRestoreComplete: () -> Void
 
     @State private var mode: BackupRestoreMode = .merge
     @State private var isRestoring = false
     @State private var showReplaceConfirmation = false
     @State private var restoreAlert: DataTransferAlert?
-    @State private var summary: BackupRestoreSummary?
     @State private var unrecoveredError: BackupRestoreError?
     @State private var snapshotDocument: ExportDocument?
     @State private var isShowingSnapshotExporter = false
@@ -170,18 +170,6 @@ struct BackupRestoreView: View {
         } onCancellation: {
             snapshotDocument = nil
         }
-        .alert(
-            "Restore Complete",
-            isPresented: Binding(
-                get: { summary != nil },
-                set: { if !$0 { summary = nil } }
-            ),
-            presenting: summary
-        ) { _ in
-            Button("Done", role: .cancel) { onRestoreComplete() }
-        } message: { presented in
-            Text(presented.message)
-        }
     }
 
     private func contentRow(_ symbol: String, _ title: String, _ value: String)
@@ -218,9 +206,20 @@ struct BackupRestoreView: View {
             do {
                 let result = try await BackupRestorer(context: modelContext)
                     .restore(backup, mode: mode)
-                withAnimation(.snappy) { isRestoring = false }
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                summary = result
+                isRestoring = false
+                toastCenter?.show(
+                    Toast(
+                        group: Toast.dataTransferGroup,
+                        kind: .success,
+                        symbol: "checkmark",
+                        title: result.message == nil
+                            ? String(localized: "Already Up to Date")
+                            : String(localized: "Backup Restored"),
+                        message: result.message
+                            ?? String(localized: "Nothing new in this backup")
+                    )
+                )
+                dismissSettings()
             } catch let error as BackupRestoreError {
                 withAnimation(.snappy) { isRestoring = false }
                 UINotificationFeedbackGenerator().notificationOccurred(.error)

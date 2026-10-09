@@ -43,6 +43,7 @@ enum LogExportRange: String, CaseIterable {
 
 struct ExportView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
 
     @Query private var foodItems: [FoodItem]
     @Query(filter: #Predicate<LoggedEntry> { $0.parentEntry == nil })
@@ -192,7 +193,15 @@ struct ExportView: View {
         ) { result in
             switch result {
             case .success:
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                toastCenter?.show(
+                    Toast(
+                        group: Toast.dataTransferGroup,
+                        kind: .success,
+                        symbol: "checkmark",
+                        title: String(localized: "Export Saved"),
+                        message: exportFilename
+                    )
+                )
             case .failure(let error):
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
                 exportAlert = .exportFailed(error)

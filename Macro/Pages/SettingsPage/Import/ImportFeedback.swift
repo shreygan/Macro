@@ -107,6 +107,41 @@ struct DataTransferAlert: Identifiable {
     }
 }
 
+extension Toast {
+    static let dataTransferGroup = "dataTransfer"
+
+    static func importComplete(
+        title: String,
+        singular: String,
+        plural: String,
+        added: Int,
+        updated: Int,
+        addedToLibrary: Int = 0
+    ) -> Toast {
+        var parts: [String] = []
+        if added > 0 { parts.append("\(added) \(added == 1 ? singular : plural) added") }
+        if updated > 0 { parts.append("\(updated) updated") }
+        if addedToLibrary > 0 { parts.append("\(addedToLibrary) to library") }
+
+        guard !parts.isEmpty else {
+            return Toast(
+                group: dataTransferGroup,
+                kind: .info,
+                symbol: "checkmark",
+                title: String(localized: "Nothing Imported"),
+                message: String(localized: "All \(plural) were already on this device")
+            )
+        }
+        return Toast(
+            group: dataTransferGroup,
+            kind: .success,
+            symbol: "checkmark",
+            title: title,
+            message: parts.joined(separator: " · ")
+        )
+    }
+}
+
 extension View {
     func dataTransferAlert(
         _ alert: Binding<DataTransferAlert?>,
