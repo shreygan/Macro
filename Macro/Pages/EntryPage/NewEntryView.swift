@@ -20,6 +20,7 @@ private final class SearchLogStatsCache {
 struct NewEntryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) var dismiss
+    @Environment(\.toastCenter) private var toastCenter
 
     var onBrowseLibrary: (() -> Void)? = nil
     var onFinishLogging: (() -> Void)? = nil
@@ -38,8 +39,6 @@ struct NewEntryView: View {
     @State private var searchLogStats = SearchLogStatsCache()
 
     @State private var draftToResume: EntryDraft? = nil
-    @State private var draftToDelete: EntryDraft? = nil
-    @State private var showDraftDeleteAlert = false
     @State private var showAllDrafts = false
 
     private let recentLimit = 10
@@ -76,7 +75,6 @@ struct NewEntryView: View {
 
     @State private var foodToEdit: FoodItem? = nil
     @State private var foodToDelete: FoodItem? = nil
-    @State private var showDeleteAlert = false
 
     private var isSearching: Bool {
         !searchText.isEmpty
@@ -147,12 +145,12 @@ struct NewEntryView: View {
 
     private func confirmDelete(_ food: FoodItem) {
         foodToDelete = food
-        showDeleteAlert = true
     }
 
-    private func confirmDelete(_ draft: EntryDraft) {
-        draftToDelete = draft
-        showDraftDeleteAlert = true
+    private func deleteDraft(_ draft: EntryDraft) {
+        DispatchQueue.main.async {
+            EntryActions.delete(draft, in: modelContext, toastCenter: toastCenter)
+        }
     }
 
     private func foodList(_ foods: [FoodItem]) -> some View {
@@ -178,7 +176,7 @@ struct NewEntryView: View {
                 foodToEdit = food
             },
             onFavorite: { food in
-                FoodItemStore.toggleFavorite(food, in: modelContext)
+                EntryActions.toggleFavorite(food, in: modelContext, toastCenter: toastCenter)
             },
             isFavorited: { food in
                 food.favoriteEntry != nil
@@ -209,14 +207,14 @@ struct NewEntryView: View {
                     Divider()
 
                     Button(role: .destructive) {
-                        confirmDelete(draft)
+                        deleteDraft(draft)
                     } label: {
                         Label("Delete Draft", systemImage: "trash")
                     }
                 }
             },
             onDelete: { draft in
-                confirmDelete(draft)
+                deleteDraft(draft)
             }
         )
     }
@@ -424,7 +422,7 @@ struct NewEntryView: View {
                 .navigationDestination(isPresented: $showAllDrafts) {
                     DraftListView(
                         onResume: { draftToResume = $0 },
-                        onDelete: { confirmDelete($0) }
+                        onDelete: { deleteDraft($0) }
                     )
                 }
                 .toolbar {
@@ -449,33 +447,28 @@ struct NewEntryView: View {
         .sheet(isPresented: $showAddIngredientSheet) {
             AddEntryView(
                 entryType: .ingredient,
-                onLogInstantly: { savedFood in
-                    self.foodToLog = savedFood
-                }
+                offersLogNow: true
             )
+            .environment(\.rootDismiss) { finishLogging() }
         }
         .sheet(isPresented: $showAddFoodSheet) {
             AddEntryView(
                 entryType: .food,
-                onLogInstantly: { savedFood in
-                    self.foodToLog = savedFood
-                }
+                offersLogNow: true
             )
+            .environment(\.rootDismiss) { finishLogging() }
         }
         .sheet(item: $foodToCreate) { request in
             AddEntryView(
                 entryType: .food,
-                onLogInstantly: { savedFood in
-                    self.foodToLog = savedFood
-                },
+                offersLogNow: true,
                 prefill: .named(request.name)
             )
+            .environment(\.rootDismiss) { finishLogging() }
         }
         .sheet(isPresented: $showAddRecipeSheet) {
-            AddRecipeView(onLogInstantly: { savedRecipe in
-                self.recipeToLog = savedRecipe
-
-            })
+            AddRecipeView(offersLogNow: true)
+                .environment(\.rootDismiss) { finishLogging() }
         }
         .sheet(item: $draftToResume) { draft in
             if draft.isAvailable {
@@ -503,19 +496,17 @@ struct NewEntryView: View {
                     }
                 case .addRecipe:
                     AddRecipeView(
-                        onLogInstantly: { savedRecipe in
-                            self.recipeToLog = savedRecipe
-                        },
+                        offersLogNow: true,
                         draft: draft
                     )
+                    .environment(\.rootDismiss) { finishLogging() }
                 case .addFood, nil:
                     AddEntryView(
                         entryType: draft.entryType ?? .food,
-                        onLogInstantly: { savedFood in
-                            self.foodToLog = savedFood
-                        },
+                        offersLogNow: true,
                         draft: draft
                     )
+                    .environment(\.rootDismiss) { finishLogging() }
                 }
             }
         }
@@ -541,27 +532,7 @@ struct NewEntryView: View {
                 EditEntryView(foodItem: food)
             }
         }
-        .deleteFoodAlert(isPresented: $showDeleteAlert, food: $foodToDelete)
-        .alert(
-            "Delete Draft?",
-            isPresented: $showDraftDeleteAlert,
-            presenting: draftToDelete
-        ) { draft in
-            Button("Cancel", role: .cancel) { draftToDelete = nil }
-            Button("Delete", role: .destructive) {
-                let id = draft.id
-                draftToDelete = nil
-                DispatchQueue.main.async {
-                    withAnimation {
-                        DraftStore.delete(id: id, in: modelContext)
-                    }
-                }
-            }
-        } message: { _ in
-            Text(
-                "This unfinished entry will be permanently deleted. This action cannot be undone."
-            )
-        }
+        .deleteFoodAlert(food: $foodToDelete)
     }
 }
 

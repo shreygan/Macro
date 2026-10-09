@@ -15,6 +15,7 @@ struct LogRecipeView: View {
     @Environment(\.rootDismiss) var rootDismiss
     @Environment(\.dismiss) var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.toastCenter) private var toastCenter
 
     @Query(sort: \EntrySource.displayOrder) var sourceOptions: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var categoryOptions:
@@ -224,6 +225,10 @@ struct LogRecipeView: View {
         )
         let resolvedNote = trimmedNote.isEmpty ? nil : trimmedNote
 
+        let originalRecipe = saveOption == .updateOriginal ? MacroBackup.foodRecord(recipe) : nil
+        var createdListItems: [any PersistentModel] = []
+        var createdRecipe: FoodItem? = nil
+
         var resolvedSource: EntrySource? = nil
         let trimmedSource = sourceSelection.trimmingCharacters(
             in: .whitespacesAndNewlines
@@ -241,6 +246,7 @@ struct LogRecipeView: View {
                     displayOrder: nextOrder
                 )
                 modelContext.insert(newSource)
+                createdListItems.append(newSource)
                 resolvedSource = newSource
             }
         }
@@ -262,6 +268,7 @@ struct LogRecipeView: View {
                     displayOrder: nextOrder
                 )
                 modelContext.insert(newCategory)
+                createdListItems.append(newCategory)
                 resolvedCategory = newCategory
             }
         }
@@ -403,6 +410,7 @@ struct LogRecipeView: View {
                 )
 
                 modelContext.insert(newRecipe)
+                createdRecipe = newRecipe
 
                 for (index, draft) in draftIngredients.enumerated() {
                     let newIngredient = RecipeIngredient(
@@ -428,11 +436,30 @@ struct LogRecipeView: View {
             }
         }
 
+        let draftRecord = DraftStore.fetch(id: draftID, in: modelContext)
+            .map(MacroBackup.draftRecord)
         DraftStore.delete(id: draftID, in: modelContext, save: false)
 
         do {
             try modelContext.save()
             didFinishLogging = true
+
+            if let toastCenter {
+                toastCenter.show(
+                    .entryLogged(
+                        LogUndoRecord(
+                            entry: mainLog,
+                            originalFood: originalRecipe,
+                            createdFood: createdRecipe,
+                            createdListItems: createdListItems,
+                            draft: draftRecord
+                        ),
+                        title: String(localized: "Recipe Logged"),
+                        in: modelContext,
+                        presenter: toastCenter
+                    )
+                )
+            }
 
             if let rootDismiss {
                 rootDismiss()
@@ -440,7 +467,10 @@ struct LogRecipeView: View {
                 dismiss()
             }
         } catch {
-            print("Failed to save recipe entry: \(error.localizedDescription)")
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Log Recipe"), message: mainLog.name)
+            )
+            modelContext.rollback()
         }
     }
 
@@ -466,18 +496,23 @@ struct LogRecipeView: View {
         )
     }
 
-    private func saveDraft() {
-        DraftStore.upsert(
-            id: draftID,
-            kind: .logRecipe,
-            type: recipe.type,
-            name: name.isEmpty ? recipe.name : name,
-            timestamp: combineDateAndTime(date: date, time: time),
-            foodItem: recipe,
-            state: draftState,
-            photos: selectedPhotos,
-            in: modelContext
-        )
+    private func saveDraft(reportingFailure: Bool = true) {
+        do {
+            try DraftStore.upsert(
+                id: draftID,
+                kind: .logRecipe,
+                type: recipe.type,
+                name: name.isEmpty ? recipe.name : name,
+                timestamp: combineDateAndTime(date: date, time: time),
+                foodItem: recipe,
+                state: draftState,
+                photos: selectedPhotos,
+                in: modelContext
+            )
+        } catch {
+            guard reportingFailure else { return }
+            toastCenter?.show(.failure(String(localized: "Couldn't Save Draft")))
+        }
     }
 
     private var hasDraftChanges: Bool {
@@ -501,7 +536,20 @@ struct LogRecipeView: View {
     }
 
     private func discardAndClose() {
-        DraftStore.delete(id: draftID, in: modelContext)
+        if isResumedDraft {
+            saveDraft(reportingFailure: false)
+            do {
+                if let record = try EntryDeleter.deleteDraft(id: draftID, in: modelContext) {
+                    toastCenter?.show(
+                        .draftDeleted(record, in: modelContext, presenter: toastCenter)
+                    )
+                }
+            } catch {
+                toastCenter?.show(.failure(String(localized: "Couldn't Delete Draft")))
+            }
+        } else {
+            DraftStore.delete(id: draftID, in: modelContext)
+        }
         didFinishLogging = true
         dismiss()
     }

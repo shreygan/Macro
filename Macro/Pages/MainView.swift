@@ -15,6 +15,7 @@ extension EnvironmentValues {
 
 struct MainView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
 
     enum TabSelection: ProminentTabItem {
         case home, stats, library
@@ -37,7 +38,6 @@ struct MainView: View {
     }
 
     @State private var selection: TabSelection = .home
-    @State private var foodToLog: FoodItem? = nil
     @State private var isErasingData = false
     @State private var libraryPopToRoot = 0
     @State private var screenBottom: CGFloat = 0
@@ -116,7 +116,7 @@ struct MainView: View {
                 )
             } popover: {
                 QuickLogPopover { food in
-                    foodToLog = food
+                    quickLog(food)
                 }
             }
             .onGeometryChange(for: CGFloat.self) { proxy in
@@ -125,18 +125,27 @@ struct MainView: View {
                 tabBarTop = minY
             }
         }
-        .sheet(item: $foodToLog) { food in
-            Group {
-                if food.type == .recipe {
-                    LogRecipeView(recipe: food, isPushedView: false)
-                } else {
-                    LogEntryView(food: food, isPushedView: false)
-                }
+    }
+
+    private func quickLog(_ food: FoodItem) {
+        do {
+            let entry = try withAnimation {
+                try QuickLogger.log(food, in: modelContext)
             }
-            .environment(\.rootDismiss) {
-                foodToLog = nil
-                selection = .home
+            if let toastCenter {
+                toastCenter.show(
+                    .entryLogged(
+                        LogUndoRecord(entry: entry),
+                        title: String(localized: "Logged for Today"),
+                        in: modelContext,
+                        presenter: toastCenter
+                    )
+                )
             }
+        } catch {
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Log Entry"), message: food.name)
+            )
         }
     }
 
@@ -154,7 +163,7 @@ struct MainView: View {
                 try AppSeeder.seedDefaults(into: modelContext)
             } catch {
                 modelContext.rollback()
-                print("Failed to clear or reseed data: \(error.localizedDescription)")
+                toastCenter?.show(.failure(String(localized: "Couldn't Erase Data")))
             }
             isErasingData = false
         }

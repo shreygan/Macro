@@ -10,6 +10,7 @@ import SwiftUI
 
 struct FoodActionMenuItems: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
 
     let food: FoodItem
     var onLog: (() -> Void)? = nil
@@ -31,7 +32,7 @@ struct FoodActionMenuItems: View {
         }
 
         Button {
-            FoodItemStore.toggleFavorite(food, in: modelContext)
+            EntryActions.toggleFavorite(food, in: modelContext, toastCenter: toastCenter)
         } label: {
             Label(
                 isFavorited ? "Unfavorite" : "Favorite",
@@ -49,13 +50,14 @@ struct FoodActionMenuItems: View {
 
 struct LogFoodSheet: View {
     let food: FoodItem
+    var draft: EntryDraft? = nil
 
     var body: some View {
         Group {
             if food.type == .recipe {
-                LogRecipeView(recipe: food, isPushedView: false)
+                LogRecipeView(recipe: food, draft: draft, isPushedView: false)
             } else {
-                LogEntryView(food: food, isPushedView: false)
+                LogEntryView(food: food, draft: draft, isPushedView: false)
             }
         }
         .environment(\.rootDismiss, nil)

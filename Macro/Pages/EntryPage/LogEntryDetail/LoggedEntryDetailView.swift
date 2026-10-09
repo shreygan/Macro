@@ -11,15 +11,14 @@ import SwiftUI
 struct LoggedEntryDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) var dismiss
+    @Environment(\.toastCenter) private var toastCenter
 
     let entry: LoggedEntry
     var isPushedView: Bool = true
 
     @State private var isEditing: Bool = false
-    @State private var showDeleteConfirmation: Bool = false
     @State private var foodToLogAgain: FoodItem? = nil
     @State private var showAddToLibrary = false
-    @State private var newFoodToLog: FoodItem? = nil
     @State private var foodToView: FoodItem? = nil
     @State private var isDismissing = false
 
@@ -533,28 +532,17 @@ struct LoggedEntryDetailView: View {
         .sheet(isPresented: $showAddToLibrary) {
             if entry.libraryEntryType == .recipe {
                 AddRecipeView(
-                    onLogInstantly: { food in newFoodToLog = food },
+                    offersLogNow: true,
                     prefill: entry.addRecipePrefill,
                     onCreate: linkToLibrary
                 )
             } else {
                 AddEntryView(
                     entryType: entry.libraryEntryType,
-                    onLogInstantly: { food in newFoodToLog = food },
+                    offersLogNow: true,
                     prefill: entry.addEntryPrefill,
                     onCreate: linkToLibrary
                 )
-            }
-        }
-        .sheet(item: $newFoodToLog) { food in
-            NavigationStack {
-                if food.type == .recipe {
-                    LogRecipeView(recipe: food, isPushedView: false)
-                        .environment(\.rootDismiss) { dismiss() }
-                } else {
-                    LogEntryView(food: food, isPushedView: false)
-                        .environment(\.rootDismiss) { dismiss() }
-                }
             }
         }
         .sheet(item: $foodToView) { food in
@@ -570,8 +558,9 @@ struct LoggedEntryDetailView: View {
                 if isEditing {
                     Button {
                         withAnimation {
-                            saveChanges()
-                            isEditing = false
+                            if saveChanges() {
+                                isEditing = false
+                            }
                         }
                     } label: {
                         Image(systemName: "checkmark")
@@ -619,7 +608,7 @@ struct LoggedEntryDetailView: View {
                         Divider()
 
                         Button(role: .destructive) {
-                            showDeleteConfirmation = true
+                            deleteEntry()
                         } label: {
                             Label("Delete Entry", systemImage: "trash")
                         }
@@ -648,21 +637,6 @@ struct LoggedEntryDetailView: View {
                     }
                 }
             }
-        }
-        .alert("Delete Entry?", isPresented: $showDeleteConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
-                isDismissing = true
-                withAnimation {
-                    modelContext.delete(entry)
-                    try? modelContext.save()
-                    dismiss()
-                }
-            }
-        } message: {
-            Text(
-                "Are you sure you want to delete this entry? This action cannot be undone."
-            )
         }
         .onChange(of: portionUnitSelection) { oldUnit, newUnit in
             guard oldUnit != newUnit, let weight = activeServingWeight else {
@@ -741,7 +715,7 @@ struct LoggedEntryDetailView: View {
         fiberDynamic = fiber
     }
 
-    private func saveChanges() {
+    private func saveChanges() -> Bool {
         let calendar = Calendar.current
         let dateComponents = calendar.dateComponents(
             [.year, .month, .day],
@@ -909,14 +883,41 @@ struct LoggedEntryDetailView: View {
 
         do {
             try modelContext.save()
+            return true
         } catch {
-            print("Error saving edited LoggedEntry: \(error)")
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Save Changes"), message: name)
+            )
+            modelContext.rollback()
+            return false
         }
+    }
+
+    private func deleteEntry() {
+        isDismissing = true
+        let snapshot: MacroBackup.LogRecord?
+        do {
+            snapshot = try withAnimation {
+                try EntryDeleter.delete(entry, in: modelContext)
+            }
+        } catch {
+            isDismissing = false
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Delete Entry"), message: entry.name)
+            )
+            return
+        }
+        guard let snapshot else {
+            isDismissing = false
+            return
+        }
+        dismiss()
+        toastCenter?.show(.entryDeleted(snapshot, in: modelContext, presenter: toastCenter))
     }
 
     private func linkToLibrary(_ food: FoodItem) {
         entry.originalFoodItem = food
-        try? modelContext.save()
+        guard save(failureTitle: String(localized: "Couldn't Link to Library")) else { return }
         pinnedNoteText = food.stickyNote?.text ?? ""
     }
 
@@ -928,7 +929,7 @@ struct LoggedEntryDetailView: View {
         } else {
             food.stickyNote = Note(text: stickyNote)
         }
-        try? modelContext.save()
+        guard save(failureTitle: String(localized: "Couldn't Pin Note")) else { return }
         withAnimation {
             pinnedNoteText = stickyNote
         }
@@ -936,10 +937,21 @@ struct LoggedEntryDetailView: View {
 
     private func deleteEntryNote() {
         entry.logNote = nil
-        try? modelContext.save()
+        guard save(failureTitle: String(localized: "Couldn't Delete Note")) else { return }
         withAnimation {
             stickyNote = ""
             isAddingEntryNote = false
+        }
+    }
+
+    private func save(failureTitle: String) -> Bool {
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            toastCenter?.show(.failure(failureTitle))
+            return false
         }
     }
 
