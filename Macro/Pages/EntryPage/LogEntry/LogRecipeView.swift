@@ -74,6 +74,7 @@ struct LogRecipeView: View {
     @State private var dateAdded: Date
 
     @State private var selectedPhotos: [LoggedPhoto]
+    @State private var isLoadingPhotos = false
 
     var isEdited: Bool {
         draftIngredients != initialIngredients
@@ -714,6 +715,11 @@ struct LogRecipeView: View {
                         )
                         .padding([.top, .leading, .trailing])
 
+                        PhotoPickerCard(
+                            images: $selectedPhotos,
+                            isLoading: $isLoadingPhotos
+                        )
+
                         Card {
                             BaseRowLayout(title: "Portion") {
                                 HStack(spacing: 8) {
@@ -729,7 +735,7 @@ struct LogRecipeView: View {
                                 }
                             }
                         }
-                        .padding([.top, .leading, .trailing])
+                        .padding([.leading, .trailing])
 
                         Card("Ingredients") {
                             RowGroup(.divider) {
@@ -763,8 +769,6 @@ struct LogRecipeView: View {
                         }
                         .padding([.top, .leading, .trailing])
 
-                        PhotoPickerCard(images: $selectedPhotos)
-
                         Spacer()
                     }
                 }
@@ -784,6 +788,7 @@ struct LogRecipeView: View {
                         if !isPushedView {
                             DraftCloseButton(
                                 isResumedDraft: isResumedDraft,
+                                canSaveDraft: !isLoadingPhotos,
                                 onClose: { dismiss() },
                                 onSaveDraft: saveDraftAndClose,
                                 onDiscard: discardAndClose
@@ -816,6 +821,7 @@ struct LogRecipeView: View {
                                 systemImage: "square.and.arrow.down",
                                 action: saveDraftAndClose
                             )
+                            .disabled(isLoadingPhotos)
 
                             if hasChangedFromOriginal {
                                 Divider()
@@ -837,6 +843,7 @@ struct LogRecipeView: View {
                                         newNote = ""
 
                                         selectedPhotos = []
+                                        isLoadingPhotos = false
 
                                         saveOption = .logOnly
                                     }
@@ -866,6 +873,7 @@ struct LogRecipeView: View {
                         }
                         .tint(Color.blue)
                         .buttonStyle(.glassProminent)
+                        .disabled(isLoadingPhotos)
                     }
                 }
                 .safeAreaInset(edge: .top) {

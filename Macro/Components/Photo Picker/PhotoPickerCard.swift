@@ -20,6 +20,7 @@ struct LoggedPhoto: Identifiable {
 
 struct PhotoPickerCard: View {
     @Binding var images: [LoggedPhoto]
+    @Binding var isLoading: Bool
 
     var isEditing: Bool = true
 
@@ -29,6 +30,8 @@ struct PhotoPickerCard: View {
     @State private var selectedPhotosPickerItems: [PhotosPickerItem] = []
 
     @State private var showAddSlide: Bool = false
+    @State private var isEmptyStateLoading: Bool = false
+    @State private var loadTask: Task<Void, Never>?
 
     let maxPhotos = 5
 
@@ -141,8 +144,31 @@ struct PhotoPickerCard: View {
                 showAddSlide = newVal
             }
         }
+        .onChange(of: images.isEmpty) { _, isEmpty in
+            if isEmpty { isEmptyStateLoading = false }
+        }
+        .onChange(of: images.map(\.id)) {
+            guard loadTask == nil else { return }
+            syncPickerSelection()
+        }
+        .onChange(of: isLoading) { _, newValue in
+            guard !newValue, let loadTask else { return }
+            loadTask.cancel()
+            self.loadTask = nil
+            isEmptyStateLoading = false
+            syncPickerSelection()
+        }
         .onChange(of: selectedPhotosPickerItems) { oldItems, newItems in
-            Task {
+            let hasUnloadedItems = newItems.contains { item in
+                !images.contains { $0.pickerItem == item }
+            }
+            if hasUnloadedItems {
+                isLoading = true
+                if images.isEmpty { isEmptyStateLoading = true }
+            }
+
+            loadTask?.cancel()
+            loadTask = Task {
                 let cameraPhotos = images.filter { $0.pickerItem == nil }
                 var updatedLibraryPhotos: [LoggedPhoto] = []
 
@@ -166,15 +192,24 @@ struct PhotoPickerCard: View {
                             )
                         }
                     }
+                    if Task.isCancelled { return }
                 }
 
                 await MainActor.run {
+                    guard !Task.isCancelled, !hasUnloadedItems || isLoading
+                    else { return }
+                    loadTask = nil
+
                     let previouslyEmpty = images.isEmpty
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8))
                     {
                         images = cameraPhotos + updatedLibraryPhotos
                     }
-                    if images.isEmpty { return }
+                    if hasUnloadedItems { isLoading = false }
+                    if images.isEmpty {
+                        isEmptyStateLoading = false
+                        return
+                    }
 
                     let addedItems = newItems.filter { !oldItems.contains($0) }
                     let isStrictDeletion =
@@ -224,15 +259,30 @@ struct PhotoPickerCard: View {
             Menu {
                 photoMenuOptions
             } label: {
-                Label("Add Photos", systemImage: "camera")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 24)
+                ZStack {
+                    if isEmptyStateLoading {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Loading Photos...")
+                                .foregroundStyle(.secondary)
+                        }
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    } else {
+                        Label("Add Photos", systemImage: "camera")
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    }
+                }
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .frame(maxWidth: .infinity)
+                .frame(height: 24)
+                .animation(.snappy, value: isEmptyStateLoading)
             }
             .buttonStyle(.glass)
+            .allowsHitTesting(!isEmptyStateLoading)
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 6)
     }
 
     @ViewBuilder
@@ -243,8 +293,18 @@ struct PhotoPickerCard: View {
             Image(systemName: "photo")
                 .font(.system(size: 40, weight: .medium))
                 .foregroundColor(.primary.opacity(0.6))
+                .opacity(isLoading ? 0 : 1)
+                .scaleEffect(isLoading ? 0.95 : 1)
+                .overlay {
+                    ProgressView()
+                        .controlSize(.large)
+                        .opacity(isLoading ? 1 : 0)
+                        .scaleEffect(isLoading ? 1 : 0.95)
+                }
                 .padding(20)
+                .animation(.snappy, value: isLoading)
         }
+        .allowsHitTesting(!isLoading)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
@@ -260,6 +320,13 @@ struct PhotoPickerCard: View {
             showPhotoLibrary = true
         } label: {
             Label("Choose from Library", systemImage: "photo.on.rectangle")
+        }
+    }
+
+    private func syncPickerSelection() {
+        let remainingItems = images.compactMap(\.pickerItem)
+        if selectedPhotosPickerItems != remainingItems {
+            selectedPhotosPickerItems = remainingItems
         }
     }
 
@@ -282,6 +349,7 @@ struct PhotoPickerCard: View {
 
 #Preview {
     @Previewable @State var previewImages: [LoggedPhoto] = []
+    @Previewable @State var isLoading = false
 
     ZStack {
         Color.background.ignoresSafeArea()
@@ -289,7 +357,11 @@ struct PhotoPickerCard: View {
         VStack {
             Spacer()
 
-            PhotoPickerCard(images: $previewImages, isEditing: false)
+            PhotoPickerCard(
+                images: $previewImages,
+                isLoading: $isLoading,
+                isEditing: false
+            )
 
             Spacer()
         }

@@ -56,6 +56,7 @@ struct LoggedEntryDetailView: View {
     @State private var showingAllNotes: Bool = false
 
     @State private var selectedPhotos: [LoggedPhoto] = []
+    @State private var isLoadingPhotos = false
 
     @State private var draftIngredients: [LogRecipeIngredient]
     @State private var showIngredientSelectionSheet = false
@@ -152,6 +153,10 @@ struct LoggedEntryDetailView: View {
     }
 
     private var isRecipe: Bool { entry.entryType == .recipe }
+
+    private var showsPhotoCard: Bool {
+        isEditing || !selectedPhotos.isEmpty
+    }
 
     private var showsNotesCard: Bool {
         isEditing || !stickyNote.isEmpty || !pinnedNoteText.isEmpty
@@ -318,6 +323,14 @@ struct LoggedEntryDetailView: View {
                         .padding([.top, .horizontal])
                     }
 
+                    if showsPhotoCard {
+                        PhotoPickerCard(
+                            images: $selectedPhotos,
+                            isLoading: $isLoadingPhotos,
+                            isEditing: isEditing
+                        )
+                    }
+
                     Card {
                         PortionPillRow(
                             title: "Portion",
@@ -328,7 +341,8 @@ struct LoggedEntryDetailView: View {
                             servingUnits: portionUnitOptions
                         )
                     }
-                    .padding([.top, .horizontal])
+                    .padding(.horizontal)
+                    .padding(.top, showsPhotoCard ? 0 : nil)
 
                     if isRecipe && (isEditing || !draftIngredients.isEmpty) {
                         Card("Ingredients") {
@@ -414,13 +428,6 @@ struct LoggedEntryDetailView: View {
                         }
                     }
                     .padding([.top, .horizontal])
-
-                    if isEditing || !selectedPhotos.isEmpty {
-                        PhotoPickerCard(
-                            images: $selectedPhotos,
-                            isEditing: isEditing
-                        )
-                    }
 
                     Spacer()
                 }
@@ -518,6 +525,7 @@ struct LoggedEntryDetailView: View {
                         Image(systemName: "checkmark")
                     }
                     .fontWeight(.semibold)
+                    .disabled(isLoadingPhotos)
                 } else if !isReadOnly {
                     Menu {
                         if let originalFood = entry.originalFoodItem {
@@ -919,6 +927,7 @@ struct LoggedEntryDetailView: View {
         pinnedNoteText = entry.originalFoodItem?.stickyNote?.text ?? ""
 
         selectedPhotos = EntryHelper.loggedPhotos(from: entry.photos)
+        isLoadingPhotos = false
 
         draftIngredients = LogRecipeIngredient.makeDrafts(for: entry)
     }
