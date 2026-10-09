@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftData
 import UIKit
 
 enum EntryHelper {
@@ -138,6 +139,26 @@ enum EntryHelper {
     }
 
     /// Converts a logged entry's saved photos into editable draft photos
+    static func applyPinnedNote(
+        _ text: String?,
+        to food: FoodItem,
+        in context: ModelContext
+    ) {
+        guard text != food.stickyNote?.text else { return }
+
+        if let text {
+            if let existingNote = food.stickyNote {
+                existingNote.text = text
+                existingNote.lastUpdated = Date()
+            } else {
+                food.stickyNote = Note(text: text)
+            }
+        } else if let existingNote = food.stickyNote {
+            context.delete(existingNote)
+            food.stickyNote = nil
+        }
+    }
+
     static func loggedPhotos(from photos: [EntryPhoto]?) -> [LoggedPhoto] {
         (photos ?? [])
             .sorted { $0.displayOrder < $1.displayOrder }

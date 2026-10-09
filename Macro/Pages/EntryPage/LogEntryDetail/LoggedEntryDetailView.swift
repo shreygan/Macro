@@ -15,6 +15,7 @@ struct LoggedEntryDetailView: View {
 
     let entry: LoggedEntry
     var isPushedView: Bool = true
+    var isReadOnly: Bool = false
 
     @State private var isEditing: Bool = false
     @State private var foodToLogAgain: FoodItem? = nil
@@ -52,7 +53,6 @@ struct LoggedEntryDetailView: View {
 
     @State private var stickyNote: String
     @State private var pinnedNoteText: String
-    @State private var isAddingEntryNote: Bool = false
     @State private var showingAllNotes: Bool = false
 
     @State private var selectedPhotos: [LoggedPhoto] = []
@@ -78,9 +78,10 @@ struct LoggedEntryDetailView: View {
     @State private var fatDynamic: String
     @State private var fiberDynamic: String
 
-    init(entry: LoggedEntry, isPushedView: Bool = true) {
+    init(entry: LoggedEntry, isPushedView: Bool = true, isReadOnly: Bool = false) {
         self.entry = entry
         self.isPushedView = isPushedView
+        self.isReadOnly = isReadOnly
 
         _name = State(initialValue: entry.name)
         _sourceSelection = State(initialValue: entry.source?.source ?? "")
@@ -152,12 +153,15 @@ struct LoggedEntryDetailView: View {
 
     private var isRecipe: Bool { entry.entryType == .recipe }
 
-    private var hasEntryNote: Bool {
-        !stickyNote.isEmpty
+    private var showsNotesCard: Bool {
+        isEditing || !stickyNote.isEmpty || !pinnedNoteText.isEmpty
     }
 
-    private var showsEntryNoteRow: Bool {
-        hasEntryNote || (isEditing && isAddingEntryNote)
+    private var pinnedNoteUpdated: Date? {
+        guard let note = entry.originalFoodItem?.stickyNote else {
+            return pinnedNoteText.isEmpty ? nil : .now
+        }
+        return pinnedNoteText == note.text ? note.lastUpdated : .now
     }
 
     private var shouldShowIngredientIcons: Bool {
@@ -301,59 +305,16 @@ struct LoggedEntryDetailView: View {
                     }
                     .padding(.horizontal)
 
-                    if isEditing || hasEntryNote {
-                        Card {
-                            RowGroup(.divider) {
-                                if showsEntryNoteRow {
-                                    let entryNoteRow = WrappedInputRow(
-                                        placeholder: "Add a note...",
-                                        text: $stickyNote,
-                                        isSticky: false,
-                                        timestamp: entry.timestamp,
-                                        isEditable: isEditing,
-                                        characterLimit: 2000
-                                    )
-
-                                    if isEditing {
-                                        CustomSwipeRow(
-                                            content: { entryNoteRow },
-                                            onDelete: deleteEntryNote,
-                                            isPinned: false
-                                        )
-                                    } else {
-                                        entryNoteRow
-                                    }
-
-                                    ButtonRow(
-                                        title: "View All Notes",
-                                        topPadding: 16
-                                    ) {
-                                        showingAllNotes = true
-                                    }
-                                } else if isEditing {
-                                    DoubleButtonRow(
-                                        topPadding: 16,
-                                        leftTitle: "Add Note",
-                                        leftAction: {
-                                            withAnimation {
-                                                isAddingEntryNote = true
-                                            }
-                                        },
-                                        rightTitle: "View All Notes",
-                                        rightAction: {
-                                            showingAllNotes = true
-                                        }
-                                    )
-                                } else {
-                                    ButtonRow(
-                                        title: "View All Notes",
-                                        topPadding: 16
-                                    ) {
-                                        showingAllNotes = true
-                                    }
-                                }
-                            }
-                        }
+                    if showsNotesCard {
+                        NotesCard(
+                            pinnedNote: $pinnedNoteText,
+                            logNote: $stickyNote,
+                            pinnedUpdated: pinnedNoteUpdated,
+                            allowsPinning: entry.originalFoodItem != nil,
+                            isEditable: isEditing,
+                            onViewAll: entry.originalFoodItem == nil || isReadOnly
+                                ? nil : { showingAllNotes = true }
+                        )
                         .padding([.top, .horizontal])
                     }
 
@@ -405,7 +366,7 @@ struct LoggedEntryDetailView: View {
                             TextInputRow(
                                 icon: .calorie,
                                 title: "Calories",
-                                titleExtension: "(Kcal)",
+                                titleExtension: "(kcal)",
                                 text: $calorie,
                                 keyboardType: .decimalPad,
                                 isEnabled: isEditing && manualOverrideToggle
@@ -497,18 +458,9 @@ struct LoggedEntryDetailView: View {
             }
         }
         .sheet(isPresented: $showingAllNotes) {
-            NavigationStack {
-                VStack(spacing: 20) {
-                    Image(systemName: "note.text")
-                        .font(.system(size: 40))
-                        .foregroundStyle(.secondary)
-                    Text("TODO: View All Notes Implementation")
-                        .foregroundStyle(.secondary)
-                }
-                .navigationTitle("All Notes")
-                .navigationBarTitleDisplayMode(.inline)
+            if let food = entry.originalFoodItem {
+                NotesHistoryView(food: food, currentEntryID: entry.id)
             }
-            .presentationDetents([.medium, .large])
         }
         .sheet(item: $foodToLogAgain) { foodToLog in
             NavigationStack {
@@ -566,7 +518,7 @@ struct LoggedEntryDetailView: View {
                         Image(systemName: "checkmark")
                     }
                     .fontWeight(.semibold)
-                } else {
+                } else if !isReadOnly {
                     Menu {
                         if let originalFood = entry.originalFoodItem {
                             Button {
@@ -743,7 +695,17 @@ struct LoggedEntryDetailView: View {
             in: .whitespacesAndNewlines
         )
         entry.logNote = trimmedNote.isEmpty ? nil : trimmedNote
-        isAddingEntryNote = false
+
+        if let food = entry.originalFoodItem {
+            let trimmedPinned = pinnedNoteText.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            EntryHelper.applyPinnedNote(
+                trimmedPinned.isEmpty ? nil : trimmedPinned,
+                to: food,
+                in: modelContext
+            )
+        }
         entry.location = location.isEmpty ? nil : location
 
         let trimmedSource = sourceSelection.trimmingCharacters(
@@ -921,29 +883,6 @@ struct LoggedEntryDetailView: View {
         pinnedNoteText = food.stickyNote?.text ?? ""
     }
 
-    private func pinEntryNote() {
-        guard let food = entry.originalFoodItem else { return }
-        if let existingNote = food.stickyNote {
-            existingNote.text = stickyNote
-            existingNote.lastUpdated = Date()
-        } else {
-            food.stickyNote = Note(text: stickyNote)
-        }
-        guard save(failureTitle: String(localized: "Couldn't Pin Note")) else { return }
-        withAnimation {
-            pinnedNoteText = stickyNote
-        }
-    }
-
-    private func deleteEntryNote() {
-        entry.logNote = nil
-        guard save(failureTitle: String(localized: "Couldn't Delete Note")) else { return }
-        withAnimation {
-            stickyNote = ""
-            isAddingEntryNote = false
-        }
-    }
-
     private func save(failureTitle: String) -> Bool {
         do {
             try modelContext.save()
@@ -977,7 +916,7 @@ struct LoggedEntryDetailView: View {
         fiber = EntryHelper.format(entry.fiber)
 
         stickyNote = entry.logNote ?? ""
-        isAddingEntryNote = false
+        pinnedNoteText = entry.originalFoodItem?.stickyNote?.text ?? ""
 
         selectedPhotos = EntryHelper.loggedPhotos(from: entry.photos)
 

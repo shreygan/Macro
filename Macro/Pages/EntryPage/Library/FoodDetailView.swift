@@ -226,18 +226,7 @@ private struct FoodDetailContent: View {
             LogAgainSheet(entry: entry)
         }
         .sheet(isPresented: $showingAllNotes) {
-            NavigationStack {
-                VStack(spacing: 20) {
-                    Image(systemName: "note.text")
-                        .font(.system(size: 40))
-                        .foregroundStyle(.secondary)
-                    Text("TODO: View All Notes Implementation")
-                        .foregroundStyle(.secondary)
-                }
-                .navigationTitle("All Notes")
-                .navigationBarTitleDisplayMode(.inline)
-            }
-            .presentationDetents([.medium, .large])
+            NotesHistoryView(food: food)
         }
         .deleteFoodAlert(
             food: $foodToDelete,
@@ -301,8 +290,12 @@ private struct FoodDetailContent: View {
                                 WrappedInputRow(
                                     placeholder: "",
                                     text: .constant(pinnedNote.text),
-                                    isSticky: true,
-                                    timestamp: pinnedNote.lastUpdated,
+                                    caption: String(
+                                        localized:
+                                            "Updated \(pinnedNote.lastUpdated.formatted(.relative(presentation: .named)))"
+                                    ),
+                                    captionSymbol: "pin.fill",
+                                    captionTint: .orange,
                                     isEditable: false
                                 )
                             }

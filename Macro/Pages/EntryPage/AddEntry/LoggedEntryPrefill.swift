@@ -57,7 +57,7 @@ extension LoggedEntry {
             ),
             isCustomDefaultServing: false,
             customServingSize: "1",
-            stickyNote: logNote ?? ""
+            stickyNote: ""
         )
     }
 
@@ -74,7 +74,7 @@ extension LoggedEntry {
             isCustomDefaultServing: false,
             customServingSize: "1",
             ingredients: [],
-            stickyNote: logNote ?? ""
+            stickyNote: ""
         )
 
         let ingredients = sortedComponents.map { child in

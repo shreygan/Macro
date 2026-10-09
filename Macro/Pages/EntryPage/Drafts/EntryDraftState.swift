@@ -91,9 +91,6 @@ extension LogRecipeIngredient {
 struct DraftNoteState: Codable, Equatable {
     var stickyNote: String
     var newNote: String
-    var isAddingNewNote: Bool
-    var isNewNotePinned: Bool
-    var isOriginalNotePinned: Bool
 }
 
 struct LogEntryDraftState: Codable, Equatable {
