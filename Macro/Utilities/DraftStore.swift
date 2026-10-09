@@ -30,7 +30,7 @@ enum DraftStore {
         state: State,
         photos: [LoggedPhoto] = [],
         in context: ModelContext
-    ) -> EntryDraft {
+    ) throws -> EntryDraft {
         let draft: EntryDraft
         if let existing = fetch(id: id, in: context) {
             let isUnchanged =
@@ -71,9 +71,9 @@ enum DraftStore {
         do {
             try context.save()
         } catch {
-            print("Failed to save draft: \(error.localizedDescription)")
+            context.rollback()
+            throw error
         }
-
         return draft
     }
 

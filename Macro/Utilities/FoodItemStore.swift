@@ -11,6 +11,11 @@ import SwiftData
 struct FoodItemUsage {
     var logCount: Int
     var recipeCount: Int
+    var draftCount: Int = 0
+
+    var hasUses: Bool {
+        logCount > 0 || recipeCount > 0 || draftCount > 0
+    }
 }
 
 struct FoodLogStats {
@@ -63,7 +68,10 @@ enum FoodItemStore {
             predicate: #Predicate {
                 $0.originalFoodItem?.id == foodID && $0.parentEntry == nil
             },
-            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+            sortBy: [
+                SortDescriptor(\.timestamp, order: .reverse),
+                SortDescriptor(\.id),
+            ]
         )
     }
 
@@ -95,49 +103,49 @@ enum FoodItemStore {
         )
         return FoodItemUsage(
             logCount: (try? context.fetchCount(topLevelLogs)) ?? 0,
-            recipeCount: recipeIDs.count
+            recipeCount: recipeIDs.count,
+            draftCount: food.drafts?.count ?? 0
         )
     }
 
-    static func toggleFavorite(_ food: FoodItem, in context: ModelContext) {
+    @discardableResult
+    static func toggleFavorite(
+        _ food: FoodItem,
+        in context: ModelContext,
+        at orderIndex: Int? = nil
+    ) throws -> Int? {
+        let previousOrder = food.favoriteEntry?.orderIndex
         if let favorite = food.favoriteEntry {
             context.delete(favorite)
         } else {
-            let existingFavorites =
-                (try? context.fetch(FetchDescriptor<FavoriteEntry>())) ?? []
-            let maxIndex =
-                existingFavorites.compactMap { $0.orderIndex }.max() ?? -1
-            context.insert(
-                FavoriteEntry(orderIndex: maxIndex + 1, foodItem: food)
-            )
+            insertFavorite(food, at: orderIndex, in: context)
         }
-        try? context.save()
-    }
-
-    static func delete(
-        _ food: FoodItem,
-        deletingLogs: Bool,
-        in context: ModelContext
-    ) {
-        for entry in loggedEntries(for: food, in: context) {
-            if deletingLogs && entry.parentEntry == nil {
-                context.delete(entry)
-            } else {
-                entry.originalFoodItem = nil
-            }
-        }
-
-        for ingredient in recipeIngredients(using: food, in: context) {
-            ingredient.ingredientItem = nil
-        }
-
-        context.delete(food)
-
         do {
             try context.save()
         } catch {
             context.rollback()
-            print("Failed to delete food: \(error.localizedDescription)")
+            throw error
         }
+        return previousOrder
+    }
+
+    static func insertFavorite(
+        _ food: FoodItem,
+        at orderIndex: Int?,
+        in context: ModelContext
+    ) {
+        let existingFavorites =
+            (try? context.fetch(FetchDescriptor<FavoriteEntry>())) ?? []
+        guard let orderIndex else {
+            let maxIndex = existingFavorites.map(\.orderIndex).max() ?? -1
+            context.insert(FavoriteEntry(orderIndex: maxIndex + 1, foodItem: food))
+            return
+        }
+        if existingFavorites.contains(where: { $0.orderIndex == orderIndex }) {
+            for favorite in existingFavorites where favorite.orderIndex >= orderIndex {
+                favorite.orderIndex += 1
+            }
+        }
+        context.insert(FavoriteEntry(orderIndex: orderIndex, foodItem: food))
     }
 }
