@@ -100,17 +100,43 @@ struct AddRecipePrefill {
     var state: AddRecipeDraftState
     var ingredients: [DraftRecipeIngredient]
 
-    static func named(_ name: String) -> AddRecipePrefill {
+    static func named(_ name: String, source: String = "") -> AddRecipePrefill {
         var state = AddRecipeDraftState.empty
-        state.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        state.name = name.titleCasedFoodName
+        state.source = source
         return AddRecipePrefill(state: state, ingredients: [])
     }
 }
 
 extension AddEntryDraftState {
-    static func named(_ name: String) -> AddEntryDraftState {
+    static func named(_ name: String, source: String = "") -> AddEntryDraftState {
         var state = AddEntryDraftState.empty
-        state.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        state.name = name.titleCasedFoodName
+        state.source = source
         return state
+    }
+}
+
+extension String {
+    private static let lowercaseTitleWords: Set<String> = [
+        "a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the",
+        "to", "with",
+    ]
+
+    var titleCasedFoodName: String {
+        let words = split(whereSeparator: \.isWhitespace)
+        return words
+            .enumerated()
+            .map { index, word in
+                let word = String(word)
+                let isEdge = index == 0 || index == words.count - 1
+                if word.contains(where: \.isUppercase)
+                    || (!isEdge && Self.lowercaseTitleWords.contains(word))
+                {
+                    return word
+                }
+                return word.prefix(1).uppercased() + word.dropFirst()
+            }
+            .joined(separator: " ")
     }
 }
