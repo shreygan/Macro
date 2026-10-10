@@ -16,6 +16,7 @@ struct LoggedEntryDetailView: View {
     let entry: LoggedEntry
     var isPushedView: Bool = true
     var isReadOnly: Bool = false
+    var showsLibraryLink: Bool = true
 
     @State private var isEditing: Bool = false
     @State private var foodToLogAgain: FoodItem? = nil
@@ -79,10 +80,16 @@ struct LoggedEntryDetailView: View {
     @State private var fatDynamic: String
     @State private var fiberDynamic: String
 
-    init(entry: LoggedEntry, isPushedView: Bool = true, isReadOnly: Bool = false) {
+    init(
+        entry: LoggedEntry,
+        isPushedView: Bool = true,
+        isReadOnly: Bool = false,
+        showsLibraryLink: Bool = true
+    ) {
         self.entry = entry
         self.isPushedView = isPushedView
         self.isReadOnly = isReadOnly
+        self.showsLibraryLink = showsLibraryLink
 
         _name = State(initialValue: entry.name)
         _sourceSelection = State(initialValue: entry.source?.source ?? "")
@@ -517,9 +524,20 @@ struct LoggedEntryDetailView: View {
         .navigationTitle(name.isEmpty ? "Unnamed Entry" : name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if !isEditing && !isReadOnly {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Edit Entry", systemImage: "pencil") {
+                        withAnimation {
+                            isEditing = true
+                        }
+                    }
+                }
+            }
+
             ToolbarItem(placement: .topBarTrailing) {
                 if isEditing {
                     Button {
+                        UIApplication.shared.dismissKeyboard()
                         withAnimation {
                             if saveChanges() {
                                 isEditing = false
@@ -528,6 +546,7 @@ struct LoggedEntryDetailView: View {
                     } label: {
                         Image(systemName: "checkmark")
                     }
+                    .accessibilityLabel("Save Changes")
                     .fontWeight(.semibold)
                     .disabled(isLoadingPhotos)
                 } else if !isReadOnly {
@@ -542,13 +561,15 @@ struct LoggedEntryDetailView: View {
                                 )
                             }
 
-                            Button {
-                                foodToView = originalFood
-                            } label: {
-                                Label(
-                                    "View in Library",
-                                    systemImage: "book.pages"
-                                )
+                            if showsLibraryLink {
+                                Button {
+                                    foodToView = originalFood
+                                } label: {
+                                    Label(
+                                        "View in Library",
+                                        systemImage: "book.pages"
+                                    )
+                                }
                             }
                         } else {
                             Button {
@@ -561,14 +582,6 @@ struct LoggedEntryDetailView: View {
                             }
                         }
 
-                        Button {
-                            withAnimation {
-                                isEditing = true
-                            }
-                        } label: {
-                            Label("Edit Entry", systemImage: "pencil")
-                        }
-
                         Divider()
 
                         Button(role: .destructive) {
@@ -579,12 +592,14 @@ struct LoggedEntryDetailView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
+                    .accessibilityLabel("Entry Options")
                 }
             }
 
             ToolbarItem(placement: .topBarLeading) {
                 if isEditing {
                     Button {
+                        UIApplication.shared.dismissKeyboard()
                         withAnimation {
                             discardChanges()
                             isEditing = false
@@ -592,6 +607,7 @@ struct LoggedEntryDetailView: View {
                     } label: {
                         Image(systemName: "xmark")
                     }
+                    .accessibilityLabel("Discard Changes")
                 } else if !isPushedView {
                     Button {
                         dismiss()
@@ -599,9 +615,11 @@ struct LoggedEntryDetailView: View {
                         Image(systemName: "xmark")
                             .foregroundStyle(.primary)
                     }
+                    .accessibilityLabel("Close")
                 }
             }
         }
+        .interactiveDismissDisabled(isEditing)
         .onChange(of: portionUnitSelection) { oldUnit, newUnit in
             guard oldUnit != newUnit, let weight = activeServingWeight else {
                 return

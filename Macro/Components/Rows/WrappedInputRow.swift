@@ -99,11 +99,6 @@ struct WrappedInputRow: View {
                 isFocused = true
             }
         }
-        .onChange(of: isEditable) { _, newValue in
-            if newValue {
-                isFocused = true
-            }
-        }
         .onChange(of: isFocused) { _, focused in
             onFocusChange?(focused)
         }
