@@ -187,8 +187,8 @@ struct LibraryView<Header: View>: View {
                     ? lhs.dateAdded > rhs.dateAdded
                     : lhs.dateAdded < rhs.dateAdded
             case .lastLogged:
-                let lhsDate = stats[lhs.id]?.lastLogged ?? .distantPast
-                let rhsDate = stats[rhs.id]?.lastLogged ?? .distantPast
+                let lhsDate = stats[lhs.id]?.lastLogged ?? lhs.dateAdded
+                let rhsDate = stats[rhs.id]?.lastLogged ?? rhs.dateAdded
                 return sortDescending ? lhsDate > rhsDate : lhsDate < rhsDate
             case .mostLogged:
                 let lhsCount = stats[lhs.id]?.count ?? 0
@@ -257,7 +257,7 @@ struct LibraryView<Header: View>: View {
             defaultType == .all ? [] : [defaultType.displayName]
         self._selectedTypes = State(initialValue: initialTypes)
         self._sortOption = State(
-            initialValue: isTabRoot ? .dateAdded : .lastUsedInRecipe
+            initialValue: isTabRoot ? .lastLogged : .lastUsedInRecipe
         )
     }
 
@@ -370,7 +370,18 @@ struct LibraryView<Header: View>: View {
         .navigationDestination(item: $listToManage) { kind in
             ManageListView(kind: kind)
         }
-        .onAppear(perform: refreshStats)
+        .onAppear {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction, refreshStats)
+        }
+        .task {
+            for await _ in NotificationCenter.default.notifications(
+                named: ModelContext.didSave
+            ) {
+                refreshStats()
+            }
+        }
         .onChange(of: usesLogStats) {
             refreshStats()
         }
