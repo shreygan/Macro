@@ -11,6 +11,7 @@ import SwiftUI
 private struct NewFoodRequest: Identifiable {
     let id = UUID()
     let name: String
+    var source: String = ""
 }
 
 private final class SearchLogStatsCache {
@@ -81,21 +82,7 @@ struct NewEntryView: View {
     }
 
     private var searchResults: [FoodItem] {
-        let matches = allFoods.filter { food in
-            food.name.localizedStandardContains(searchText)
-                || (food.source?.source.localizedStandardContains(searchText)
-                    ?? false)
-        }
-
-        let stats = logStats()
-        return matches.sorted { lhs, rhs in
-            let lhsDate = stats[lhs.id]?.lastLogged ?? .distantPast
-            let rhsDate = stats[rhs.id]?.lastLogged ?? .distantPast
-            if lhsDate == rhsDate {
-                return lhs.dateAdded > rhs.dateAdded
-            }
-            return lhsDate > rhsDate
-        }
+        FoodSearch(searchText).ranked(allFoods, stats: logStats())
     }
 
     private func logStats() -> [UUID: FoodLogStats] {
@@ -234,13 +221,18 @@ struct NewEntryView: View {
                 systemImage: "magnifyingglass"
             )
         } description: {
-            Text("Try a new search or create a new item.")
-                .font(.subheadline)
+            SearchSuggestionButton(
+                suggestion: FoodSearch.suggestion(for: searchText, in: allFoods),
+                fallback: "Try a new search or create a new item."
+            ) { searchText = $0 }
+            .font(.subheadline)
         } actions: {
-            Button("Create New Food") {
-                foodToCreate = NewFoodRequest(name: searchText)
+            CreateFromSearchButtons(
+                query: searchText,
+                title: "Create New Food"
+            ) { name, source in
+                foodToCreate = NewFoodRequest(name: name, source: source)
             }
-            .tint(.blue)
         }
     }
 
@@ -462,7 +454,7 @@ struct NewEntryView: View {
             AddEntryView(
                 entryType: .food,
                 offersLogNow: true,
-                prefill: .named(request.name)
+                prefill: .named(request.name, source: request.source)
             )
             .environment(\.rootDismiss) { finishLogging() }
         }
