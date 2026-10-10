@@ -895,9 +895,11 @@ struct FloatingKeyboardModifier: ViewModifier {
             proxy.scrollTo(focusedField, anchor: .bottom)
         }
     }
+}
 
-    private func hideKeyboard() {
-        UIApplication.shared.sendAction(
+extension UIApplication {
+    func dismissKeyboard() {
+        sendAction(
             #selector(UIResponder.resignFirstResponder),
             to: nil,
             from: nil,

@@ -218,7 +218,11 @@ private struct FoodDetailContent: View {
         }
         .sheet(item: $selectedEntry) { entry in
             NavigationStack {
-                LoggedEntryDetailView(entry: entry, isPushedView: false)
+                LoggedEntryDetailView(
+                    entry: entry,
+                    isPushedView: false,
+                    showsLibraryLink: false
+                )
             }
             .environment(\.tabBarHeight, 0)
         }
@@ -697,7 +701,11 @@ private struct FoodLogsContent: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedEntry) { entry in
             NavigationStack {
-                LoggedEntryDetailView(entry: entry, isPushedView: false)
+                LoggedEntryDetailView(
+                    entry: entry,
+                    isPushedView: false,
+                    showsLibraryLink: false
+                )
             }
             .environment(\.tabBarHeight, 0)
         }
