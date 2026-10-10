@@ -835,7 +835,7 @@ struct LogEntryView: View {
                         Spacer()
                     }
                 }
-                .safeAreaInset(edge: .top) {
+                .safeAreaBar(edge: .top) {
                     Card {
                         MealRow(
                             name: name.isEmpty
@@ -858,8 +858,7 @@ struct LogEntryView: View {
                         )
                     }
                     .padding([.leading, .trailing])
-                    .padding(.bottom, 16)
-                    .background(.ultraThinMaterial)
+                    .padding(.bottom, 24)
                 }
                 .withCustomKeyboardToolbar()
                 .navigationTitle(
@@ -984,7 +983,7 @@ struct LogEntryView: View {
                             Image(systemName: "plus")
                                 .foregroundStyle(.primary)
                         }
-                        .tint(Color.blue)
+                        .tint(Color.accentColor)
                         .buttonStyle(.glassProminent)
                         .disabled(isLoadingPhotos)
                     }

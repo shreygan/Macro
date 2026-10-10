@@ -487,9 +487,9 @@ struct ExportView: View {
             if loadingKind == kind {
                 HStack(spacing: 12) {
                     ProgressView()
-                        .tint(.blue)
+                        .tint(.accentColor)
                     Text(loadingTitle)
-                        .font(.subheadline.weight(.medium))
+                        .font(.statusLabel)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.bottom, 9)
@@ -502,7 +502,7 @@ struct ExportView: View {
                         tint: isEmpty ? .secondary : .white
                     ),
                     title: isEmpty ? emptyTitle : title,
-                    tint: isEmpty ? Color.gray.opacity(0.1) : .blue,
+                    tint: isEmpty ? Color.controlFill : .accentColor,
                     textColor: isEmpty ? .secondary : .white,
                     topPadding: 8
                 ) {

@@ -8,41 +8,34 @@
 import SwiftUI
 
 extension Color {
-    static let calorie = Color(
-        red: 255 / 255,
-        green: 59 / 255,
-        blue: 48 / 255
-    )
+    static let calorie = Color(uiColor: .systemRed)
 
-    static let protein = Color(
-        red: 0 / 255,
-        green: 122 / 255,
-        blue: 255 / 255
-    )
+    static let protein = Color(uiColor: .systemBlue)
 
-    static let carbs = Color(
-        red: 52 / 255,
-        green: 199 / 255,
-        blue: 89 / 255
-    )
+    static let carbs = Color(uiColor: .systemGreen)
 
-    static let fat = Color(
-        red: 175 / 255,
-        green: 82 / 255,
-        blue: 222 / 255
-    )
+    static let fat = Color(uiColor: .systemPurple)
 
-    static let fiber = Color(
-        red: 255 / 255,
-        green: 204 / 255,
-        blue: 0 / 255
-    )
+    static let fiber = Color(uiColor: .systemYellow)
 
-    static var tertiary: Color {
-        Color.primary.opacity(0.3)
-    }
+    static let tertiaryText = Color(
+        uiColor: UIColor { traits in
+            let base: UIColor = traits.userInterfaceStyle == .dark ? .white : .black
+            return base.withAlphaComponent(traits.accessibilityContrast == .high ? 0.54 : 0.3)
+        }
+    )
 
     static var background: Color {
         Color.gray.opacity(0.15)
     }
+
+    static let controlFill = Color(uiColor: .tertiarySystemFill)
+
+    static let trackFill = Color(uiColor: .systemFill)
+
+    static let highlightFill = Color(uiColor: .secondarySystemFill)
+
+    static let accentFill = Color.accentColor.opacity(0.15)
+
+    static let destructiveFill = Color.red.opacity(0.1)
 }

@@ -439,7 +439,7 @@ struct LoggedEntryDetailView: View {
                     Spacer()
                 }
             }
-            .safeAreaInset(edge: .top) {
+            .safeAreaBar(edge: .top) {
                 Card {
                     MealRow(
                         name: name.isEmpty ? "Unnamed Entry" : name,
@@ -459,8 +459,7 @@ struct LoggedEntryDetailView: View {
                     )
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 16)
-                .background(.ultraThinMaterial)
+                .padding(.bottom, 24)
             }
             .withCustomKeyboardToolbar()
         }

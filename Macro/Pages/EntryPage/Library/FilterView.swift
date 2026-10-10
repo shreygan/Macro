@@ -96,7 +96,7 @@ struct FilterRowView: View {
 
             HStack {
                 Text(title)
-                    .font(.headline)
+                    .font(.sectionTitle)
 
                 Spacer()
 
@@ -120,13 +120,13 @@ struct FilterRowView: View {
                         }
                     }
                 }
-                .font(.subheadline)
+                .font(.compactValue)
 
             }
             .padding(.horizontal)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     ForEach(items, id: \.self) { item in
                         let isSelected = selection.contains(item)
 
@@ -140,22 +140,8 @@ struct FilterRowView: View {
                             }
                         } label: {
                             Text(item)
-                                .font(.subheadline)
-                                .fontWeight(isSelected ? .semibold : .regular)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(
-                                    isSelected
-                                        ? Color.accentColor
-                                        : Color.secondary.opacity(0.15)
-                                )
-                                .foregroundStyle(
-                                    isSelected ? Color.white : Color.primary
-                                )
-                                .clipShape(Capsule())
-                                .buttonStyle(.plain)
-                                .contentShape(Capsule())
                         }
+                        .buttonStyle(.filterChip(isSelected: isSelected))
                     }
                 }
                 .padding(.horizontal)

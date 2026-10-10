@@ -310,14 +310,12 @@ private struct FoodDetailContent: View {
                                 BaseRowLayout(title: "All Notes") {
                                     HStack(spacing: 8) {
                                         Text(noteCount.formatted())
-                                            .font(.system(size: 16))
+                                            .font(.rowValue)
                                             .foregroundStyle(.secondary)
 
                                         Image(systemName: "chevron.right")
-                                            .font(
-                                                .system(size: 14, weight: .semibold)
-                                            )
-                                            .foregroundStyle(.tertiary)
+                                            .font(.chevron)
+                                            .foregroundStyle(Color.tertiaryText)
                                     }
                                 }
                                 .contentShape(Rectangle())
@@ -382,7 +380,7 @@ private struct FoodDetailContent: View {
         )
         .contentMargins(.bottom, tabBarHeight, for: .scrollIndicators)
         .ignoresSafeArea(edges: tabBarHeight > 0 ? .bottom : [])
-        .safeAreaInset(edge: .top) {
+        .safeAreaBar(edge: .top) {
             Card {
                 MealRow(
                     food: food,
@@ -391,8 +389,7 @@ private struct FoodDetailContent: View {
                 )
             }
             .padding(.horizontal)
-            .padding(.bottom, 16)
-            .background(.ultraThinMaterial)
+            .padding(.bottom, 24)
         }
     }
 
@@ -403,7 +400,7 @@ private struct FoodDetailContent: View {
                     foodToLog = food
                 } label: {
                     Label("Log \(typeName)", systemImage: "plus")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .font(.prominentButton)
                         .frame(maxWidth: .infinity)
                         .frame(height: 24)
                 }
@@ -508,8 +505,8 @@ private struct FoodDetailContent: View {
                 .minimumScaleFactor(0.7)
 
             Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
+                .font(.detail)
+                .foregroundStyle(Color.tertiaryText)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
@@ -575,13 +572,13 @@ private struct FoodDetailContent: View {
         ) {
             HStack(spacing: 8) {
                 Text("\(EntryHelper.formatMacro(calories)) kcal")
-                    .font(.system(size: 14))
+                    .font(.compactValue)
                     .foregroundStyle(.secondary)
 
                 if ingredient.ingredientItem != nil {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.tertiary)
+                        .font(.chevron)
+                        .foregroundStyle(Color.tertiaryText)
                 }
             }
         }
@@ -601,7 +598,7 @@ private struct FoodDetailContent: View {
     private func detailRow(_ title: String, value: String) -> some View {
         BaseRowLayout(title: title) {
             Text(value)
-                .font(.system(size: 16))
+                .font(.rowValue)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }

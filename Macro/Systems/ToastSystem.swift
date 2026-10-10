@@ -335,7 +335,7 @@ struct ToastView: View {
 
                 if let message = toast.message {
                     Text(message)
-                        .font(.system(size: 14))
+                        .font(.compactValue)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -354,12 +354,12 @@ struct ToastView: View {
             onDismiss()
         } label: {
             Text(action.title)
-                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .font(.prominentButton)
                 .foregroundStyle(foreground)
                 .padding(.horizontal, 16)
                 .frame(maxWidth: fillsWidth ? .infinity : nil)
                 .frame(height: 36)
-                .background(Capsule().fill(Color.gray.opacity(0.1)))
+                .background(Capsule().fill(Color.controlFill))
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)

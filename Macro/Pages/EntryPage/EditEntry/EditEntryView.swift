@@ -418,7 +418,7 @@ struct EditEntryView: View {
                             ? "ingredient_description"
                             : "food_description"
                     )
-                    .font(.footnote)
+                    .font(.subtitle)
                     .foregroundColor(.secondary)
                     .padding(.horizontal)
                     .padding(.bottom, 4)
@@ -637,12 +637,10 @@ struct EditEntryView: View {
                             dismiss()
                         } label: {
                             Image(systemName: "checkmark")
-                                .foregroundStyle(
-                                    isSaveDisabled ? .tertiary : .primary
-                                )
+                                .foregroundStyle(.primary)
                         }
                         .disabled(isSaveDisabled)
-                        .tint(isSaveDisabled ? Color.tertiary : Color.blue)
+                        .tint(Color.accentColor)
                         .buttonStyle(.glassProminent)
 
                     } else {
@@ -695,12 +693,10 @@ struct EditEntryView: View {
                             }
                         } label: {
                             Image(systemName: "checkmark")
-                                .foregroundStyle(
-                                    isSaveDisabled ? .tertiary : .primary
-                                )
+                                .foregroundStyle(.primary)
                         }
                         .disabled(isSaveDisabled)
-                        .tint(isSaveDisabled ? Color.tertiary : Color.blue)
+                        .tint(Color.accentColor)
                         .buttonStyle(.glassProminent)
                     }
                 }
@@ -726,7 +722,7 @@ struct EditEntryView: View {
 
                 Text(uniqueRecipesCount > 1 ? pluralText : singularText)
             }
-            .safeAreaInset(edge: .top) {
+            .safeAreaBar(edge: .top) {
                 Card {
                     MealRow(
                         name: name.isEmpty
@@ -763,8 +759,7 @@ struct EditEntryView: View {
                     )
                 }
                 .padding([.leading, .trailing])
-                .padding(.bottom, 16)
-                .background(.ultraThinMaterial)
+                .padding(.bottom, 24)
             }
         }
     }

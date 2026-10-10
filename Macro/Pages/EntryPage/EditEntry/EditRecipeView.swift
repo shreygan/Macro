@@ -481,7 +481,7 @@ struct EditRecipeView: View {
             ScrollView {
                 VStack {
                     Text("recipe_description")
-                        .font(.footnote)
+                        .font(.subtitle)
                         .foregroundColor(.secondary)
                         .padding(.horizontal)
                         .padding(.bottom, 4)
@@ -734,16 +734,14 @@ struct EditRecipeView: View {
                         saveRecipe()
                     } label: {
                         Image(systemName: "checkmark")
-                            .foregroundStyle(
-                                isRecipeValid ? .primary : .tertiary
-                            )
+                            .foregroundStyle(.primary)
                     }
                     .disabled(!isRecipeValid)
-                    .tint(isRecipeValid ? Color.blue : Color.tertiary)
+                    .tint(Color.accentColor)
                     .buttonStyle(.glassProminent)
                 }
             }
-            .safeAreaInset(edge: .top) {
+            .safeAreaBar(edge: .top) {
                 Card {
                     MealRow(
                         name: name.isEmpty ? "Edit Recipe" : name,
@@ -768,8 +766,7 @@ struct EditRecipeView: View {
                     )
                 }
                 .padding([.leading, .trailing])
-                .padding(.bottom, 16)
-                .background(.ultraThinMaterial)
+                .padding(.bottom, 24)
             }
         }
         .environment(focusManager)

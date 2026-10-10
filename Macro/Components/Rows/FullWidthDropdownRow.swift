@@ -19,7 +19,7 @@ struct FullWidthDropdownRow: View {
         HStack(spacing: 8) {
 
             TextField(placeholder, text: $selection)
-                .font(.system(size: 16))
+                .font(.rowValue)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .focused($isTextFieldFocused)
                 .autoFloatingToolbar(for: .default)
@@ -42,8 +42,8 @@ struct FullWidthDropdownRow: View {
                 }
             } label: {
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.tertiary)
+                    .font(.chevron)
+                    .foregroundColor(.tertiaryText)
                     .frame(width: 44, alignment: .trailing)
                     .contentShape(Rectangle())
             }
@@ -60,7 +60,7 @@ struct FullWidthDropdownRow: View {
 
         var body: some View {
             ZStack {
-                Color.gray.opacity(0.15).ignoresSafeArea()
+                Color.background.ignoresSafeArea()
 
                 Card("QUICK ADD") {
 

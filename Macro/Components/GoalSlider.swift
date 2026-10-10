@@ -39,13 +39,11 @@ private func formatNumber(_ value: Double) -> String {
 ///
 /// - `title`: An optional title string for the slider.
 /// - `titleIcon`: An optional Icon displayed in the title.
-/// - `titleFontSize`: Font size for the title. Defaults to 20.
 /// - `unit`: The slider values unit. Defaults to 'kcal'.
 /// - `trackWidth`: The width of the slider track. Defaults to 235.
 /// - `trackHeight`: The height of the slider track and fill. Defaults to 50.
 /// - `fillColor`: The color of the slider's filled track area. Defaults to white.
-/// - `trackFill`: The color of the slider's background track. Defaults to secondary with opacity.
-/// - `trackStroke`: The color of the slider's border stroke. Defaults to primary with opacity.
+/// - `trackFill`: The color of the slider's background track. Defaults to `Color.trackFill`.
 /// - `value`: A binding to the current value of the slider.
 /// - `range`: A closed range representing the minimum and maximum values for the slider. Defaults to 0...100.
 /// - `onChange`: An optional closure that is called when the slider value changes.
@@ -67,30 +65,25 @@ public struct GoalSlider: View {
 
     private let title: String?
     private let titleIcon: RowIcon?
-    private let titleFontSize: CGFloat
+    private let titleFontSize = FontSize.display
     private let unit: String
     private let trackWidth: CGFloat
     private let trackHeight: CGFloat
     private let fillColor: Color
     private let trackFill: Color
-    private let trackStroke: Color
     private let range: ClosedRange<Double>
     private let onChange: ((Double) -> Void)?
     private let onChangeEnd: ((Double) -> Void)?
     private let onEditingChanged: ((Bool) -> Void)?
 
-    private let textFontSize: CGFloat = 12
-
     init(
         _ title: String? = nil,
         titleIcon: RowIcon? = nil,
-        titleFontSize: CGFloat = 20,
         unit: String = "kcal",
         trackWidth: CGFloat = 325,
         trackHeight: CGFloat = 50,
         fillColor: Color = .white,
         trackFill: Color? = nil,
-        trackStroke: Color? = nil,
         value: Binding<Double>,
         limitMode: Binding<GoalLimitMode>,
         in range: ClosedRange<Double> = 0...100,
@@ -100,13 +93,11 @@ public struct GoalSlider: View {
     ) {
         self.title = title
         self.titleIcon = titleIcon
-        self.titleFontSize = titleFontSize
         self.unit = unit
         self.trackWidth = trackWidth
         self.trackHeight = trackHeight
         self.fillColor = fillColor
-        self.trackFill = trackFill ?? .secondary.opacity(0.3)
-        self.trackStroke = trackStroke ?? .primary.opacity(0.15)
+        self.trackFill = trackFill ?? .trackFill
         self._value = value
         self._limitMode = limitMode
         self._displayText = State(
@@ -159,8 +150,7 @@ public struct GoalSlider: View {
                     }
 
                     Text(title)
-                        .fontWeight(.bold)
-                        .font(.system(size: titleFontSize))
+                        .font(.display)
 
                     Spacer()
 
@@ -173,7 +163,7 @@ public struct GoalSlider: View {
                                 selection: $selection,
                                 allowsFractions: false
                             )
-                            .font(.system(size: textFontSize))
+                            .font(.detail)
                             .multilineTextAlignment(.trailing)
                             .fixedSize(horizontal: true, vertical: false)
                             .frame(minWidth: 30)
@@ -248,14 +238,14 @@ public struct GoalSlider: View {
                             }
 
                         Text(unit)
-                            .font(.system(size: textFontSize))
+                            .font(.detail)
                             .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
                         Capsule()
-                            .fill(Color(UIColor.tertiarySystemFill))
+                            .fill(Color.controlFill)
                             .scaleEffect(isEditingNumber ? 0.925 : 1.0)
                             .animation(
                                 .interactiveSpring(
@@ -281,7 +271,6 @@ public struct GoalSlider: View {
                 halfTrackHeight: halfTrackHeight,
                 fillColor: fillColor,
                 trackFill: trackFill,
-                trackStroke: trackStroke,
                 onChange: updateValue,
                 onChangeEnd: { onChangeEnd?(value) },
                 onEditingChanged: onEditingChanged
@@ -359,7 +348,6 @@ private struct SliderView: View {
     let halfTrackHeight: CGFloat
     let fillColor: Color
     let trackFill: Color
-    let trackStroke: Color
     let onChange: () -> Void
     let onChangeEnd: () -> Void
     let onEditingChanged: ((Bool) -> Void)?
@@ -415,10 +403,6 @@ private struct SliderView: View {
         Capsule()
             .fill(trackFill)
             .frame(width: trackWidth, height: trackHeight)
-            .overlay(
-                Capsule()
-                    .stroke(trackStroke, lineWidth: 0.25)
-            )
     }
 
     private var sliderFill: some View {
@@ -437,7 +421,6 @@ private struct SliderView: View {
         GoalSlider(
             "Calories",
             titleIcon: .custom(Image("Calorie")),
-            titleFontSize: 20,
             unit: "kcal",
             fillColor: Color.red,
             value: .constant(2000),
@@ -448,7 +431,6 @@ private struct SliderView: View {
         GoalSlider(
             "Calories",
             titleIcon: .calorie,
-            titleFontSize: 20,
             unit: "kcal",
             fillColor: Color.red,
             value: .constant(2000),

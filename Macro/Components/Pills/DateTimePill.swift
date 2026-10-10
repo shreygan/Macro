@@ -37,13 +37,7 @@ struct DateTimePill: View {
                 format: components == .date
                     ? .dateTime.month().day().year() : .dateTime.hour().minute()
             )
-            .font(.system(size: 16))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(Color(UIColor.tertiarySystemFill))
-            )
+            .pillBackground()
             .allowsHitTesting(false)
 
             picker

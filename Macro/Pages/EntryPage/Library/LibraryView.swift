@@ -536,7 +536,7 @@ struct LibraryView<Header: View>: View {
                         selectedCategories.removeAll()
                     }
                 }
-                .tint(.blue)
+                .tint(.accentColor)
             }
         } else if selectedChip == .favorites && searchText.isEmpty {
             ContentUnavailableView(
@@ -602,12 +602,12 @@ struct LibraryView<Header: View>: View {
                 }
             } else if let type = singleType {
                 Button("Add \(type)") { entryTypeToAdd = addableEntryType }
-                    .tint(.blue)
+                    .tint(.accentColor)
             } else {
                 Button("Add \(fallbackEntryType.rawValue.capitalized)") {
                     entryTypeToAdd = fallbackEntryType
                 }
-                    .tint(.blue)
+                    .tint(.accentColor)
             }
         }
     }
@@ -720,8 +720,6 @@ struct LibraryView<Header: View>: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(LibraryChip.allChips, id: \.self) { chip in
-                    let isSelected = selectedChip == chip
-
                     Button {
                         withAnimation(.snappy) {
                             selectedChip = chip
@@ -733,22 +731,8 @@ struct LibraryView<Header: View>: View {
                         }
                     } label: {
                         Label(chip.title, systemImage: chip.symbol)
-                            .font(.subheadline)
-                            .fontWeight(isSelected ? .semibold : .regular)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(
-                                isSelected
-                                    ? Color.accentColor
-                                    : Color.secondary.opacity(0.15)
-                            )
-                            .foregroundStyle(
-                                isSelected ? Color.white : Color.primary
-                            )
-                            .clipShape(Capsule())
-                            .contentShape(Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.filterChip(isSelected: selectedChip == chip))
                 }
             }
             .padding(.horizontal)

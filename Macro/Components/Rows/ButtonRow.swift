@@ -10,7 +10,7 @@ import SwiftUI
 struct ButtonRow: View {
     var icon: RowIcon? = nil
     var title: String
-    var tint: Color = Color.gray.opacity(0.1)
+    var tint: Color = .controlFill
     var textColor: Color = .primary
 
     var topPadding: CGFloat = 8
@@ -24,7 +24,7 @@ struct ButtonRow: View {
         Button(action: action) {
             ZStack {
                 Text(title)
-                    .font(.system(size: 14, design: .rounded))
+                    .font(.rowButton)
                     .frame(maxWidth: .infinity, alignment: .center)
 
                 HStack {
@@ -32,7 +32,7 @@ struct ButtonRow: View {
                         switch icon {
                         case .appSymbol(let symbol, let iconTint):
                             Image(systemName: symbol.rawValue)
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.buttonIcon)
                                 .foregroundColor(
                                     iconTint == .primary ? textColor : iconTint
                                 )
@@ -40,7 +40,7 @@ struct ButtonRow: View {
 
                         case .customSymbol(let systemName, let iconTint):
                             Image(systemName: systemName)
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.buttonIcon)
                                 .foregroundColor(
                                     iconTint == .primary ? textColor : iconTint
                                 )

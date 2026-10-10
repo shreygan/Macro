@@ -27,7 +27,7 @@ struct Card<Content: View, MenuContent: View, HeaderAccessory: View>: View {
                 HStack(spacing: 8) {
                     if let title = title {
                         Text(title)
-                            .font(.system(size: 14, weight: .bold))
+                            .font(.cardTitle)
                             .foregroundColor(.primary)
                     }
 
@@ -135,7 +135,7 @@ extension Card where HeaderAccessory == EmptyView {
 
 #Preview {
     ZStack {
-        Color.gray.opacity(0.15).ignoresSafeArea()
+        Color.background.ignoresSafeArea()
 
         VStack {
             Card("MEAL PLAN") {

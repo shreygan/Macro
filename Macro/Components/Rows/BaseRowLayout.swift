@@ -14,7 +14,7 @@ struct BaseRowLayout<RightContent: View>: View {
     var subtitle: String? = nil
     var info: String? = nil
 
-    var titleFontSize: CGFloat = 16
+    private let titleFontSize = FontSize.row
 
     @ViewBuilder var rightContent: RightContent
 
@@ -44,7 +44,7 @@ struct BaseRowLayout<RightContent: View>: View {
 
             if let info, isShowingInfo {
                 Text(info)
-                    .font(.system(size: 13))
+                    .font(.subtitle)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -63,13 +63,13 @@ struct BaseRowLayout<RightContent: View>: View {
                 switch icon {
                 case .appSymbol(let symbol, let tint):
                     Image(systemName: symbol.rawValue)
-                        .font(.system(size: 14))
+                        .font(.rowIcon)
                         .foregroundStyle(tint)
                         .frame(width: 15)
 
                 case .customSymbol(let systemName, let tint):
                     Image(systemName: systemName)
-                        .font(.system(size: 14))
+                        .font(.rowIcon)
                         .foregroundStyle(tint)
                         .frame(width: 15)
 
@@ -91,23 +91,21 @@ struct BaseRowLayout<RightContent: View>: View {
 
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(title)
-                        .font(.system(size: titleFontSize, weight: .medium))
+                        .font(.rowTitle)
                         .foregroundStyle(.primary)
 
                     if let titleExtension = titleExtension {
                         Text(titleExtension)
-                            .font(
-                                .system(size: titleFontSize, weight: .regular)
-                            )
-                            .foregroundStyle(.tertiary)
+                            .font(.rowValue)
+                            .foregroundStyle(Color.tertiaryText)
 
                     }
                 }
 
                 if let subtitle = subtitle {
                     Text(subtitle)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.tertiary)
+                        .font(.subtitle)
+                        .foregroundStyle(Color.tertiaryText)
                 }
             }
         }
@@ -160,7 +158,7 @@ struct BaseRowLayout<RightContent: View>: View {
 
         BaseRowLayout(title: "Simple Row") {
             Text("-")
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.tertiaryText)
         }
 
     }

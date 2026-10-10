@@ -86,9 +86,9 @@ struct LogImportReviewView: View {
             if isLoading {
                 VStack(spacing: 12) {
                     ProgressView()
-                        .tint(.blue)
+                        .tint(.accentColor)
                     Text("Reading CSV...")
-                        .font(.subheadline.weight(.medium))
+                        .font(.statusLabel)
                         .foregroundStyle(.secondary)
                 }
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
@@ -107,7 +107,7 @@ struct LogImportReviewView: View {
                         Button("Select Another CSV") {
                             isShowingFilePicker = true
                         }
-                        .tint(.blue)
+                        .tint(.accentColor)
 
                         if !issues.isEmpty {
                             Button("View Skipped Rows") {
@@ -164,7 +164,7 @@ struct LogImportReviewView: View {
                     Image(systemName: "checkmark")
                         .foregroundStyle(.primary)
                 }
-                .tint(Color.blue)
+                .tint(Color.accentColor)
                 .buttonStyle(.glassProminent)
                 .disabled(entriesToSave.isEmpty)
             }
@@ -189,7 +189,7 @@ struct LogImportReviewView: View {
     }
 
     private var summaryCard: some View {
-        Card("Summary", cornerRadius: 20) {
+        Card("Summary") {
             RowGroup(.divider) {
                 BaseRowLayout(
                     icon: .customSymbol("checkmark.circle.fill", tint: .green),
@@ -594,8 +594,8 @@ struct ImportIssueCount: View {
         HStack(spacing: 6) {
             Text("\(count)")
             Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.tertiary)
+                .font(.chevron)
+                .foregroundStyle(Color.tertiaryText)
         }
     }
 }

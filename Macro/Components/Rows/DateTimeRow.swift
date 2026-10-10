@@ -56,7 +56,7 @@ struct DateTimePillRow: View {
                     .accessibilityHidden(!isEnabled)
 
                     Text(formattedDateTime)
-                        .font(.system(size: 16))
+                        .font(.rowValue)
                         .foregroundColor(.secondary)
                         .padding(.trailing, 8)
                         .opacity(isEnabled ? 0.0 : 1.0)
@@ -79,7 +79,7 @@ struct DateTimePillRow: View {
 
         var body: some View {
             ZStack {
-                Color.gray.opacity(0.1).ignoresSafeArea()
+                Color.background.ignoresSafeArea()
 
                 VStack {
                     Card("Entry Details") {

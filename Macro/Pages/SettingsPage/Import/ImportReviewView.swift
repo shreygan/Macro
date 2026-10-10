@@ -70,9 +70,9 @@ struct ImportReviewView: View {
             if isLoading {
                 VStack(spacing: 12) {
                     ProgressView()
-                        .tint(.blue)
+                        .tint(.accentColor)
                     Text("Reading CSV...")
-                        .font(.subheadline.weight(.medium))
+                        .font(.statusLabel)
                         .foregroundStyle(.secondary)
                 }
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
@@ -112,7 +112,7 @@ struct ImportReviewView: View {
                         Button("Select Another CSV") {
                             isShowingFilePicker = true
                         }
-                        .tint(.blue)
+                        .tint(.accentColor)
 
                         if !issues.isEmpty {
                             Button("View Skipped Rows") {
@@ -174,7 +174,7 @@ struct ImportReviewView: View {
                     Image(systemName: "checkmark")
                         .foregroundStyle(.primary)
                 }
-                .tint(Color.blue)
+                .tint(Color.accentColor)
                 .buttonStyle(.glassProminent)
                 .disabled(itemsToSave.isEmpty)
             }
@@ -246,7 +246,7 @@ struct ImportReviewView: View {
         let recipes = newItems.filter { $0.type == .recipe }
         let ingredientCount = recipes.reduce(0) { $0 + $1.ingredients.count }
 
-        Card("Summary", cornerRadius: 20) {
+        Card("Summary") {
             RowGroup(.divider) {
                 BaseRowLayout(
                     icon: .customSymbol("checkmark.circle.fill", tint: .green),

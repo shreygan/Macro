@@ -154,15 +154,15 @@ struct GoalHistoryView: View {
         VStack(spacing: 12) {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 36))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.tertiaryText)
 
             Text("No Goal History Yet")
-                .font(.system(size: 15, weight: .medium))
+                .font(.statusLabel)
                 .foregroundStyle(.secondary)
 
             Text("Past goals will appear here after you make a change.")
-                .font(.system(size: 13))
-                .foregroundStyle(.tertiary)
+                .font(.subtitle)
+                .foregroundStyle(Color.tertiaryText)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)

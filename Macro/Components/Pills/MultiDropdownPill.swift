@@ -85,24 +85,17 @@ struct MultiDropdownPill: View {
     private func pill(_ text: String) -> some View {
         HStack(spacing: 4) {
             Text(text)
-                .font(.system(size: 16))
                 .foregroundColor(isEnabled ? .primary : .secondary)
                 .contentTransition(.interpolate)
 
             if isEnabled {
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.tertiary)
+                    .font(.dropdownChevron)
+                    .foregroundColor(.tertiaryText)
                     .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(
-            Capsule().fill(
-                isEnabled ? Color(UIColor.tertiarySystemFill) : Color.clear
-            )
-        )
+        .pillBackground(isEnabled: isEnabled)
     }
 
     private func toggle(_ option: String, isOn: Bool) {
@@ -122,7 +115,7 @@ struct MultiDropdownPill: View {
     @Previewable @State var selection: Set<String> = []
 
     ZStack {
-        Color.gray.opacity(0.15).ignoresSafeArea()
+        Color.background.ignoresSafeArea()
 
         Card("Library Entries") {
             BaseRowLayout(

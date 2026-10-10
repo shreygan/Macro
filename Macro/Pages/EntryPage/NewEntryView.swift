@@ -208,7 +208,7 @@ struct NewEntryView: View {
 
     private func emptyText(_ text: LocalizedStringKey) -> some View {
         Text(text)
-            .font(.system(size: 14, weight: .medium))
+            .font(.compactTitle)
             .foregroundColor(.secondary)
             .padding()
             .transition(.opacity)

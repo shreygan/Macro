@@ -879,12 +879,12 @@ struct LogRecipeView: View {
                             Image(systemName: "plus")
                                 .foregroundStyle(.primary)
                         }
-                        .tint(Color.blue)
+                        .tint(Color.accentColor)
                         .buttonStyle(.glassProminent)
                         .disabled(isLoadingPhotos)
                     }
                 }
-                .safeAreaInset(edge: .top) {
+                .safeAreaBar(edge: .top) {
                     Card {
                         MealRow(
                             name: name.isEmpty ? "New Recipe" : name,
@@ -907,8 +907,7 @@ struct LogRecipeView: View {
                         )
                     }
                     .padding([.leading, .trailing])
-                    .padding(.bottom, 16)
-                    .background(.ultraThinMaterial)
+                    .padding(.bottom, 24)
                 }
             }
             .environment(focusManager)

@@ -23,17 +23,12 @@ struct DropdownPill: View {
                 TextField("", text: $selection)
                     .textFieldStyle(.plain)
                     .textInputAutocapitalization(.never)
-                    .font(.system(size: 16))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(minWidth: 10)
                     .focused($isFocused)
                     .autoFloatingToolbar(for: .default)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5.39)
-                    .background(
-                        Capsule().fill(Color(UIColor.tertiarySystemFill))
-                    )
+                    .pillBackground()
                     .onSubmit { validateAndRevert() }
                     .onChange(of: isFocused) { _, isNowFocused in
                         if !isNowFocused { validateAndRevert() }
@@ -60,7 +55,6 @@ struct DropdownPill: View {
                 } label: {
                     HStack(spacing: 4) {
                         Text(selection.isEmpty ? "-" : selection)
-                            .font(.system(size: 16))
                             .foregroundColor(
                                 !isEnabled || selection.isEmpty
                                     ? .secondary : .primary
@@ -68,22 +62,14 @@ struct DropdownPill: View {
 
                         if isEnabled {
                             Image(systemName: "chevron.up.chevron.down")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.tertiary)
+                                .font(.dropdownChevron)
+                                .foregroundColor(.tertiaryText)
                                 .transition(
                                     .scale(scale: 0.8).combined(with: .opacity)
                                 )
                         }
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule().fill(
-                            isEnabled
-                                ? Color(UIColor.tertiarySystemFill)
-                                : Color.clear
-                        )
-                    )
+                    .pillBackground(isEnabled: isEnabled)
                 }
                 .disabled(!isEnabled)
                 .id(selection)
@@ -141,7 +127,7 @@ struct DropdownPill: View {
 
         var body: some View {
             ZStack {
-                Color.gray.opacity(0.15).ignoresSafeArea()
+                Color.background.ignoresSafeArea()
 
                 Card("PORTION") {
                     BaseRowLayout(

@@ -94,9 +94,9 @@ struct BackupRestoreView: View {
                             if isRestoring {
                                 HStack(spacing: 12) {
                                     ProgressView()
-                                        .tint(.blue)
+                                        .tint(.accentColor)
                                     Text("Restoring Backup...")
-                                        .font(.subheadline.weight(.medium))
+                                        .font(.statusLabel)
                                         .foregroundStyle(.secondary)
                                 }
                                 .padding(.bottom, 9)
@@ -109,7 +109,7 @@ struct BackupRestoreView: View {
                                         tint: mode == .replace ? .red : .white
                                     ),
                                     title: mode == .replace ? "Erase and Restore" : "Restore Backup",
-                                    tint: mode == .replace ? .red.opacity(0.1) : .blue,
+                                    tint: mode == .replace ? .destructiveFill : .accentColor,
                                     textColor: mode == .replace ? .red : .white,
                                     topPadding: 0
                                 ) {

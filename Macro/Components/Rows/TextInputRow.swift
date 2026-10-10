@@ -71,7 +71,7 @@ struct TextInputRow: View {
                     )
 
                     TextInputRow(
-                        icon: .customSymbol("bolt.fill", tint: .blue),
+                        icon: .customSymbol("bolt.fill", tint: .protein),
                         title: "Protein",
                         titleExtension: "(g)",
                         text: $disabledText,

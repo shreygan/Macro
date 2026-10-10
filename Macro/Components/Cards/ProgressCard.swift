@@ -70,7 +70,7 @@ struct ProgressCard: View {
             MacroConfig(
                 title: "Calories",
                 iconSymbol: .calorie,
-                tintColor: .red,
+                tintColor: .calorie,
                 current: progress.calories,
                 goal: goals.calories,
                 mode: goals.calorieMode,
@@ -79,7 +79,7 @@ struct ProgressCard: View {
             MacroConfig(
                 title: "Protein",
                 iconSymbol: .protein,
-                tintColor: .blue,
+                tintColor: .protein,
                 current: progress.protein,
                 goal: goals.protein,
                 mode: goals.proteinMode,
@@ -88,7 +88,7 @@ struct ProgressCard: View {
             MacroConfig(
                 title: "Carbohydrates",
                 iconSymbol: .carbs,
-                tintColor: .green,
+                tintColor: .carbs,
                 current: progress.carbs,
                 goal: goals.carbs,
                 mode: goals.carbsMode,
@@ -97,7 +97,7 @@ struct ProgressCard: View {
             MacroConfig(
                 title: "Fat",
                 iconSymbol: .fatfiber,
-                tintColor: .purple,
+                tintColor: .fat,
                 current: progress.fat,
                 goal: goals.fat,
                 mode: goals.fatMode,
@@ -106,7 +106,7 @@ struct ProgressCard: View {
             MacroConfig(
                 title: "Fiber",
                 iconSymbol: .fatfiber,
-                tintColor: .yellow,
+                tintColor: .fiber,
                 current: progress.fiber,
                 goal: goals.fiber,
                 mode: goals.fiberMode,

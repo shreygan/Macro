@@ -66,8 +66,8 @@ struct LogHistoryRow: View {
                     .lineLimit(1)
 
                 Text(subtitle)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.tertiary)
+                    .font(.subtitle)
+                    .foregroundStyle(Color.tertiaryText)
                     .lineLimit(1)
                     .truncationMode(.tail)
 
@@ -87,14 +87,14 @@ struct LogHistoryRow: View {
                         Image(systemName: "photo")
                     }
                 }
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
+                .font(.detail)
+                .foregroundStyle(Color.tertiaryText)
             }
 
             if action != nil {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .font(.chevron)
+                    .foregroundStyle(Color.tertiaryText)
             }
         }
         .padding(.horizontal, 16)
@@ -104,20 +104,20 @@ struct LogHistoryRow: View {
 
     private var titleText: Text {
         let date = Text(EntryHelper.logDateText(entry.timestamp))
-            .font(.system(size: 14, weight: .medium))
+            .font(.compactTitle)
             .foregroundColor(.primary)
 
         guard let category else { return date }
 
         let suffix = Text(" · \(category)")
-            .font(.system(size: 14))
+            .font(.compactValue)
             .foregroundColor(.secondary)
 
         return Text("\(date)\(suffix)")
     }
 
     private var macrosText: Text {
-        let strut = Text("\u{200B}").font(.system(size: 16))
+        let strut = Text("\u{200B}").font(.rowValue)
         var result = macroText(.calorie, value: entry.calories, isFirst: true)
 
         let macros: [(RowIcon, Double)] = [
@@ -172,7 +172,7 @@ struct LogHistoryRow: View {
     )
 
     ZStack {
-        Color.gray.opacity(0.15).ignoresSafeArea()
+        Color.background.ignoresSafeArea()
 
         Card("History") {
             RowGroup(.divider) {

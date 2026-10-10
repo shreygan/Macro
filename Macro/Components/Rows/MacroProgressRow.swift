@@ -22,7 +22,7 @@ struct MacroProgressRow: View {
                 HStack(spacing: 6) {
                     iconView
                     Text(title)
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.compactTitle)
                         .foregroundColor(.primary)
                 }
 
@@ -31,7 +31,7 @@ struct MacroProgressRow: View {
                 HStack(spacing: 6) {
                     if mode == .off {
                         Text("\(Int(current)) \(unit)")
-                            .font(.system(size: 14))
+                            .font(.compactValue)
                             .foregroundColor(.secondary)
                             .contentTransition(.numericText(value: current))
                     } else {
@@ -40,12 +40,12 @@ struct MacroProgressRow: View {
                         Text(
                             "\(Int(current)) / \(Int(goal)) \(unit) \(modeText)"
                         )
-                        .font(.system(size: 14))
+                        .font(.compactValue)
                         .foregroundColor(.secondary)
                         .contentTransition(.numericText(value: current))
 
                         statusIcon
-                            .font(.system(size: 14))
+                            .font(.compactValue)
                             .foregroundColor(.primary)
                     }
                 }
@@ -61,7 +61,7 @@ struct MacroProgressRow: View {
 
                     ZStack(alignment: .leading) {
                         Capsule()
-                            .fill(Color.gray.opacity(0.2))
+                            .fill(Color.trackFill)
                             .frame(height: 8)
                             .position(x: geo.size.width / 2, y: 12)
 
@@ -86,7 +86,7 @@ struct MacroProgressRow: View {
     @ViewBuilder
     private var iconView: some View {
         Image(systemName: iconSymbol.rawValue)
-            .font(.system(size: 14))
+            .font(.rowIcon)
             .foregroundStyle(tintColor)
             .frame(width: 15)
     }

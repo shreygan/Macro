@@ -17,13 +17,13 @@ struct CompactMealRow: View {
     var body: some View {
         HStack(spacing: 10) {
             food.type.appSymbol.image
-                .font(.system(size: 13))
-                .foregroundStyle(.tertiary)
+                .font(.smallIcon)
+                .foregroundStyle(Color.tertiaryText)
                 .frame(width: 18)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(food.name.isEmpty ? "New Food" : food.name)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.compactTitle)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
