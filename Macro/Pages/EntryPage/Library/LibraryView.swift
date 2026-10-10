@@ -98,6 +98,7 @@ struct LibraryView<Header: View>: View {
 
     @State private var entryTypeToAdd: EntryType?
     @State private var newEntryName = ""
+    @State private var newEntrySource = ""
 
     private var addableEntryType: EntryType {
         guard selectedTypes.count == 1,
@@ -132,26 +133,17 @@ struct LibraryView<Header: View>: View {
         !selectedSources.isEmpty || !selectedCategories.isEmpty
     }
 
-    var filteredFoods: [FoodItem] {
-        // 1. Search text filter
-        var result =
-            searchText.isEmpty
-            ? savedMeals
-            : savedMeals.filter { food in
-                food.name.localizedStandardContains(searchText)
-                    || (food.source?.source.localizedStandardContains(
-                        searchText
-                    ) ?? false)
-            }
+    private var filterPool: [FoodItem] {
+        var result = savedMeals
 
-        // 2. Type filter
+        // 1. Type filter
         if !selectedTypes.isEmpty {
             result = result.filter { food in
                 return selectedTypes.contains(food.type.rawValue.capitalized)
             }
         }
 
-        // 3. Source filter
+        // 2. Source filter
         if !selectedSources.isEmpty {
             result = result.filter { food in
                 guard let sourceName = food.source?.source else { return false }
@@ -159,7 +151,7 @@ struct LibraryView<Header: View>: View {
             }
         }
 
-        // 4. Category filter
+        // 3. Category filter
         if !selectedCategories.isEmpty {
             result = result.filter { food in
                 guard let categoryName = food.category?.category else {
@@ -173,11 +165,32 @@ struct LibraryView<Header: View>: View {
             result = result.filter { $0.favoriteEntry != nil }
         }
 
+        return result
+    }
+
+    var filteredFoods: [FoodItem] {
+        // 4. Search text filter
+        let pool = filterPool
+        let search = FoodSearch(searchText)
+        var tiers: [UUID: Int] = [:]
+        if !searchText.isEmpty {
+            for food in pool {
+                tiers[food.id] = search.nameTier(of: food)
+            }
+        }
+        let result =
+            searchText.isEmpty ? pool : pool.filter { tiers[$0.id] != nil }
+
         // 5. Sort filtered results
         let stats = logStats
         let usage = recipeStats
 
         return result.sorted { lhs, rhs in
+            if let lhsTier = tiers[lhs.id], let rhsTier = tiers[rhs.id],
+                lhsTier != rhsTier
+            {
+                return lhsTier < rhsTier
+            }
             switch sortOption {
             case .name:
                 return lhs.name.localizedStandardCompare(rhs.name)
@@ -413,7 +426,10 @@ struct LibraryView<Header: View>: View {
                 get: { entryTypeToAdd != nil },
                 set: { if !$0 { entryTypeToAdd = nil } }
             ),
-            onDismiss: { newEntryName = "" }
+            onDismiss: {
+                newEntryName = ""
+                newEntrySource = ""
+            }
         ) {
             if let type = entryTypeToAdd {
                 addEntrySheet(for: type)
@@ -559,7 +575,13 @@ struct LibraryView<Header: View>: View {
         } description: {
             Group {
                 if !searchText.isEmpty {
-                    Text("Try a new search or create a new \(itemName).")
+                    SearchSuggestionButton(
+                        suggestion: FoodSearch.suggestion(
+                            for: searchText,
+                            in: filterPool
+                        ),
+                        fallback: "Try a new search or create a new \(itemName)."
+                    ) { searchText = $0 }
                 } else if let type = singleType {
                     let descriptionKey = type.lowercased() + "_description"
                     Text(LocalizedStringKey(descriptionKey))
@@ -570,11 +592,14 @@ struct LibraryView<Header: View>: View {
             .font(.subheadline)
         } actions: {
             if !searchText.isEmpty {
-                Button("Create New \(addableEntryType.rawValue.capitalized)") {
-                    newEntryName = searchText
+                CreateFromSearchButtons(
+                    query: searchText,
+                    title: "Create New \(addableEntryType.rawValue.capitalized)"
+                ) { name, source in
+                    newEntryName = name
+                    newEntrySource = source
                     entryTypeToAdd = addableEntryType
                 }
-                .tint(.blue)
             } else if let type = singleType {
                 Button("Add \(type)") { entryTypeToAdd = addableEntryType }
                     .tint(.blue)
@@ -594,7 +619,7 @@ struct LibraryView<Header: View>: View {
         if type == .recipe {
             AddRecipeView(
                 offersLogNow: !picksEntry,
-                prefill: .named(newEntryName),
+                prefill: .named(newEntryName, source: newEntrySource),
                 onCreate: picksEntry ? pickCreated : nil
             )
         } else {
@@ -606,7 +631,7 @@ struct LibraryView<Header: View>: View {
                         pickCreated(food)
                     } : nil,
                 offersLogNow: !picksEntry,
-                prefill: .named(newEntryName)
+                prefill: .named(newEntryName, source: newEntrySource)
             )
         }
     }

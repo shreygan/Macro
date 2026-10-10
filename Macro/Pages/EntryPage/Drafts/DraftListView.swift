@@ -70,11 +70,13 @@ struct DraftListView: View {
     @State private var sortDescending = true
 
     private var filteredDrafts: [EntryDraft] {
+        let search = FoodSearch(searchText)
         let matches = drafts.filter { draft in
             filter.includes(draft)
                 && (searchText.isEmpty
-                    || displayName(for: draft).localizedStandardContains(
-                        searchText
+                    || search.matches(
+                        name: displayName(for: draft),
+                        fields: searchFields(for: draft)
                     ))
         }
 
@@ -104,6 +106,39 @@ struct DraftListView: View {
     private func displayName(for draft: EntryDraft) -> String {
         let typeName = draft.entryType?.rawValue.capitalized ?? "Entry"
         return draft.name.isEmpty ? "New \(typeName)" : draft.name
+    }
+
+    private func searchFields(for draft: EntryDraft) -> [String?] {
+        let food = draft.foodItem
+        var fields: [String?] = [
+            draft.entryType?.rawValue,
+            food?.source?.source,
+            food?.category?.category,
+            food?.foodGroup?.foodGroup,
+        ]
+
+        switch draft.kind {
+        case .logFood:
+            let state = draft.decodeState(LogEntryDraftState.self)
+            fields += [
+                state?.sourceSelection,
+                state?.categorySelection,
+                state?.foodGroupSelection,
+            ]
+        case .logRecipe:
+            let state = draft.decodeState(LogRecipeDraftState.self)
+            fields += [state?.sourceSelection, state?.categorySelection]
+        case .addFood:
+            let state = draft.decodeState(AddEntryDraftState.self)
+            fields += [state?.source, state?.category, state?.foodGroup]
+        case .addRecipe:
+            let state = draft.decodeState(AddRecipeDraftState.self)
+            fields += [state?.source, state?.category]
+        case nil:
+            break
+        }
+
+        return fields.filter { $0 != "None" }
     }
 
     var body: some View {
@@ -218,8 +253,19 @@ struct DraftListView: View {
                     systemImage: "magnifyingglass"
                 )
             } description: {
-                Text("Try a different search.")
-                    .font(.subheadline)
+                SearchSuggestionButton(
+                    suggestion: FoodSearch.suggestion(
+                        for: searchText,
+                        in: drafts.filter(filter.includes).map { draft in
+                            (
+                                name: displayName(for: draft),
+                                fields: searchFields(for: draft)
+                            )
+                        }
+                    ),
+                    fallback: "Try a different search."
+                ) { searchText = $0 }
+                .font(.subheadline)
             }
         }
     }
