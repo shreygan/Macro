@@ -155,27 +155,20 @@ struct MealRow<Content: View>: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 5) {
                         Text(name)
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.compactTitle)
                             .foregroundColor(.primary)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
 
                         if let icon = icon {
                             icon.image
-                                .font(.system(size: 13))
-                                .foregroundColor(.tertiary)
+                                .font(.smallIcon)
+                                .foregroundColor(.tertiaryText)
                         }
 
                         if let tag {
                             Text(tag)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(
-                                    Color.secondary.opacity(0.15),
-                                    in: Capsule()
-                                )
+                                .tagStyle()
                                 .fixedSize()
                         }
                     }
@@ -183,22 +176,22 @@ struct MealRow<Content: View>: View {
 
                     ViewThatFits(in: .horizontal) {
                         Text(subtitle)
-                            .font(.system(size: 13))
-                            .foregroundColor(.tertiary)
+                            .font(.subtitle)
+                            .foregroundColor(.tertiaryText)
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
 
                         VStack(alignment: .leading, spacing: 1) {
                             if !topText.isEmpty {
                                 Text(topText)
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.tertiary)
+                                    .font(.subtitle)
+                                    .foregroundColor(.tertiaryText)
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                             }
                             Text(bottomText)
-                                .font(.system(size: 13))
-                                .foregroundColor(.tertiary)
+                                .font(.subtitle)
+                                .foregroundColor(.tertiaryText)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
@@ -221,12 +214,12 @@ struct MealRow<Content: View>: View {
                     systemName: isSelected ? "checkmark.circle.fill" : "circle"
                 )
                 .font(.system(size: 22))
-                .foregroundStyle(isSelected ? Color.accentColor : .tertiary)
+                .foregroundStyle(isSelected ? Color.accentColor : .tertiaryText)
                 .contentTransition(.symbolEffect(.replace))
             } else if action != nil {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.tertiary)
+                    .font(.chevron)
+                    .foregroundColor(.tertiaryText)
             }
 
         }
@@ -268,7 +261,7 @@ struct MealRow<Content: View>: View {
             isFirst: isFirst
         )
         let strut = Text("\u{200B}")
-            .font(.system(size: 16))
+            .font(.rowValue)
 
         return Text("\(macro)\(strut)")
     }
@@ -421,7 +414,7 @@ extension MealRow where Content == EmptyView {
     ]
 
     ZStack {
-        Color.gray.opacity(0.15).ignoresSafeArea()
+        Color.background.ignoresSafeArea()
 
         Card {
             MealRow(

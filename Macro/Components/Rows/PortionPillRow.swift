@@ -53,7 +53,7 @@ struct PortionPillRow: View {
                     .accessibilityHidden(!isEnabled)
 
                     Text(formattedPortion)
-                        .font(.system(size: 16))
+                        .font(.rowValue)
                         .foregroundColor(.secondary)
                         .padding(.trailing, 8)
                         .opacity(isEnabled ? 0.0 : 1.0)
@@ -116,7 +116,7 @@ struct PortionPillRow: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
+                        .background(Color.accentColor)
                         .cornerRadius(12)
                         .padding(.horizontal)
                     }

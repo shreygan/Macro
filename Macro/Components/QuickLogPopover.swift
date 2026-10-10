@@ -102,7 +102,7 @@ struct QuickLogPopover: View {
         if !foods.isEmpty {
             if showsHeader {
                 Text(title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.detailEmphasis)
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
                     .padding(.horizontal, 14)
@@ -118,7 +118,7 @@ struct QuickLogPopover: View {
                         .background {
                             if hoveredID == food.id {
                                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                    .fill(Color.primary.opacity(0.1))
+                                    .fill(Color.highlightFill)
                                     .padding(.horizontal, 6)
                             }
                         }

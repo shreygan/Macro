@@ -24,17 +24,17 @@ struct CreateFromSearchButtons: View {
             Button("Create \"\(query.titleCasedFoodName)\"") {
                 onCreate(query, "")
             }
-            .tint(.blue)
+            .tint(.accentColor)
 
             Button("Create \"\(split.name.titleCasedFoodName)\" from \(split.source)") {
                 onCreate(split.name, split.source)
             }
-            .tint(.blue)
+            .tint(.accentColor)
         } else {
             Button(title) {
                 onCreate(query, "")
             }
-            .tint(.blue)
+            .tint(.accentColor)
         }
     }
 }

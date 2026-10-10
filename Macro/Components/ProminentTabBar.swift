@@ -150,7 +150,7 @@ fileprivate struct CustomProminentTabBar<Item: ProminentTabItem>: UIViewRepresen
         }
 
         control.selectedSegmentIndex = allTabs.firstIndex(of: selection) ?? 0
-        control.selectedSegmentTintColor = UIColor(Color.gray.opacity(0.18))
+        control.selectedSegmentTintColor = UIColor(Color.highlightFill)
         control.setTitleTextAttributes([.foregroundColor: UIColor(Color.accentColor)], for: .selected)
         control
             .addTarget(

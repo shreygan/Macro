@@ -168,7 +168,7 @@ struct SettingsView: View {
                             ButtonRow(
                                 icon: .customSymbol("trash", tint: .red),
                                 title: "Delete All Data",
-                                tint: .red.opacity(0.1),
+                                tint: .destructiveFill,
                                 textColor: .red,
                                 topPadding: 0
                             ) {

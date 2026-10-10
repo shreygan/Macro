@@ -187,8 +187,8 @@ private struct NoteHistoryRow: View {
 
             if showsChevron {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .font(.chevron)
+                    .foregroundStyle(Color.tertiaryText)
             }
         }
         .padding(.horizontal, 16)
@@ -198,7 +198,7 @@ private struct NoteHistoryRow: View {
     private var textContent: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(text)
-                .font(.system(size: 16))
+                .font(.rowValue)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -209,9 +209,9 @@ private struct NoteHistoryRow: View {
                 }
 
                 Text(detail)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.tertiaryText)
             }
-            .font(.system(size: 13))
+            .font(.subtitle)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

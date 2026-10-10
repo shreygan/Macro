@@ -15,13 +15,13 @@ struct DoubleButtonRow: View {
 
     var leftIcon: RowIcon? = nil
     var leftTitle: String
-    var leftTint: Color = Color.gray.opacity(0.1)
+    var leftTint: Color = .controlFill
     var leftTextColor: Color = .primary
     var leftAction: () -> Void
 
     var rightIcon: RowIcon? = nil
     var rightTitle: String
-    var rightTint: Color = Color.gray.opacity(0.1)
+    var rightTint: Color = .controlFill
     var rightTextColor: Color = .primary
     var rightAction: () -> Void
 
@@ -30,7 +30,7 @@ struct DoubleButtonRow: View {
             Button(action: leftAction) {
                 ZStack {
                     Text(leftTitle)
-                        .font(.system(size: 14, design: .rounded))
+                        .font(.rowButton)
                         .frame(maxWidth: .infinity, alignment: .center)
 
                     HStack {
@@ -52,7 +52,7 @@ struct DoubleButtonRow: View {
             Button(action: rightAction) {
                 ZStack {
                     Text(rightTitle)
-                        .font(.system(size: 14, design: .rounded))
+                        .font(.rowButton)
                         .frame(maxWidth: .infinity, alignment: .center)
 
                     HStack {
@@ -81,13 +81,13 @@ struct DoubleButtonRow: View {
         switch icon {
         case .appSymbol(let symbol, let iconTint):
             Image(systemName: symbol.rawValue)
-                .font(.system(size: 14, weight: .medium))
+                .font(.buttonIcon)
                 .foregroundColor(iconTint == .primary ? textColor : iconTint)
                 .frame(width: 15)
 
         case .customSymbol(let systemName, let iconTint):
             Image(systemName: systemName)
-                .font(.system(size: 14, weight: .medium))
+                .font(.buttonIcon)
                 .foregroundColor(iconTint == .primary ? textColor : iconTint)
                 .frame(width: 15)
 
@@ -109,7 +109,7 @@ struct DoubleButtonRow: View {
             leftTitle: "Cancel",
             leftAction: { print("Cancel tapped") },
             rightTitle: "Save",
-            rightTint: .blue,
+            rightTint: .accentColor,
             rightTextColor: .white,
             rightAction: { print("Save tapped") }
         )
@@ -117,7 +117,7 @@ struct DoubleButtonRow: View {
         DoubleButtonRow(
             leftIcon: .customSymbol("trash", tint: .red),
             leftTitle: "Delete",
-            leftTint: Color.red.opacity(0.1),
+            leftTint: .destructiveFill,
             leftTextColor: .red,
             leftAction: { print("Delete tapped") },
 

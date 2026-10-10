@@ -238,12 +238,12 @@ struct ManageListView: View {
             } else {
                 if item.isHidden {
                     Image(systemName: "eye.slash")
-                        .font(.system(size: 14))
+                        .font(.rowIcon)
                         .foregroundStyle(.secondary)
                 }
 
                 Text(item.name)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.rowTitle)
                     .foregroundStyle(item.isHidden ? .secondary : .primary)
             }
 
@@ -305,7 +305,7 @@ struct ManageListView: View {
                 )
             }
         }
-        .font(.system(size: 14))
+        .font(.compactValue)
         .foregroundStyle(.secondary)
     }
 
@@ -335,7 +335,7 @@ struct ManageListView: View {
         onConfirm: @escaping () -> Void
     ) -> some View {
         TextField(placeholder, text: $nameText)
-            .font(.system(size: 16, weight: .medium))
+            .font(.rowTitle)
             .textInputAutocapitalization(.words)
             .submitLabel(.done)
             .focused($focusedField, equals: field)
@@ -361,7 +361,7 @@ struct ManageListView: View {
 
     private var duplicateText: some View {
         Text("Already exists")
-            .font(.system(size: 14))
+            .font(.compactValue)
             .foregroundStyle(.red)
     }
 

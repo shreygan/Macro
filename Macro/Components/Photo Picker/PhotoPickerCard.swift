@@ -70,31 +70,13 @@ struct PhotoPickerCard: View {
                                                         width: 30,
                                                         height: 30
                                                     )
-                                                    .background(
-                                                        Circle()
-                                                            .fill(
-                                                                .regularMaterial
-                                                            )
-                                                    )
-                                                    .overlay(
-                                                        Circle()
-                                                            .strokeBorder(
-                                                                Color.white
-                                                                    .opacity(
-                                                                        0.4
-                                                                    ),
-                                                                lineWidth: 0.5
-                                                            )
-                                                    )
-                                                    .shadow(
-                                                        color: .black.opacity(
-                                                            0.15
-                                                        ),
-                                                        radius: 4,
-                                                        x: 0,
-                                                        y: 2
-                                                    )
+                                                    .contentShape(.circle)
                                             }
+                                            .buttonStyle(.plain)
+                                            .glassEffect(
+                                                .regular.interactive(),
+                                                in: .circle
+                                            )
                                             .padding(12)
                                             .opacity(isEditing ? 1 : 0)
                                             .scaleEffect(isEditing ? 1 : 0.5)
@@ -272,7 +254,7 @@ struct PhotoPickerCard: View {
                             .transition(.opacity.combined(with: .scale(scale: 0.95)))
                     }
                 }
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .font(.prominentButton)
                 .frame(maxWidth: .infinity)
                 .frame(height: 24)
                 .animation(.snappy, value: isEmptyStateLoading)
@@ -292,7 +274,7 @@ struct PhotoPickerCard: View {
         } label: {
             Image(systemName: "photo")
                 .font(.system(size: 40, weight: .medium))
-                .foregroundColor(.primary.opacity(0.6))
+                .foregroundColor(.secondary)
                 .opacity(isLoading ? 0 : 1)
                 .scaleEffect(isLoading ? 0.95 : 1)
                 .overlay {

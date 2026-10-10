@@ -48,14 +48,13 @@ struct GoalSetupView: View {
             if !isEditingExistingUser {
                 HStack(spacing: 8) {
                     Text("Set Your Macro Goals")
-                        .font(.system(.title2, design: .rounded))
-                        .fontWeight(.bold)
+                        .font(.pageTitle)
 
                     Button {
                         showInfoSheet = true
                     } label: {
                         Image(systemName: "info.circle")
-                            .font(.system(.footnote))
+                            .font(.smallIcon)
                             .foregroundStyle(.secondary)
                     }
 
@@ -211,15 +210,11 @@ struct GoalSetupView: View {
 
             } label: {
                 Text(isEditingExistingUser ? "Save" : "Start")
-                    .font(.system(.caption, design: .rounded))
+                    .font(.prominentButton)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .clipShape(
-                        Capsule()
-                    )
+                    .frame(height: 24)
             }
+            .buttonStyle(.glassProminent)
             .padding(.horizontal, 40)
             .padding(.top, 8)
             .padding(.bottom, 16)
@@ -248,24 +243,24 @@ struct GoalSetupView: View {
         .sheet(isPresented: $showInfoSheet) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("About Goals")
-                    .font(.headline)
+                    .font(.sectionTitle)
 
                 Text(
                     "**Ceiling**: Your daily maximum. You’ll aim to stay under or reach this amount."
                 )
-                .font(.system(.footnote, design: .rounded))
+                .font(.subtitle)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
 
                 Text(
                     "**Floor**: Your daily minimum. You’ll aim to reach or exceed this amount."
                 )
-                .font(.system(.footnote, design: .rounded))
+                .font(.subtitle)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
 
                 Text("**Off**: Just track the macro with no set targets.")
-                    .font(.system(.footnote, design: .rounded))
+                    .font(.subtitle)
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
 

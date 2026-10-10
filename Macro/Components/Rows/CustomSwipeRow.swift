@@ -87,7 +87,7 @@ struct CustomSwipeRow<Content: View>: View {
                             .clipShape(Circle())
 
                             Text(isFavorited ? "Unfavorite" : "Favorite")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.swipeLabel)
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -124,7 +124,7 @@ struct CustomSwipeRow<Content: View>: View {
                             .clipShape(Circle())
 
                             Text(isPinned ? "Unpin" : "Pin")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.swipeLabel)
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -159,7 +159,7 @@ struct CustomSwipeRow<Content: View>: View {
                                 .clipShape(Circle())
 
                             Text(editTitle)
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.swipeLabel)
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -194,7 +194,7 @@ struct CustomSwipeRow<Content: View>: View {
                             .clipShape(Circle())
 
                             Text(isHidden ? "Unhide" : "Hide")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.swipeLabel)
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -225,7 +225,7 @@ struct CustomSwipeRow<Content: View>: View {
                                 .clipShape(Circle())
 
                             Text("Delete")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.swipeLabel)
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -370,7 +370,7 @@ struct CustomSwipeRow<Content: View>: View {
     ]
 
     ZStack {
-        Color.gray.opacity(0.15).ignoresSafeArea()
+        Color.background.ignoresSafeArea()
 
         VStack(spacing: 24) {
 

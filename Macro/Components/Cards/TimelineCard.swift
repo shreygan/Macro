@@ -197,7 +197,7 @@ struct TimelineCard<MenuContent: View>: View {
                 if items.isEmpty {
                     VStack(spacing: 16) {
                         Text("No entries logged today.")
-                            .font(.subheadline)
+                            .font(.compactTitle)
                             .foregroundColor(.secondary)
                     }
                     .frame(maxWidth: .infinity)
@@ -227,21 +227,11 @@ struct TimelineCard<MenuContent: View>: View {
 
                                 if item.isDraft {
                                     Text("Draft")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundColor(.secondary)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 1)
-                                        .background(
-                                            Capsule()
-                                                .strokeBorder(
-                                                    Color.secondary,
-                                                    lineWidth: 1
-                                                )
-                                        )
+                                        .tagStyle()
                                         .padding(.leading, 6)
                                 }
                             }
-                            .font(.system(size: 13))
+                            .font(.subtitle)
                             .padding(.leading, 4)
                             .padding(.bottom, 6)
 
@@ -263,23 +253,23 @@ struct TimelineCard<MenuContent: View>: View {
                             ZStack(alignment: .top) {
                                 if isFirst && isLast {
                                     Capsule()
-                                        .fill(Color.gray.opacity(0.3))
+                                        .fill(Color.trackFill)
                                         .frame(width: 2)
                                         .padding(.top, 8)
                                         .padding(.bottom, 16)
                                 } else if isFirst {
                                     Rectangle()
-                                        .fill(Color.gray.opacity(0.3))
+                                        .fill(Color.trackFill)
                                         .frame(width: 2)
                                         .padding(.top, 8)
                                 } else if isLast {
                                     Capsule()
-                                        .fill(Color.gray.opacity(0.3))
+                                        .fill(Color.trackFill)
                                         .frame(width: 2)
                                         .padding(.bottom, 16)
                                 } else {
                                     Rectangle()
-                                        .fill(Color.gray.opacity(0.3))
+                                        .fill(Color.trackFill)
                                         .frame(width: 2)
                                 }
 

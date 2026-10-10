@@ -59,11 +59,10 @@ struct WelcomeView: View {
                             .padding(.bottom, 8)
 
                         Text("Macro")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
+                            .font(.wordmark)
 
                         Text("The Nutrition Tracker")
-                            .font(.subheadline)
+                            .font(.compactValue)
                             .foregroundColor(.secondary)
 
                         Spacer()
@@ -73,8 +72,8 @@ struct WelcomeView: View {
                             Image(systemName: "chevron.up").opacity(0.6)
                             Image(systemName: "chevron.up").opacity(1.0)
                         }
-                        .font(.title2)
-                        .foregroundColor(.gray)
+                        .font(.largeIcon)
+                        .foregroundColor(.secondary)
                         .padding(.bottom, 40)
                         .phaseAnimator([false, true]) { content, floating in
                             content.offset(
@@ -85,8 +84,8 @@ struct WelcomeView: View {
                         }
 
                         Text("by Shrey and Priyanka")
-                            .font(.caption2)
-                            .foregroundColor(.gray)
+                            .font(.detail)
+                            .foregroundColor(.secondary)
                             .padding(.bottom)
                     }
                 }

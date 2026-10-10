@@ -70,17 +70,12 @@ struct GoalHistoryRow: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Text(goals.date.formatted(date: .abbreviated, time: .shortened))
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.sectionTitle)
                     .foregroundStyle(.primary)
 
                 if isCurrent {
                     Text("Current")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(Color.accentColor.opacity(0.15))
-                        .clipShape(Capsule())
+                        .tagStyle(.accent)
                 }
 
                 Spacer()
@@ -88,7 +83,7 @@ struct GoalHistoryRow: View {
 
             if trackedMacros.isEmpty {
                 Text("No macros tracked")
-                    .font(.system(size: 13))
+                    .font(.subtitle)
                     .foregroundStyle(.secondary)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
@@ -100,7 +95,7 @@ struct GoalHistoryRow: View {
                                 .frame(width: 14)
 
                             Text(macro.title)
-                                .font(.system(size: 13))
+                                .font(.subtitle)
                                 .foregroundStyle(.secondary)
 
                             Spacer()

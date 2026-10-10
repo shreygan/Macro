@@ -111,10 +111,10 @@ struct NotesCard: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.menuIcon)
                 .foregroundStyle(.secondary)
                 .frame(width: 28, height: 28)
-                .background(Circle().fill(Color.gray.opacity(0.1)))
+                .background(Circle().fill(Color.controlFill))
         }
         .buttonStyle(.plain)
         .padding(.vertical, -2)

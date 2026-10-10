@@ -97,7 +97,7 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
 
 #Preview {
     ZStack {
-        Color.gray.opacity(0.15).ignoresSafeArea()
+        Color.background.ignoresSafeArea()
 
         VStack {
 

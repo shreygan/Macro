@@ -174,14 +174,14 @@ struct DraftRow: View {
 
     private var titleText: Text {
         let title = Text(name)
-            .font(.system(size: 14, weight: .medium))
+            .font(.compactTitle)
             .foregroundColor(.secondary)
 
         guard let nameSuffix else { return title }
 
         let suffix = Text(" · \(nameSuffix)")
-            .font(.system(size: 14))
-            .foregroundColor(.tertiary)
+            .font(.compactValue)
+            .foregroundColor(.tertiaryText)
 
         return Text("\(title)\(suffix)")
     }
@@ -196,16 +196,16 @@ struct DraftRow: View {
 
                     if let icon = icon {
                         icon.image
-                            .font(.system(size: 13))
-                            .foregroundColor(.tertiary)
+                            .font(.smallIcon)
+                            .foregroundColor(.tertiaryText)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 if !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(.system(size: 13))
-                        .foregroundColor(.tertiary)
+                        .font(.subtitle)
+                        .foregroundColor(.tertiaryText)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -218,7 +218,7 @@ struct DraftRow: View {
                         }
 
                         Text(status)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.detailEmphasis)
                     }
                     .foregroundColor(.secondary)
                     .padding(.top, 2)
@@ -229,8 +229,8 @@ struct DraftRow: View {
 
             if action != nil {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.tertiary)
+                    .font(.chevron)
+                    .foregroundColor(.tertiaryText)
             }
         }
         .padding(.horizontal, 16)

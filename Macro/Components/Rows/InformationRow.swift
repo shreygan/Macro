@@ -32,7 +32,7 @@ struct InformationRow: View {
         VStack(alignment: .leading, spacing: 12) {
             if let title = title {
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.sectionTitle)
                     .foregroundStyle(.primary)
             }
 
@@ -52,7 +52,7 @@ struct InformationRow: View {
         switch block {
         case .text(let string):
             Text(string)
-                .font(.system(size: 13))
+                .font(.subtitle)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -63,7 +63,7 @@ struct InformationRow: View {
                     .padding(10)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.secondary.opacity(0.1))
+            .background(Color.controlFill)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
         case .bullets(let items):
@@ -71,11 +71,11 @@ struct InformationRow: View {
                 ForEach(items, id: \.self) { item in
                     HStack(alignment: .top, spacing: 6) {
                         Text("•")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.tertiary)
+                            .font(.bullet)
+                            .foregroundStyle(Color.tertiaryText)
 
                         Text(item)
-                            .font(.system(size: 13))
+                            .font(.subtitle)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -85,7 +85,7 @@ struct InformationRow: View {
 
         case .title(let title):
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.sectionTitle)
                 .foregroundStyle(.primary)
         }
     }

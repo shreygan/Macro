@@ -427,23 +427,22 @@ struct HomeView: View {
                                             .dateTime.weekday(.narrow)
                                         )
                                     )
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
+                                    .font(.sectionTitle)
                                     .foregroundColor(
                                         isSelected
                                             ? .white
-                                            : (isToday ? .blue : .primary)
+                                            : (isToday ? .accentColor : .primary)
                                     )
                                     .frame(width: 30, height: 30)
                                     .background(
                                         Circle().fill(
                                             isSelected
-                                                ? Color.blue : Color.clear
+                                                ? Color.accentColor : Color.clear
                                         )
                                     )
 
                                     Circle()
-                                        .fill(Color(uiColor: .systemGray5))
+                                        .fill(Color.controlFill)
                                         .frame(width: 40, height: 40)
                                         .overlay(alignment: .bottom) {
                                             if draftDays.contains(

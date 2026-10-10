@@ -11,7 +11,6 @@ struct InputPill: View {
     @Binding var text: String
 
     var unit: String? = nil
-    var textFontSize: CGFloat = 16
     var keyboardType: UIKeyboardType = .default
     var placeholder: String = "-"
 
@@ -29,7 +28,6 @@ struct InputPill: View {
                     draft: $draft,
                     selection: $selection
                 )
-                .font(.system(size: textFontSize))
                 .multilineTextAlignment(.center)
                 .frame(minWidth: 10)
                 .fixedSize(horizontal: true, vertical: false)
@@ -37,16 +35,10 @@ struct InputPill: View {
 
             if let unit = unit {
                 Text(unit)
-                    .font(.system(size: textFontSize))
-                    .foregroundColor(.tertiary)
+                    .foregroundColor(.tertiaryText)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            Capsule()
-                .fill(Color(UIColor.tertiarySystemFill))
-        )
+        .pillBackground()
     }
 }
 

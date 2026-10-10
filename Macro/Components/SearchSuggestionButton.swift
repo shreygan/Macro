@@ -17,7 +17,7 @@ struct SearchSuggestionButton: View {
             Button("Did you mean \"\(suggestion)\"?") {
                 onSelect(suggestion)
             }
-            .tint(.blue)
+            .tint(.accentColor)
         } else {
             Text(fallback)
         }

@@ -55,7 +55,7 @@ struct WrappedInputRow: View {
                 Text(text.isEmpty ? placeholder : text)
                     .foregroundColor(
                         text.isEmpty
-                            ? .secondary.opacity(0.5)
+                            ? .tertiaryText
                             : Color(uiColor: .secondaryLabel)
                     )
                     .lineLimit(nil)
@@ -73,7 +73,7 @@ struct WrappedInputRow: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .font(.caption)
+                .font(.detail)
             }
         }
         .overlay(alignment: .bottomTrailing) {
@@ -82,7 +82,7 @@ struct WrappedInputRow: View {
 
                 if text.count > threshold {
                     Text("\(text.count)/\(limit)")
-                        .font(.system(size: 8, weight: .regular))
+                        .font(.characterCount)
                         .foregroundColor(
                             text.count >= limit ? .red : .secondary
                         )

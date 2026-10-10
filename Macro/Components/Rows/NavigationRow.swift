@@ -21,8 +21,8 @@ struct NavigationRow: View {
             subtitle: subtitle
         ) {
             Image(systemName: "chevron.right")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.tertiary)
+                .font(.chevron)
+                .foregroundColor(.tertiaryText)
         }
     }
 }

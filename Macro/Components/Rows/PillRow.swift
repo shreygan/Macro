@@ -35,7 +35,7 @@ struct PillRow: View {
 
         var body: some View {
             ZStack {
-                Color.gray.opacity(0.15).ignoresSafeArea()
+                Color.background.ignoresSafeArea()
 
                 Card("BODY METRICS") {
                     PillRow(

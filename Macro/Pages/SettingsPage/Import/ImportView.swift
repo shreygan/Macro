@@ -199,9 +199,9 @@ struct ImportView: View {
             if loadingKind == kind {
                 HStack(spacing: 12) {
                     ProgressView()
-                        .tint(.blue)
+                        .tint(.accentColor)
                     Text(loadingTitle)
-                        .font(.subheadline.weight(.medium))
+                        .font(.statusLabel)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.bottom, 9)
@@ -214,7 +214,7 @@ struct ImportView: View {
                         tint: .white
                     ),
                     title: title,
-                    tint: .blue,
+                    tint: .accentColor,
                     textColor: .white,
                     topPadding: 8
                 ) {

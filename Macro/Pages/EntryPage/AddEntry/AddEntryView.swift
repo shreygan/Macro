@@ -405,7 +405,7 @@ struct AddEntryView: View {
                             ? "ingredient_description"
                             : "food_description"
                     )
-                    .font(.footnote)
+                    .font(.subtitle)
                     .foregroundColor(.secondary)
                     .padding(.horizontal)
                     .padding(.bottom, 4)
@@ -599,35 +599,25 @@ struct AddEntryView: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    if name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let isAddDisabled =
+                        name.trimmingCharacters(in: .whitespacesAndNewlines)
                         .isEmpty
                         || (Double(
                             servingSize.replacingOccurrences(of: ",", with: ".")
                         ) ?? 0) <= 0
-                    {
-                        Button {
-                        } label: {
-                            Image(systemName: "plus")
-                                .foregroundStyle(.primary)
-                        }
-                        .disabled(true)
-                        .tint(Color.tertiary)
-                        .buttonStyle(.borderless)
 
-                    } else {
-                        Button {
-                            addEntry()
-                        } label: {
-                            Image(systemName: "plus")
-                                .foregroundStyle(.primary)
-                        }
-                        .tint(Color.blue)
-                        .buttonStyle(.glassProminent)
-
+                    Button {
+                        addEntry()
+                    } label: {
+                        Image(systemName: "plus")
+                            .foregroundStyle(.primary)
                     }
+                    .disabled(isAddDisabled)
+                    .tint(Color.accentColor)
+                    .buttonStyle(.glassProminent)
                 }
             }
-            .safeAreaInset(edge: .top) {
+            .safeAreaBar(edge: .top) {
                 Card {
                     MealRow(
                         name: name.isEmpty
@@ -664,8 +654,7 @@ struct AddEntryView: View {
                     )
                 }
                 .padding([.leading, .trailing])
-                .padding(.bottom, 16)
-                .background(.ultraThinMaterial)
+                .padding(.bottom, 24)
             }
 
         }
