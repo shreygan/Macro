@@ -571,7 +571,11 @@ struct AddRecipeView: View {
                                                 $0.id == draft.id
                                             })
                                         {
-                                            draftIngredients.remove(at: index)
+                                            withAnimation(.snappy) {
+                                                _ = draftIngredients.remove(
+                                                    at: index
+                                                )
+                                            }
                                         }
                                     }
                                     .transition(
@@ -623,11 +627,14 @@ struct AddRecipeView: View {
                 .navigationTitle("Add New Recipe")
                 .navigationBarTitleDisplayMode(.inline)
                 .sheet(isPresented: $showIngredientSelectionSheet) {
-                    IngredientSelectionView { selectedItem in
+                    IngredientSelectionView(
+                        inRecipeIDs: Set(draftIngredients.compactMap(\.item?.id))
+                    ) { selectedItems in
                         draftIngredients.append(
-                            DraftRecipeIngredient(item: selectedItem)
+                            contentsOf: selectedItems.map {
+                                DraftRecipeIngredient(item: $0)
+                            }
                         )
-                        showIngredientSelectionSheet = false
                     }
                 }
                 .toolbar {

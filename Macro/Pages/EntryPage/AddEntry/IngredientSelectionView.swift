@@ -8,28 +8,83 @@
 import SwiftData
 import SwiftUI
 
+@Observable
+final class IngredientSelection {
+    private(set) var items: [FoodItem] = []
+    let inRecipeIDs: Set<UUID>
+    let recipeID: UUID?
+    var blockedIDs: Set<UUID> = []
+
+    init(inRecipeIDs: Set<UUID>, recipeID: UUID?) {
+        self.inRecipeIDs = inRecipeIDs
+        self.recipeID = recipeID
+    }
+
+    func contains(_ food: FoodItem) -> Bool {
+        items.contains { $0.id == food.id }
+    }
+
+    func isInRecipe(_ food: FoodItem) -> Bool {
+        inRecipeIDs.contains(food.id)
+    }
+
+    func isBlocked(_ food: FoodItem) -> Bool {
+        blockedIDs.contains(food.id) || isInRecipe(food)
+    }
+
+    func toggle(_ food: FoodItem) {
+        if let index = items.firstIndex(where: { $0.id == food.id }) {
+            items.remove(at: index)
+        } else {
+            items.append(food)
+        }
+    }
+
+    func add(_ food: FoodItem) {
+        if !contains(food) {
+            items.append(food)
+        }
+    }
+}
+
 struct IngredientSelectionView: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.modelContext) private var modelContext
 
-    var onSelect: (FoodItem) -> Void
+    var excludedRecipe: FoodItem?
+    var onAdd: ([FoodItem]) -> Void
+
+    @State private var selection: IngredientSelection
 
     @State private var activeSheet: ActiveSheet?
     enum ActiveSheet: Identifiable {
-        case newIngredient, newFood, newRecipe
+        case newIngredient, newFood
         var id: Int { hashValue }
+    }
+
+    init(
+        inRecipeIDs: Set<UUID> = [],
+        excludedRecipe: FoodItem? = nil,
+        onAdd: @escaping ([FoodItem]) -> Void
+    ) {
+        self.excludedRecipe = excludedRecipe
+        self.onAdd = onAdd
+        self._selection = State(
+            initialValue: IngredientSelection(
+                inRecipeIDs: inRecipeIDs,
+                recipeID: excludedRecipe?.id
+            )
+        )
     }
 
     var body: some View {
         NavigationStack {
             LibraryView(
                 title: "Add Ingredient",
-                searchPrompt: "Search ingredients...",
-                defaultType: .specific(.ingredient),
+                searchPrompt: "Search your library",
                 swipeActions: [],
-                onSelect: { ingredient in
-                    onSelect(ingredient)
-                    dismiss()
-                }
+                fallbackEntryType: .ingredient,
+                selection: selection
             ) {
                 SearchStateReader { isSearching in
                     if !isSearching {
@@ -52,37 +107,12 @@ struct IngredientSelectionView: View {
 
                             Card("Library") {
                                 RowGroup(.divider) {
-                                    NavigationLink(
-                                        destination: LibraryView(
-                                            defaultType: .specific(.food),
-                                            swipeActions: [],
-                                            onSelect: { food in
-                                                onSelect(food)
-                                                dismiss()
-                                            }
-                                        )
-                                    ) {
-                                        NavigationRow(
-                                            icon: .appSymbol(.food),
-                                            title: "Foods"
-                                        )
-                                    }.buttonStyle(.plain)
-
-                                    NavigationLink(
-                                        destination: LibraryView(
-                                            defaultType: .specific(.recipe),
-                                            swipeActions: [],
-                                            onSelect: { recipe in
-                                                onSelect(recipe)
-                                                dismiss()
-                                            }
-                                        )
-                                    ) {
-                                        NavigationRow(
-                                            icon: .appSymbol(.recipe),
-                                            title: "Recipes"
-                                        )
-                                    }.buttonStyle(.plain)
+                                    libraryLink(
+                                        "Ingredients",
+                                        type: .ingredient
+                                    )
+                                    libraryLink("Foods", type: .food)
+                                    libraryLink("Recipes", type: .recipe)
                                 }
                             }
                         }
@@ -94,30 +124,25 @@ struct IngredientSelectionView: View {
                     }
                 }
             }
+            .addSelectionToolbar(selection, onAdd: confirm)
             .navigationDestination(item: $activeSheet) { sheet in
                 switch sheet {
                 case .newIngredient:
                     AddEntryView(
                         entryType: .ingredient,
                         isPushedView: true,
-                        onSelectInstantly: { onSelect($0) }
+                        onSelectInstantly: selectCreated
                     )
                 case .newFood:
                     AddEntryView(
                         entryType: .food,
                         isPushedView: true,
-                        onSelectInstantly: { onSelect($0) }
-                    )
-                case .newRecipe:
-                    AddEntryView(
-                        entryType: .recipe,
-                        isPushedView: true,
-                        onSelectInstantly: { onSelect($0) }
+                        onSelectInstantly: selectCreated
                     )
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button {
                         dismiss()
                     } label: {
@@ -127,6 +152,71 @@ struct IngredientSelectionView: View {
             }
         }
         .environment(\.tabBarHeight, 0)
+        .sensoryFeedback(.selection, trigger: selection.items.count)
+        .onAppear(perform: loadBlockedRecipes)
+    }
+
+    private func loadBlockedRecipes() {
+        guard let excludedRecipe else { return }
+        selection.blockedIDs =
+            FoodItemStore.recipesContaining(excludedRecipe, in: modelContext)
+            .union([excludedRecipe.id])
+    }
+
+    private func libraryLink(_ title: String, type: EntryType) -> some View {
+        NavigationLink(
+            destination: LibraryView(
+                title: title,
+                defaultType: .specific(type),
+                swipeActions: [],
+                selection: selection
+            )
+            .addSelectionToolbar(selection, onAdd: confirm)
+        ) {
+            NavigationRow(icon: .appSymbol(type.appSymbol), title: title)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func selectCreated(_ food: FoodItem) {
+        selection.add(food)
+        activeSheet = nil
+    }
+
+    private func confirm() {
+        onAdd(selection.items)
+        dismiss()
+    }
+}
+
+private extension View {
+    func addSelectionToolbar(
+        _ selection: IngredientSelection,
+        onAdd: @escaping () -> Void
+    ) -> some View {
+        toolbar {
+            DefaultToolbarItem(kind: .search, placement: .bottomBar)
+
+            ToolbarSpacer(.fixed, placement: .bottomBar)
+
+            ToolbarItem(placement: .bottomBar) {
+                SelectionDoneButton(selection: selection, onAdd: onAdd)
+            }
+        }
+    }
+}
+
+private struct SelectionDoneButton: View {
+    let selection: IngredientSelection
+    let onAdd: () -> Void
+
+    var body: some View {
+        Button(action: onAdd) {
+            Image(systemName: "checkmark")
+        }
+        .buttonStyle(.glassProminent)
+        .disabled(selection.items.isEmpty)
+        .accessibilityLabel("Add Ingredients")
     }
 }
 
@@ -207,8 +297,9 @@ struct SearchStateReader<Content: View>: View {
         container.mainContext.insert(mockChicken)
         container.mainContext.insert(mockProteinBar)
 
-        return IngredientSelectionView { selectedItem in
-            print("Preview User Selected: \(selectedItem.name)")
+        return IngredientSelectionView(inRecipeIDs: [mockChicken.id]) {
+            selectedItems in
+            print("Preview User Selected: \(selectedItems.map(\.name))")
         }
         .modelContainer(container)
 

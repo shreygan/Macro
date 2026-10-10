@@ -621,7 +621,11 @@ struct EditRecipeView: View {
                                     if let index = draftIngredients.firstIndex(
                                         where: { $0.id == draft.id })
                                     {
-                                        draftIngredients.remove(at: index)
+                                        withAnimation(.snappy) {
+                                            _ = draftIngredients.remove(
+                                                at: index
+                                            )
+                                        }
                                     }
                                 }
                                 .transition(
@@ -673,11 +677,15 @@ struct EditRecipeView: View {
             .navigationTitle("Edit Recipe")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showIngredientSelectionSheet) {
-                IngredientSelectionView { selectedItem in
+                IngredientSelectionView(
+                    inRecipeIDs: Set(draftIngredients.compactMap(\.item?.id)),
+                    excludedRecipe: recipe
+                ) { selectedItems in
                     draftIngredients.append(
-                        DraftRecipeIngredient(item: selectedItem)
+                        contentsOf: selectedItems.map {
+                            DraftRecipeIngredient(item: $0)
+                        }
                     )
-                    showIngredientSelectionSheet = false
                 }
             }
             //            .sheet(item: $localIngredientToEdit) { draftItem in // TODO: PLEASE GET RID OF THIS FULLY

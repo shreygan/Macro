@@ -13,6 +13,8 @@ enum FoodSortOption {
     case dateAdded
     case lastLogged
     case mostLogged
+    case lastUsedInRecipe
+    case mostUsedInRecipes
     case calories
     case protein
     case carbs
@@ -58,8 +60,10 @@ struct LibraryView<Header: View>: View {
     var searchPrompt: String
     var swipeActions: Set<SwipeAction>
     var onSelect: ((FoodItem) -> Void)? = nil
+    var selection: IngredientSelection?
     var defaultType: LibraryFilterType
     var isTabRoot: Bool
+    var fallbackEntryType: EntryType
     var popToRootTrigger: Int
     let headerContent: Header
 
@@ -79,9 +83,10 @@ struct LibraryView<Header: View>: View {
     @State private var selectedFood: FoodItem?
     @State private var searchText = ""
 
-    @State private var sortOption: FoodSortOption = .dateAdded
+    @State private var sortOption: FoodSortOption
     @State private var sortDescending: Bool = true
     @State private var logStats: [UUID: FoodLogStats] = [:]
+    @State private var recipeStats: [UUID: FoodRecipeStats] = [:]
 
     @State private var showFilterSheet = false
     @State private var selectedTypes: Set<String>
@@ -99,22 +104,28 @@ struct LibraryView<Header: View>: View {
             let singleType = selectedTypes.first,
             let type = EntryType(rawValue: singleType.lowercased())
         else {
-            return .food
+            return fallbackEntryType
         }
         return type
     }
 
-    private var dynamicTitle: String {
-        if !isTabRoot, selectedTypes.count == 1,
-            let singleType = selectedTypes.first
-        {
-            return "\(singleType)s"
-        }
-        return title
+    private var defaultTypes: Set<String> {
+        defaultType == .all ? [] : [defaultType.displayName]
     }
 
     private var usesLogStats: Bool {
         sortOption == .lastLogged || sortOption == .mostLogged
+    }
+
+    private var usesRecipeStats: Bool {
+        sortOption == .lastUsedInRecipe || sortOption == .mostUsedInRecipes
+    }
+
+    private var selectionSubtitle: String {
+        guard let count = selection?.items.count else { return "" }
+        return count > 0
+            ? String(localized: "\(count) Selected")
+            : String(localized: "None Selected")
     }
 
     private var hasListFilters: Bool {
@@ -164,6 +175,7 @@ struct LibraryView<Header: View>: View {
 
         // 5. Sort filtered results
         let stats = logStats
+        let usage = recipeStats
 
         return result.sorted { lhs, rhs in
             switch sortOption {
@@ -181,6 +193,19 @@ struct LibraryView<Header: View>: View {
             case .mostLogged:
                 let lhsCount = stats[lhs.id]?.count ?? 0
                 let rhsCount = stats[rhs.id]?.count ?? 0
+                if lhsCount == rhsCount {
+                    return lhs.name.localizedStandardCompare(rhs.name)
+                        == .orderedAscending
+                }
+                return sortDescending
+                    ? lhsCount > rhsCount : lhsCount < rhsCount
+            case .lastUsedInRecipe:
+                let lhsDate = usage[lhs.id]?.lastUsed ?? .distantPast
+                let rhsDate = usage[rhs.id]?.lastUsed ?? .distantPast
+                return sortDescending ? lhsDate > rhsDate : lhsDate < rhsDate
+            case .mostUsedInRecipes:
+                let lhsCount = usage[lhs.id]?.count ?? 0
+                let rhsCount = usage[rhs.id]?.count ?? 0
                 if lhsCount == rhsCount {
                     return lhs.name.localizedStandardCompare(rhs.name)
                         == .orderedAscending
@@ -211,22 +236,29 @@ struct LibraryView<Header: View>: View {
         defaultType: LibraryFilterType = .all,
         swipeActions: Set<SwipeAction> = [.edit, .delete, .favorite],
         isTabRoot: Bool = false,
+        fallbackEntryType: EntryType = .food,
         popToRootTrigger: Int = 0,
         onSelect: ((FoodItem) -> Void)? = nil,
+        selection: IngredientSelection? = nil,
         @ViewBuilder headerContent: () -> Header = { EmptyView() }
     ) {
         self.title = title
         self.searchPrompt = searchPrompt
         self.defaultType = defaultType
         self.isTabRoot = isTabRoot
+        self.fallbackEntryType = fallbackEntryType
         self.popToRootTrigger = popToRootTrigger
         self.swipeActions = swipeActions
         self.onSelect = onSelect
+        self.selection = selection
         self.headerContent = headerContent()
 
         let initialTypes: Set<String> =
             defaultType == .all ? [] : [defaultType.displayName]
         self._selectedTypes = State(initialValue: initialTypes)
+        self._sortOption = State(
+            initialValue: isTabRoot ? .dateAdded : .lastUsedInRecipe
+        )
     }
 
     var body: some View {
@@ -309,7 +341,8 @@ struct LibraryView<Header: View>: View {
         }
         .withGlobalSwipeDismissal()
         .animation(.easeInOut(duration: 0.25), value: foods.isEmpty)
-        .navigationTitle(dynamicTitle)
+        .navigationTitle(title)
+        .navigationSubtitle(selectionSubtitle)
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.immediately)
         .safeAreaBar(edge: .top) {
@@ -337,9 +370,12 @@ struct LibraryView<Header: View>: View {
         .navigationDestination(item: $listToManage) { kind in
             ManageListView(kind: kind)
         }
-        .onAppear(perform: refreshLogStats)
+        .onAppear(perform: refreshStats)
         .onChange(of: usesLogStats) {
-            refreshLogStats()
+            refreshStats()
+        }
+        .onChange(of: usesRecipeStats) {
+            refreshStats()
         }
         .onChange(of: popToRootTrigger) {
             selectedFood = nil
@@ -351,7 +387,7 @@ struct LibraryView<Header: View>: View {
         .onChange(of: categoryOptions.map(\.category)) { _, names in
             selectedCategories.formIntersection(names)
         }
-        .sheet(item: $foodToLog, onDismiss: refreshLogStats) { food in
+        .sheet(item: $foodToLog, onDismiss: refreshStats) { food in
             LogFoodSheet(food: food)
         }
         .sheet(item: $foodToEdit) { food in
@@ -395,26 +431,60 @@ struct LibraryView<Header: View>: View {
         .deleteFoodAlert(food: $foodToDelete)
     }
 
+    @ViewBuilder
     private func foodRow(for food: FoodItem) -> some View {
-        MealRow(
+        let row = MealRow(
             food: food,
             servingUnits: portionUnitOptions,
             icon: selectedTypes.count != 1 ? food.type.appSymbol : nil
         ) {
             handleSelect(food)
         }
+
+        if let selection {
+            let isBlocked = selection.isBlocked(food)
+
+            row
+                .selectionState(selection.contains(food))
+                .nameTag(selectionTag(for: food, in: selection))
+                .opacity(isBlocked ? 0.4 : 1)
+                .allowsHitTesting(!isBlocked)
+        } else {
+            row
+        }
+    }
+
+    private func selectionTag(
+        for food: FoodItem,
+        in selection: IngredientSelection
+    ) -> LocalizedStringKey? {
+        if food.id == selection.recipeID {
+            return "This Recipe"
+        } else if selection.isInRecipe(food) {
+            return "In Recipe"
+        } else if selection.isBlocked(food) {
+            return "Uses This Recipe"
+        }
+        return nil
     }
 
     private func handleSelect(_ food: FoodItem) {
-        if let onSelect = onSelect {
+        if let selection {
+            guard !selection.isBlocked(food) else { return }
+            withAnimation(.snappy) {
+                selection.toggle(food)
+            }
+        } else if let onSelect = onSelect {
             onSelect(food)
         } else {
             selectedFood = food
         }
     }
 
-    private func refreshLogStats() {
+    private func refreshStats() {
         logStats = usesLogStats ? FoodItemStore.logStats(in: modelContext) : [:]
+        recipeStats =
+            usesRecipeStats ? FoodItemStore.recipeStats(in: modelContext) : [:]
     }
 
     private func confirmDelete(_ food: FoodItem) {
@@ -489,7 +559,7 @@ struct LibraryView<Header: View>: View {
             .font(.subheadline)
         } actions: {
             if !searchText.isEmpty {
-                Button("Create New \(singleType ?? "Food")") {
+                Button("Create New \(addableEntryType.rawValue.capitalized)") {
                     newEntryName = searchText
                     entryTypeToAdd = addableEntryType
                 }
@@ -498,7 +568,9 @@ struct LibraryView<Header: View>: View {
                 Button("Add \(type)") { entryTypeToAdd = addableEntryType }
                     .tint(.blue)
             } else {
-                Button("Add Food") { entryTypeToAdd = .food }
+                Button("Add \(fallbackEntryType.rawValue.capitalized)") {
+                    entryTypeToAdd = fallbackEntryType
+                }
                     .tint(.blue)
             }
         }
@@ -506,23 +578,33 @@ struct LibraryView<Header: View>: View {
 
     @ViewBuilder
     private func addEntrySheet(for type: EntryType) -> some View {
+        let picksEntry = onSelect != nil || selection != nil
+
         if type == .recipe {
             AddRecipeView(
-                offersLogNow: onSelect == nil,
-                prefill: .named(newEntryName)
+                offersLogNow: !picksEntry,
+                prefill: .named(newEntryName),
+                onCreate: picksEntry ? pickCreated : nil
             )
         } else {
             AddEntryView(
                 entryType: type,
-                onSelectInstantly: onSelect.map { select in
-                    { food in
+                onSelectInstantly: picksEntry
+                    ? { food in
                         entryTypeToAdd = nil
-                        select(food)
-                    }
-                },
-                offersLogNow: onSelect == nil,
+                        pickCreated(food)
+                    } : nil,
+                offersLogNow: !picksEntry,
                 prefill: .named(newEntryName)
             )
+        }
+    }
+
+    private func pickCreated(_ food: FoodItem) {
+        if let selection {
+            selection.add(food)
+        } else {
+            onSelect?(food)
         }
     }
 
@@ -530,10 +612,8 @@ struct LibraryView<Header: View>: View {
         Button {
             showFilterSheet = true
         } label: {
-            let defaultTypesSet: Set<String> =
-                defaultType == .all ? [] : [defaultType.displayName]
             let hasFilters =
-                (!isTabRoot && selectedTypes != defaultTypesSet)
+                (!isTabRoot && selectedTypes != defaultTypes)
                 || hasListFilters
             Image(
                 systemName: hasFilters
@@ -552,6 +632,9 @@ struct LibraryView<Header: View>: View {
                 if isTabRoot {
                     Text("Recently Logged").tag(FoodSortOption.lastLogged)
                     Text("Most Logged").tag(FoodSortOption.mostLogged)
+                } else {
+                    Text("Recently Used").tag(FoodSortOption.lastUsedInRecipe)
+                    Text("Most Used").tag(FoodSortOption.mostUsedInRecipes)
                 }
                 Text("Calories").tag(FoodSortOption.calories)
                 Text("Protein").tag(FoodSortOption.protein)
@@ -562,10 +645,14 @@ struct LibraryView<Header: View>: View {
             if sortOption != .name {
                 Divider()
                 Picker("Order", selection: $sortDescending) {
-                    if sortOption == .dateAdded || sortOption == .lastLogged {
+                    if sortOption == .dateAdded || sortOption == .lastLogged
+                        || sortOption == .lastUsedInRecipe
+                    {
                         Text("Newest First").tag(true)
                         Text("Oldest First").tag(false)
-                    } else if sortOption == .mostLogged {
+                    } else if sortOption == .mostLogged
+                        || sortOption == .mostUsedInRecipes
+                    {
                         Text("Most First").tag(true)
                         Text("Least First").tag(false)
                     } else {

@@ -459,9 +459,13 @@ struct LoggedEntryDetailView: View {
         }
         .environment(focusManager)
         .sheet(isPresented: $showIngredientSelectionSheet) {
-            IngredientSelectionView { selectedItem in
-                draftIngredients.append(LogRecipeIngredient(item: selectedItem))
-                showIngredientSelectionSheet = false
+            IngredientSelectionView(
+                inRecipeIDs: Set(draftIngredients.compactMap(\.ingredientItem?.id)),
+                excludedRecipe: entry.originalFoodItem
+            ) { selectedItems in
+                draftIngredients.append(
+                    contentsOf: selectedItems.map { LogRecipeIngredient(item: $0) }
+                )
             }
         }
         .sheet(isPresented: $showingAllNotes) {

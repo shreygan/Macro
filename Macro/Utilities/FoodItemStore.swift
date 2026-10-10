@@ -38,6 +38,13 @@ struct FoodLogStats {
     }
 }
 
+struct FoodRecipeStats {
+    var recipeIDs: Set<UUID>
+    var lastUsed: Date
+
+    var count: Int { recipeIDs.count }
+}
+
 @MainActor
 enum FoodItemStore {
     static func loggedEntries(
@@ -84,6 +91,58 @@ enum FoodItemStore {
             predicate: #Predicate { $0.ingredientItem?.id == foodID }
         )
         return (try? context.fetch(descriptor)) ?? []
+    }
+
+    static func recipeStats(in context: ModelContext) -> [UUID: FoodRecipeStats] {
+        var descriptor = FetchDescriptor<RecipeIngredient>()
+        descriptor.relationshipKeyPathsForPrefetching = [
+            \.ingredientItem, \.parentRecipe,
+        ]
+        var result: [UUID: FoodRecipeStats] = [:]
+        for ingredient in (try? context.fetch(descriptor)) ?? [] {
+            guard let id = ingredient.ingredientItem?.id,
+                let recipe = ingredient.parentRecipe
+            else { continue }
+            if var stats = result[id] {
+                stats.recipeIDs.insert(recipe.id)
+                stats.lastUsed = max(stats.lastUsed, recipe.dateAdded)
+                result[id] = stats
+            } else {
+                result[id] = FoodRecipeStats(
+                    recipeIDs: [recipe.id],
+                    lastUsed: recipe.dateAdded
+                )
+            }
+        }
+        return result
+    }
+
+    static func recipesContaining(
+        _ food: FoodItem,
+        in context: ModelContext
+    ) -> Set<UUID> {
+        var descriptor = FetchDescriptor<RecipeIngredient>()
+        descriptor.relationshipKeyPathsForPrefetching = [
+            \.ingredientItem, \.parentRecipe,
+        ]
+        var parents: [UUID: Set<UUID>] = [:]
+        for ingredient in (try? context.fetch(descriptor)) ?? [] {
+            guard let childID = ingredient.ingredientItem?.id,
+                let parentID = ingredient.parentRecipe?.id
+            else { continue }
+            parents[childID, default: []].insert(parentID)
+        }
+
+        var result: Set<UUID> = []
+        var queue = [food.id]
+        while let id = queue.popLast() {
+            for parentID in parents[id] ?? [] {
+                if result.insert(parentID).inserted {
+                    queue.append(parentID)
+                }
+            }
+        }
+        return result
     }
 
     static func usage(
