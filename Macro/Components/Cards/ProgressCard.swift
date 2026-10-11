@@ -16,28 +16,35 @@ struct DailyProgress {
     var fiber: Double
 }
 
+extension DailyProgress {
+    init(entries: [LoggedEntry]) {
+        self.init(
+            calories: entries.reduce(0) { $0 + $1.calories },
+            protein: entries.reduce(0) { $0 + $1.protein },
+            carbs: entries.reduce(0) { $0 + $1.carbs },
+            fat: entries.reduce(0) { $0 + $1.fat },
+            fiber: entries.reduce(0) { $0 + $1.fiber }
+        )
+    }
+}
+
 struct ProgressCard: View {
     var goals: UserGoals
+    var isPastGoals: Bool
     @Query private var entries: [LoggedEntry]
 
     private var progress: DailyProgress {
-        let totalCalories = entries.reduce(0) { $0 + $1.calories }
-        let totalProtein = entries.reduce(0) { $0 + $1.protein }
-        let totalCarbs = entries.reduce(0) { $0 + $1.carbs }
-        let totalFat = entries.reduce(0) { $0 + $1.fat }
-        let totalFiber = entries.reduce(0) { $0 + $1.fiber }
-
-        return DailyProgress(
-            calories: totalCalories,
-            protein: totalProtein,
-            carbs: totalCarbs,
-            fat: totalFat,
-            fiber: totalFiber
-        )
+        DailyProgress(entries: entries)
     }
 
-    init(goals: UserGoals, date: Date, dayStartMinutes: Int = 0) {
+    init(
+        goals: UserGoals,
+        date: Date,
+        dayStartMinutes: Int = 0,
+        isPastGoals: Bool = false
+    ) {
         self.goals = goals
+        self.isPastGoals = isPastGoals
 
         let dayRange = Calendar.current.logicalDayRange(
             for: date,
@@ -121,7 +128,7 @@ struct ProgressCard: View {
     }
 
     var body: some View {
-        if !goals.isDeleted && goals.modelContext != nil {
+        if goals.isLive {
             card
         }
     }
@@ -144,6 +151,11 @@ struct ProgressCard: View {
             .padding(.top, 12)
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
+        } headerAccessory: {
+            if isPastGoals {
+                Text("Past Goals")
+                    .tagStyle()
+            }
         }
     }
 }

@@ -21,6 +21,9 @@ struct GoalSetupView: View {
     @Binding var isFatActive: Bool
     @Binding var isFiberActive: Bool
 
+    var editingGoals: UserGoals? = nil
+    var isAddingPeriod = false
+
     @State private var calorieValue = 3000.0
     @State private var proteinValue = 150.0
     @State private var carbsValue = 150.0
@@ -36,11 +39,51 @@ struct GoalSetupView: View {
     @State private var showInfoSheet = false
     @State private var showHistorySheet = false
 
+    @State private var addStart = Date()
+    @State private var addEnd = Date()
+    @State private var hasEnd = false
+    @State private var hasSetUpDates = false
+    @State private var prefilledTargets: GoalTargets?
     /// The goal setup screen is shown both during onboarding (before a user
     /// exists) and later for editing via HomeView. Only the latter should
     /// expose the history button, since onboarding has no history yet.
     private var isEditingExistingUser: Bool {
         users.first?.onboardingComplete ?? false
+    }
+
+    private var logicalToday: Date {
+        Calendar.current.logicalDay(
+            for: .now,
+            dayStartMinutes: users.first?.dayStartMinutes ?? 0
+        )
+    }
+
+    private var logicalYesterday: Date {
+        Calendar.current.date(byAdding: .day, value: -1, to: logicalToday) ?? logicalToday
+    }
+
+    private var addingRange: GoalDateRange? {
+        guard isAddingPeriod else { return nil }
+        let calendar = Calendar.current
+        return GoalDateRange(
+            start: calendar.startOfDay(for: addStart),
+            end: hasEnd ? calendar.startOfDay(for: addEnd) : nil
+        )
+    }
+
+    private var targets: GoalTargets {
+        GoalTargets(
+            calories: calorieValue,
+            calorieMode: calorieMode,
+            protein: proteinValue,
+            proteinMode: proteinMode,
+            carbs: carbsValue,
+            carbsMode: carbsMode,
+            fat: fatValue,
+            fatMode: fatMode,
+            fiber: fiberValue,
+            fiberMode: fiberMode
+        )
     }
 
     var body: some View {
@@ -62,6 +105,11 @@ struct GoalSetupView: View {
                 }
                 .padding(.top, 20)
                 .padding(.horizontal, 30)
+            }
+
+            if isAddingPeriod {
+                dateRange
+                    .padding(.top, 8)
             }
 
             Spacer(minLength: 16)
@@ -142,72 +190,7 @@ struct GoalSetupView: View {
             Spacer(minLength: 16)
 
             Button {
-                if let existingUser = users.first {
-                    existingUser.onboardingComplete = true
-
-                    let goalsChanged: Bool
-                    if let existingGoals = existingUser.currentGoals {
-                        goalsChanged =
-                            existingGoals.calories != calorieValue
-                            || existingGoals.calorieMode != calorieMode
-                            || existingGoals.protein != proteinValue
-                            || existingGoals.proteinMode != proteinMode
-                            || existingGoals.carbs != carbsValue
-                            || existingGoals.carbsMode != carbsMode
-                            || existingGoals.fat != fatValue
-                            || existingGoals.fatMode != fatMode
-                            || existingGoals.fiber != fiberValue
-                            || existingGoals.fiberMode != fiberMode
-                    } else {
-                        goalsChanged = true
-                    }
-
-                    if goalsChanged {
-                        let newGoals = UserGoals(
-                            calories: calorieValue,
-                            calorieMode: calorieMode,
-                            protein: proteinValue,
-                            proteinMode: proteinMode,
-                            carbs: carbsValue,
-                            carbsMode: carbsMode,
-                            fat: fatValue,
-                            fatMode: fatMode,
-                            fiber: fiberValue,
-                            fiberMode: fiberMode,
-                            owner: existingUser
-                        )
-                        context.insert(newGoals)
-                    }
-                } else {
-                    let newUser = User(onboardingComplete: true)
-                    context.insert(newUser)
-
-                    let newGoals = UserGoals(
-                        calories: calorieValue,
-                        calorieMode: calorieMode,
-                        protein: proteinValue,
-                        proteinMode: proteinMode,
-                        carbs: carbsValue,
-                        carbsMode: carbsMode,
-                        fat: fatValue,
-                        fatMode: fatMode,
-                        fiber: fiberValue,
-                        fiberMode: fiberMode,
-                        owner: newUser
-                    )
-                    context.insert(newGoals)
-                }
-
-                do {
-                    try context.save()
-                } catch {
-                    context.rollback()
-                    toastCenter?.show(.failure(String(localized: "Couldn't Save Goals")))
-                    return
-                }
-
-                dismiss()
-
+                save()
             } label: {
                 Text(isEditingExistingUser ? "Save" : "Start")
                     .font(.prominentButton)
@@ -221,7 +204,11 @@ struct GoalSetupView: View {
         }
         .keyboardAvoidingScrollView(alwaysScrollable: isEditingExistingUser)
         .withCustomKeyboardToolbar(insetsContent: false)
-        .navigationTitle(isEditingExistingUser ? "Set Goals" : "")
+        .navigationTitle(
+            editingGoals != nil
+                ? "Edit Goals"
+                : isAddingPeriod ? "Add Goals" : isEditingExistingUser ? "Set Goals" : ""
+        )
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if isEditingExistingUser {
@@ -232,10 +219,12 @@ struct GoalSetupView: View {
                         Image(systemName: "info.circle")
                     }
 
-                    Button {
-                        showHistorySheet = true
-                    } label: {
-                        Image(systemName: "clock.arrow.circlepath")
+                    if editingGoals == nil, !isAddingPeriod {
+                        Button {
+                            showHistorySheet = true
+                        } label: {
+                            Image(systemName: "clock.arrow.circlepath")
+                        }
                     }
                 }
             }
@@ -284,28 +273,170 @@ struct GoalSetupView: View {
             }
         }
         .onAppear {
+            if isAddingPeriod, !hasSetUpDates {
+                hasSetUpDates = true
+                addStart = logicalYesterday
+                addEnd = logicalYesterday
+            }
             loadGoals()
         }
         .onChange(of: users.first?.currentGoals?.id) {
+            guard editingGoals == nil, !isAddingPeriod else { return }
             loadGoals()
+        }
+        .onChange(of: addStart) {
+            if addEnd < addStart {
+                addEnd = addStart
+            }
+            if addStart >= logicalToday {
+                hasEnd = false
+            }
+            if targets == prefilledTargets {
+                loadGoals()
+            }
         }
     }
 
+    private var dateRange: some View {
+        HStack(spacing: 10) {
+            DateTimePill(
+                selection: $addStart,
+                components: .date,
+                range: Date.distantPast...logicalToday
+            )
+
+            Image(systemName: "arrow.right")
+                .font(.smallIcon)
+                .foregroundStyle(.secondary)
+
+            if hasEnd {
+                HStack(spacing: 4) {
+                    DateTimePill(
+                        selection: $addEnd,
+                        components: .date,
+                        range: addStart...max(addStart, logicalYesterday)
+                    )
+
+                    Button {
+                        withAnimation(.snappy) {
+                            hasEnd = false
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.smallIcon)
+                            .foregroundStyle(Color.tertiaryText)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Remove End Date")
+                }
+                .transition(.opacity)
+            } else {
+                Button {
+                    addEnd = max(addEnd, addStart)
+                    withAnimation(.snappy) {
+                        hasEnd = true
+                    }
+                } label: {
+                    Text("Ongoing")
+                        .foregroundStyle(addStart < logicalToday ? .primary : .secondary)
+                        .pillBackground()
+                }
+                .buttonStyle(.plain)
+                .disabled(addStart >= logicalToday)
+                .accessibilityLabel("Add End Date")
+                .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func save() {
+        guard let user = users.first else {
+            let newUser = User(onboardingComplete: true)
+            context.insert(newUser)
+            context.insert(UserGoals(targets, owner: newUser))
+            do {
+                try context.save()
+            } catch {
+                context.rollback()
+                toastCenter?.show(.failure(String(localized: "Couldn't Save Goals")))
+                return
+            }
+            dismiss()
+            return
+        }
+
+        let wasOnboarded = user.onboardingComplete
+        user.onboardingComplete = true
+
+        let snapshot: GoalHistoryStore.Snapshot?
+        do {
+            if let editingGoals {
+                guard editingGoals.isLive else {
+                    dismiss()
+                    return
+                }
+                snapshot =
+                    editingGoals.targets == targets
+                    ? nil
+                    : try GoalHistoryStore.update(
+                        editingGoals,
+                        to: targets,
+                        for: user,
+                        in: context
+                    )
+            } else if let addingRange {
+                snapshot = try GoalHistoryStore.add(
+                    targets,
+                    from: addingRange.start,
+                    through: addingRange.end,
+                    for: user,
+                    in: context
+                )
+            } else if user.currentGoals?.targets != targets {
+                snapshot = try GoalHistoryStore.setCurrent(targets, for: user, in: context)
+            } else {
+                snapshot = nil
+                try context.save()
+            }
+        } catch {
+            context.rollback()
+            toastCenter?.show(.failure(String(localized: "Couldn't Save Goals")))
+            return
+        }
+
+        if wasOnboarded, let snapshot {
+            let timeline = user.goalTimeline
+            toastCenter?.show(
+                .goalsChanged(
+                    addingRange != nil
+                        ? String(localized: "Goals Added")
+                        : String(localized: "Goals Updated"),
+                    symbol: "checkmark",
+                    message: addingRange.map { $0.title }
+                        ?? editingGoals.flatMap { goals in
+                            timeline.periods.first { $0.id == goals.id }?.title
+                        },
+                    undo: snapshot,
+                    for: user,
+                    in: context,
+                    presenter: toastCenter
+                )
+            )
+        }
+
+        dismiss()
+    }
+
     private func matchesSliders(_ goals: UserGoals) -> Bool {
-        goals.calories == calorieValue
-            && goals.calorieMode == calorieMode
-            && goals.protein == proteinValue
-            && goals.proteinMode == proteinMode
-            && goals.carbs == carbsValue
-            && goals.carbsMode == carbsMode
-            && goals.fat == fatValue
-            && goals.fatMode == fatMode
-            && goals.fiber == fiberValue
-            && goals.fiberMode == fiberMode
+        goals.targets == targets
     }
 
     private func loadGoals(from savedGoals: UserGoals? = nil) {
-        if let savedGoals = savedGoals ?? users.first?.currentGoals {
+        let editingGoals = editingGoals?.isLive == true ? editingGoals : nil
+        let rangeGoals = addingRange.flatMap { users.first?.goalTimeline.goals(for: $0.start) }
+        defer { prefilledTargets = targets }
+        if let savedGoals = savedGoals ?? editingGoals ?? rangeGoals ?? users.first?.currentGoals {
             calorieValue = savedGoals.calories
             calorieMode = savedGoals.calorieMode
             proteinValue = savedGoals.protein

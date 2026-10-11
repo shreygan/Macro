@@ -239,7 +239,7 @@ extension MacroBackup {
     }
 
     @MainActor
-    private static func goalRecord(_ goal: UserGoals) -> GoalRecord {
+    static func goalRecord(_ goal: UserGoals) -> GoalRecord {
         GoalRecord(
             id: goal.id,
             date: goal.date,

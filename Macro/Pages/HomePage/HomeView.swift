@@ -241,6 +241,8 @@ struct HomeView: View {
     var body: some View {
         let draftDays = draftDays
         let logicalToday = logicalToday
+        let goalTimeline = users.first?.goalTimeline
+        let currentGoals = goalTimeline?.current?.goals
 
         NavigationStack {
             ScrollView(.horizontal) {
@@ -254,11 +256,14 @@ struct HomeView: View {
 
                         ScrollView {
                             VStack {
-                                if let userGoals = users.first?.currentGoals {
+                                if let currentGoals,
+                                    let dayGoals = goalTimeline?.goals(for: effectiveDate)
+                                {
                                     ProgressCard(
-                                        goals: userGoals,
+                                        goals: dayGoals,
                                         date: effectiveDate,
-                                        dayStartMinutes: dayStartMinutes
+                                        dayStartMinutes: dayStartMinutes,
+                                        isPastGoals: !dayGoals.hasSameTargets(as: currentGoals)
                                     )
                                     .padding([.horizontal, .bottom])
                                     .padding(.top, 5)
@@ -336,7 +341,7 @@ struct HomeView: View {
                                 .padding(.horizontal)
                                 .padding(
                                     .top,
-                                    users.first?.currentGoals == nil ? nil : 0
+                                    currentGoals == nil ? nil : 0
                                 )
                             }
                             .background(
