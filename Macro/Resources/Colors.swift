@@ -37,5 +37,12 @@ extension Color {
 
     static let accentFill = Color.accentColor.opacity(0.15)
 
+    static let progressFill = Color(
+        uiColor: UIColor { traits in
+            let base: UIColor = traits.userInterfaceStyle == .dark ? .white : .black
+            return base.withAlphaComponent(0.55)
+        }
+    )
+
     static let destructiveFill = Color.red.opacity(0.1)
 }

@@ -12,6 +12,7 @@ struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.toastCenter) private var toastCenter
     @Environment(\.tabBarHeight) private var tabBarHeight
+    @Environment(\.scenePhase) private var scenePhase
 
     @Query private var users: [User]
     @Query(filter: EntryDraft.logDraftsPredicate) private var logDrafts:
@@ -81,13 +82,62 @@ struct HomeView: View {
 
     @State private var swipeDirection: Edge = .trailing
     @State private var hasAlignedToday = false
+    @State private var now = Date()
 
     private var dayStartMinutes: Int {
         users.first?.dayStartMinutes ?? 0
     }
 
+    private let hiddenCirclesInset: CGFloat = 34
+
+    private var dayCircleMode: DayCircleMode {
+        users.first?.dayCircleMode ?? .goalProgress
+    }
+
     private var logicalToday: Date {
-        Calendar.current.logicalDay(for: Date(), dayStartMinutes: dayStartMinutes)
+        Calendar.current.logicalDay(for: now, dayStartMinutes: dayStartMinutes)
+    }
+
+    private var nextDayStart: Date {
+        Calendar.current.logicalDayRange(
+            for: logicalToday,
+            dayStartMinutes: dayStartMinutes
+        ).upperBound
+    }
+
+    private func dayAccessibilityValue(
+        score: DayGoalScore?,
+        isToday: Bool,
+        isDraftDay: Bool
+    ) -> String {
+        var parts: [String] = []
+        if isToday {
+            parts.append(String(localized: "Today"))
+        }
+        if dayCircleMode != .off {
+            if let score {
+                if score.allHit {
+                    parts.append(String(localized: "All goals hit"))
+                } else if !score.isScored {
+                    parts.append(String(localized: "Logged"))
+                } else {
+                    let percent = score.fraction.formatted(
+                        .percent.precision(.fractionLength(0))
+                    )
+                    parts.append(
+                        dayCircleMode == .oneGoal
+                            ? String(localized: "\(percent) of goal")
+                            : String(localized: "\(percent) of goals")
+                    )
+                }
+            } else {
+                parts.append(String(localized: "Nothing logged"))
+            }
+        }
+        if isDraftDay {
+            parts.append(String(localized: "Has drafts"))
+        }
+        return parts.joined(separator: ", ")
     }
 
     private func alignToLogicalToday() {
@@ -380,7 +430,10 @@ struct HomeView: View {
                         .scrollEdgeEffectStyle(.hard, for: .top)
                         .modifier(ScrolledTopEdgeEffect())
                         .safeAreaBar(edge: .top) {
-                            Color.primary.opacity(0.001).frame(height: 97.5)
+                            Color.primary.opacity(0.001).frame(
+                                height: dayCircleMode == .off
+                                    ? 97.5 - hiddenCirclesInset : 97.5
+                            )
                         }
                         .containerRelativeFrame(.horizontal)
                         .id(date)
@@ -415,70 +468,123 @@ struct HomeView: View {
                             )
                         }
 
-                        HStack {
-                            ForEach(weekDates, id: \.self) { date in
-                                let isSelected = Calendar.current.isDate(
-                                    date,
-                                    inSameDayAs: displayDate
-                                )
-                                let isToday = Calendar.current.isDate(
-                                    date,
-                                    inSameDayAs: logicalToday
-                                )
-
-                                VStack(spacing: 12) {
-                                    Text(
-                                        date.formatted(
-                                            .dateTime.weekday(.narrow)
-                                        )
+                        WeekGoalScores(
+                            weekDates: weekDates,
+                            goalTimeline: goalTimeline
+                                ?? GoalTimeline([], dayStartMinutes: dayStartMinutes),
+                            mode: dayCircleMode,
+                            goal: users.first?.resolvedDayCircleGoal ?? .calories,
+                            dayStartMinutes: dayStartMinutes,
+                            logicalToday: logicalToday
+                        ) { scores in
+                            HStack {
+                                ForEach(weekDates, id: \.self) { date in
+                                    let isSelected = Calendar.current.isDate(
+                                        date,
+                                        inSameDayAs: displayDate
                                     )
-                                    .font(.sectionTitle)
-                                    .foregroundColor(
-                                        isSelected
-                                            ? .white
-                                            : (isToday ? .accentColor : .primary)
-                                    )
-                                    .frame(width: 30, height: 30)
-                                    .background(
-                                        Circle().fill(
-                                            isSelected
-                                                ? Color.accentColor : Color.clear
-                                        )
+                                    let isToday = Calendar.current.isDate(
+                                        date,
+                                        inSameDayAs: logicalToday
                                     )
 
-                                    Circle()
-                                        .fill(Color.controlFill)
-                                        .frame(width: 40, height: 40)
-                                        .overlay(alignment: .bottom) {
-                                            if draftDays.contains(
-                                                Calendar.current.startOfDay(
-                                                    for: date
-                                                )
-                                            ) {
-                                                Circle()
-                                                    .fill(Color.white)
-                                                    .overlay(
-                                                        Circle().strokeBorder(
-                                                            Color.gray,
-                                                            lineWidth: 1.5
-                                                        )
+                                    let isDraftDay = draftDays.contains(
+                                        Calendar.current.startOfDay(for: date)
+                                    )
+
+                                    Group {
+                                        if dayCircleMode == .off {
+                                            VStack(spacing: 4) {
+                                                Text(
+                                                    date.formatted(
+                                                        .dateTime.weekday(.narrow)
                                                     )
-                                                    .frame(width: 8, height: 8)
-                                                    .offset(y: 4)
-                                                    .transition(.opacity)
+                                                )
+                                                .font(.detailEmphasis)
+                                                .foregroundStyle(
+                                                    isToday ? Color.accentColor : .secondary
+                                                )
+
+                                                Text(
+                                                    date.formatted(.dateTime.day())
+                                                )
+                                                .font(.sectionTitle)
+                                                .foregroundColor(
+                                                    isSelected
+                                                        ? .white
+                                                        : (isToday ? .accentColor : .primary)
+                                                )
+                                                .frame(width: 30, height: 30)
+                                                .background(
+                                                    Circle().fill(
+                                                        isSelected
+                                                            ? Color.accentColor : Color.clear
+                                                    )
+                                                )
+                                                .overlay(alignment: .bottom) {
+                                                    draftDot(isVisible: isDraftDay)
+                                                }
+                                            }
+                                            .frame(minWidth: 44)
+                                            .contentShape(Rectangle())
+                                        } else {
+                                            VStack(spacing: 12) {
+                                                Text(
+                                                    date.formatted(
+                                                        .dateTime.weekday(.narrow)
+                                                    )
+                                                )
+                                                .font(.sectionTitle)
+                                                .foregroundColor(
+                                                    isSelected
+                                                        ? .white
+                                                        : (isToday ? .accentColor : .primary)
+                                                )
+                                                .frame(width: 30, height: 30)
+                                                .background(
+                                                    Circle().fill(
+                                                        isSelected
+                                                            ? Color.accentColor : Color.clear
+                                                    )
+                                                )
+
+                                                DayProgressCircle(score: scores[date])
+                                                    .overlay(alignment: .bottom) {
+                                                        draftDot(isVisible: isDraftDay)
+                                                    }
                                             }
                                         }
-                                        .animation(
-                                            .easeInOut(duration: 0.25),
-                                            value: draftDays
+                                    }
+                                    .animation(
+                                        .easeInOut(duration: 0.25),
+                                        value: draftDays
+                                    )
+                                    .onTapGesture {
+                                        navigateToDate(to: date)
+                                    }
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel(
+                                        date.formatted(
+                                            .dateTime.weekday(.wide).month(.wide).day()
                                         )
-                                }
-                                .onTapGesture {
-                                    navigateToDate(to: date)
-                                }
+                                    )
+                                    .accessibilityValue(
+                                        dayAccessibilityValue(
+                                            score: scores[date],
+                                            isToday: isToday,
+                                            isDraftDay: isDraftDay
+                                        )
+                                    )
+                                    .accessibilityAddTraits(
+                                        isSelected ? [.isButton, .isSelected] : .isButton
+                                    )
+                                    .accessibilityAction {
+                                        navigateToDate(to: date)
+                                    }
 
-                                if date != weekDates.last {
-                                    Spacer()
+                                    if date != weekDates.last {
+                                        Spacer()
+                                    }
                                 }
                             }
                         }
@@ -487,13 +593,26 @@ struct HomeView: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .frame(height: 90)
+                .frame(height: dayCircleMode == .off ? 90 - hiddenCirclesInset : 90)
             }
             .navigationTitle("Home")
             .navigationSubtitle(currDate(for: displayDate))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 alignToLogicalToday()
+            }
+            .task(id: nextDayStart) {
+                let delay = nextDayStart.timeIntervalSinceNow + 1
+                if delay > 0 {
+                    try? await Task.sleep(for: .seconds(delay))
+                }
+                guard !Task.isCancelled else { return }
+                now = Date()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    now = Date()
+                }
             }
             .onChange(of: dayStartMinutes) { oldMinutes, _ in
                 let previousToday = Calendar.current.logicalDay(
@@ -687,6 +806,24 @@ struct HomeView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private func draftDot(isVisible: Bool) -> some View {
+    ZStack {
+        if isVisible {
+            Circle()
+                .fill(Color.white)
+                .overlay(
+                    Circle().strokeBorder(
+                        Color.gray,
+                        lineWidth: 1.5
+                    )
+                )
+                .frame(width: 8, height: 8)
+                .offset(y: 4)
+                .transition(.opacity)
         }
     }
 }

@@ -108,21 +108,36 @@ struct SettingsView: View {
                         }
                         .padding(.horizontal)
 
-                        if users.first != nil {
+                        if let user = users.first {
                             Card("Tracking") {
-                                BaseRowLayout(
-                                    icon: .customSymbol("sunrise"),
-                                    title: "Day Starts At",
-                                    info:
-                                        "Meals logged before this time count toward the previous day."
-                                ) {
-                                    DateTimePill(
-                                        selection: dayStartSelection,
-                                        components: .hourAndMinute,
-                                        range: dayStartRange
-                                    )
-                                    .padding(.trailing, -5)
-                                    .padding(.vertical, -2)
+                                RowGroup(.divider) {
+                                    BaseRowLayout(
+                                        icon: .customSymbol("sunrise"),
+                                        title: "Day Starts At",
+                                        info:
+                                            "Meals logged before this time count toward the previous day."
+                                    ) {
+                                        DateTimePill(
+                                            selection: dayStartSelection,
+                                            components: .hourAndMinute,
+                                            range: dayStartRange
+                                        )
+                                        .padding(.trailing, -5)
+                                        .frame(height: FontSize.rowLineHeight)
+                                    }
+
+                                    NavigationLink {
+                                        DayCirclesView(user: user)
+                                    } label: {
+                                        NavigationRow(
+                                            icon: .customSymbol(
+                                                "circle.bottomhalf.filled"
+                                            ),
+                                            title: "Day Circles"
+                                        )
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                             .padding([.top, .leading, .trailing])

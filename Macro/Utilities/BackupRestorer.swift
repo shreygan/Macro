@@ -314,6 +314,18 @@ struct BackupRestorer {
         return summary
     }
 
+    private func restoreDayCircles(
+        from record: MacroBackup.UserRecord?,
+        to user: User
+    ) {
+        if let mode = record?.dayCircleMode.flatMap(DayCircleMode.init(rawValue:)) {
+            user.dayCircleMode = mode
+        }
+        if let goal = record?.dayCircleGoal.flatMap(DayCircleGoal.init(rawValue:)) {
+            user.dayCircleGoal = goal
+        }
+    }
+
     private func restoreUser(
         _ backup: MacroBackup,
         exact: Bool,
@@ -330,6 +342,7 @@ struct BackupRestorer {
                 onboardingComplete: backup.user?.onboardingComplete ?? false
             )
             user.dayStartMinutes = backup.user?.dayStartMinutes ?? 0
+            restoreDayCircles(from: backup.user, to: user)
             context.insert(user)
         }
 
@@ -337,6 +350,7 @@ struct BackupRestorer {
             user.name = record.name
             user.onboardingComplete = record.onboardingComplete
             user.dayStartMinutes = record.dayStartMinutes
+            restoreDayCircles(from: record, to: user)
         }
 
         let existingGoalIDs = Set((user.goalsHistory ?? []).map(\.id))
