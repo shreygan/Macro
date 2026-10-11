@@ -314,6 +314,18 @@ struct BackupRestorer {
         return summary
     }
 
+    private func restoreDayCircles(
+        from record: MacroBackup.UserRecord?,
+        to user: User
+    ) {
+        if let mode = record?.dayCircleMode.flatMap(DayCircleMode.init(rawValue:)) {
+            user.dayCircleMode = mode
+        }
+        if let goal = record?.dayCircleGoal.flatMap(DayCircleGoal.init(rawValue:)) {
+            user.dayCircleGoal = goal
+        }
+    }
+
     private func restoreUser(
         _ backup: MacroBackup,
         exact: Bool,
@@ -330,6 +342,7 @@ struct BackupRestorer {
                 onboardingComplete: backup.user?.onboardingComplete ?? false
             )
             user.dayStartMinutes = backup.user?.dayStartMinutes ?? 0
+            restoreDayCircles(from: backup.user, to: user)
             context.insert(user)
         }
 
@@ -337,28 +350,35 @@ struct BackupRestorer {
             user.name = record.name
             user.onboardingComplete = record.onboardingComplete
             user.dayStartMinutes = record.dayStartMinutes
+            restoreDayCircles(from: record, to: user)
         }
 
         let existingGoalIDs = Set((user.goalsHistory ?? []).map(\.id))
-        for record in backup.goals where !existingGoalIDs.contains(record.id) {
-            let goal = UserGoals(
-                id: record.id,
-                date: record.date,
-                calories: record.calories,
-                calorieMode: GoalLimitMode(rawValue: record.calorieMode) ?? .off,
-                protein: record.protein,
-                proteinMode: GoalLimitMode(rawValue: record.proteinMode) ?? .off,
-                carbs: record.carbs,
-                carbsMode: GoalLimitMode(rawValue: record.carbsMode) ?? .off,
-                fat: record.fat,
-                fatMode: GoalLimitMode(rawValue: record.fatMode) ?? .off,
-                fiber: record.fiber,
-                fiberMode: GoalLimitMode(rawValue: record.fiberMode) ?? .off,
-                owner: user
-            )
+        let deviceStart = exact ? nil : user.goalTimeline.periods.first?.startDay
+        var insertedGoalIDs: Set<UUID> = []
+        for record in backup.goals {
+            let isBeforeDeviceHistory = deviceStart.map {
+                Calendar.current.logicalDay(
+                    for: record.date,
+                    dayStartMinutes: user.dayStartMinutes
+                ) < $0
+            } ?? true
+            guard !existingGoalIDs.contains(record.id) else {
+                summary.skippedExisting += 1
+                continue
+            }
+            guard isBeforeDeviceHistory else { continue }
+            let goal = UserGoals(record.targets, id: record.id, date: record.date, owner: user)
             context.insert(goal)
-            summary.goals += 1
+            insertedGoalIDs.insert(goal.id)
         }
+
+        if !exact {
+            GoalHistoryStore.normalize(user, in: context)
+        }
+        summary.goals += (user.goalsHistory ?? []).filter {
+            !$0.isDeleted && insertedGoalIDs.contains($0.id)
+        }.count
     }
 
     private func restoreList<Record, Model: PersistentModel>(

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct GoalHistoryRow: View {
     var goals: UserGoals
+    var title: String
     var isCurrent: Bool = false
 
     private struct MacroDisplay: Identifiable {
@@ -69,7 +70,7 @@ struct GoalHistoryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                Text(goals.date.formatted(date: .abbreviated, time: .shortened))
+                Text(title)
                     .font(.sectionTitle)
                     .foregroundStyle(.primary)
 
@@ -130,9 +131,9 @@ struct GoalHistoryRow: View {
     )
 
     return VStack(spacing: 0) {
-        GoalHistoryRow(goals: goals, isCurrent: true)
+        GoalHistoryRow(goals: goals, title: "Since Oct 5", isCurrent: true)
         Divider().padding(.horizontal, 16)
-        GoalHistoryRow(goals: goals)
+        GoalHistoryRow(goals: goals, title: "Until Oct 4")
     }
     .background(Color(white: 0.96))
     .cornerRadius(24)

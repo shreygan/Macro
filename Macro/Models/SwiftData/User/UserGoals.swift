@@ -62,15 +62,6 @@ class UserGoals {
     }
 
     func hasSameTargets(as other: UserGoals) -> Bool {
-        calories == other.calories
-            && calorieMode == other.calorieMode
-            && protein == other.protein
-            && proteinMode == other.proteinMode
-            && carbs == other.carbs
-            && carbsMode == other.carbsMode
-            && fat == other.fat
-            && fatMode == other.fatMode
-            && fiber == other.fiber
-            && fiberMode == other.fiberMode
+        targets == other.targets
     }
 }

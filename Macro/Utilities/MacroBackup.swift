@@ -33,6 +33,8 @@ nonisolated struct MacroBackup: Codable, Sendable {
         var name: String?
         var onboardingComplete: Bool
         var dayStartMinutes: Int
+        var dayCircleMode: String? = nil
+        var dayCircleGoal: String? = nil
     }
 
     struct GoalRecord: Codable, Sendable {
@@ -203,7 +205,9 @@ extension MacroBackup {
                 UserRecord(
                     name: $0.name,
                     onboardingComplete: $0.onboardingComplete,
-                    dayStartMinutes: $0.dayStartMinutes
+                    dayStartMinutes: $0.dayStartMinutes,
+                    dayCircleMode: $0.dayCircleModeRawValue,
+                    dayCircleGoal: $0.dayCircleGoalRawValue
                 )
             },
             goals: (user?.goalsHistory ?? [])
@@ -239,7 +243,7 @@ extension MacroBackup {
     }
 
     @MainActor
-    private static func goalRecord(_ goal: UserGoals) -> GoalRecord {
+    static func goalRecord(_ goal: UserGoals) -> GoalRecord {
         GoalRecord(
             id: goal.id,
             date: goal.date,
