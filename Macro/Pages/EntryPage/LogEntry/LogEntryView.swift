@@ -74,6 +74,8 @@ struct LogEntryView: View {
     @State private var newNote: String
 
     @State private var showingAllNotes: Bool = false
+    @State private var showingAllPhotos: Bool = false
+    @State private var hasPhotoHistory: Bool = false
 
     @State private var selectedPhotos: [LoggedPhoto]
     @State private var isLoadingPhotos = false
@@ -757,7 +759,9 @@ struct LogEntryView: View {
 
                         PhotoPickerCard(
                             images: $selectedPhotos,
-                            isLoading: $isLoadingPhotos
+                            isLoading: $isLoadingPhotos,
+                            onViewAll: hasPhotoHistory
+                                ? { showingAllPhotos = true } : nil
                         )
 
                         Card {
@@ -856,6 +860,7 @@ struct LogEntryView: View {
                             fat: fat,
                             fiber: fiber
                         )
+                        .nameLineLimit(3)
                     }
                     .padding([.leading, .trailing])
                     .padding(.bottom, 24)
@@ -1116,6 +1121,14 @@ struct LogEntryView: View {
         }
         .sheet(isPresented: $showingAllNotes) {
             NotesHistoryView(food: food)
+        }
+        .sheet(isPresented: $showingAllPhotos) {
+            PhotoHistoryView(food: food)
+        }        .task {
+            hasPhotoHistory = FoodItemStore.hasPhotoHistory(
+                for: food,
+                in: modelContext
+            )
         }
     }
 }

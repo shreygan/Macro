@@ -71,6 +71,8 @@ struct LogRecipeView: View {
     @State private var newNote: String
 
     @State private var showingAllNotes: Bool = false
+    @State private var showingAllPhotos: Bool = false
+    @State private var hasPhotoHistory: Bool = false
     @State private var dateAdded: Date
 
     @State private var selectedPhotos: [LoggedPhoto]
@@ -717,7 +719,9 @@ struct LogRecipeView: View {
 
                         PhotoPickerCard(
                             images: $selectedPhotos,
-                            isLoading: $isLoadingPhotos
+                            isLoading: $isLoadingPhotos,
+                            onViewAll: hasPhotoHistory
+                                ? { showingAllPhotos = true } : nil
                         )
 
                         Card {
@@ -905,6 +909,7 @@ struct LogRecipeView: View {
                             fat: EntryHelper.format(displayFat),
                             fiber: EntryHelper.format(displayFiber)
                         )
+                        .nameLineLimit(3)
                     }
                     .padding([.leading, .trailing])
                     .padding(.bottom, 24)
@@ -933,6 +938,14 @@ struct LogRecipeView: View {
             }
             .sheet(isPresented: $showingAllNotes) {
                 NotesHistoryView(food: recipe)
+            }
+            .sheet(isPresented: $showingAllPhotos) {
+                PhotoHistoryView(food: recipe)
+            }            .task {
+                hasPhotoHistory = FoodItemStore.hasPhotoHistory(
+                    for: recipe,
+                    in: modelContext
+                )
             }
             .onChange(of: portionUnitSelection) { oldUnit, newUnit in
                 guard !isResettingPortion, oldUnit != newUnit,

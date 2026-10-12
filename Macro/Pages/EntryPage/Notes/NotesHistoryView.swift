@@ -11,12 +11,25 @@ import SwiftUI
 struct NotesHistoryView: View {
     let food: FoodItem
     var currentEntryID: UUID? = nil
+    var isPushedView: Bool = false
 
     var body: some View {
-        NavigationStack {
-            NotesHistoryContent(food: food, currentEntryID: currentEntryID)
+        if isPushedView {
+            NotesHistoryContent(
+                food: food,
+                currentEntryID: currentEntryID,
+                isPushedView: true
+            )
+        } else {
+            NavigationStack {
+                NotesHistoryContent(
+                    food: food,
+                    currentEntryID: currentEntryID,
+                    isPushedView: false
+                )
+            }
+            .environment(\.tabBarHeight, 0)
         }
-        .environment(\.tabBarHeight, 0)
     }
 }
 
@@ -25,14 +38,16 @@ private struct NotesHistoryContent: View {
 
     let food: FoodItem
     let currentEntryID: UUID?
+    let isPushedView: Bool
 
     @Query private var logs: [LoggedEntry]
 
     @State private var selectedEntry: LoggedEntry? = nil
 
-    init(food: FoodItem, currentEntryID: UUID?) {
+    init(food: FoodItem, currentEntryID: UUID?, isPushedView: Bool) {
         self.food = food
         self.currentEntryID = currentEntryID
+        self.isPushedView = isPushedView
         _logs = Query(FoodItemStore.topLevelLogsDescriptor(for: food))
     }
 
@@ -116,8 +131,8 @@ private struct NotesHistoryContent: View {
                             )
                         }
                     }
-                    .padding(.bottom)
                 }
+                .tabBarScrollInsets()
             }
         }
         .navigationDestination(item: $selectedEntry) { entry in
@@ -127,12 +142,14 @@ private struct NotesHistoryContent: View {
         .navigationSubtitle(food.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .foregroundStyle(.primary)
+            if !isPushedView {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .foregroundStyle(.primary)
+                    }
                 }
             }
         }
