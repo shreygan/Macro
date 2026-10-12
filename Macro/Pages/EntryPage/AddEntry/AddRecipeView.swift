@@ -694,6 +694,7 @@ struct AddRecipeView: View {
                             fat: EntryHelper.format(displayFat),
                             fiber: EntryHelper.format(displayFiber)
                         )
+                        .nameLineLimit(3)
                     }
                     .padding([.leading, .trailing])
                     .padding(.bottom, 24)

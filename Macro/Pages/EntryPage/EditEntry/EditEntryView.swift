@@ -757,6 +757,7 @@ struct EditEntryView: View {
                             by: activeMultiplier
                         )
                     )
+                    .nameLineLimit(3)
                 }
                 .padding([.leading, .trailing])
                 .padding(.bottom, 24)

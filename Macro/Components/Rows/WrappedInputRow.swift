@@ -29,38 +29,33 @@ struct WrappedInputRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if isEditable {
-                TextField(
-                    placeholder,
-                    text: $draft,
-                    selection: $selection,
-                    axis: .vertical
+            TextField(
+                placeholder,
+                text: $draft,
+                selection: $selection,
+                axis: .vertical
+            )
+                .focused($isFocused)
+                .autoFloatingToolbar(
+                    for: keyboardType,
+                    text: $text,
+                    draft: $draft,
+                    selection: $selection
                 )
-                    .focused($isFocused)
-                    .autoFloatingToolbar(
-                        for: keyboardType,
-                        text: $text,
-                        draft: $draft,
-                        selection: $selection
-                    )
-                    .lineLimit(1...10)
-                    .numericKeyboardFilter(text: $draft, type: keyboardType)
-                    .textInputAutocapitalization(.never)
-                    .onChange(of: text) { oldValue, newValue in
-                        if let limit = characterLimit, newValue.count > limit {
-                            text = String(newValue.prefix(limit))
-                        }
+                .lineLimit(isEditable ? 10 : nil)
+                .numericKeyboardFilter(text: $draft, type: keyboardType)
+                .textInputAutocapitalization(.never)
+                .foregroundStyle(
+                    isEditable
+                        ? Color(uiColor: .label)
+                        : Color(uiColor: .secondaryLabel)
+                )
+                .disabled(!isEditable)
+                .onChange(of: text) { oldValue, newValue in
+                    if let limit = characterLimit, newValue.count > limit {
+                        text = String(newValue.prefix(limit))
                     }
-            } else {
-                Text(text.isEmpty ? placeholder : text)
-                    .foregroundColor(
-                        text.isEmpty
-                            ? .tertiaryText
-                            : Color(uiColor: .secondaryLabel)
-                    )
-                    .lineLimit(nil)
-                    .frame(minHeight: 22, alignment: .topLeading)
-            }
+                }
 
             if caption != nil || captionSymbol != nil {
                 HStack(spacing: 4) {

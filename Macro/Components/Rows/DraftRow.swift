@@ -191,7 +191,6 @@ struct DraftRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
                     titleText
-                        .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if let icon = icon {
