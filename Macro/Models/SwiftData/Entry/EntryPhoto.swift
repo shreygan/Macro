@@ -9,7 +9,7 @@ import Foundation
 import SwiftData
 
 @Model
-class EntryPhoto {
+nonisolated class EntryPhoto {
     @Attribute(.externalStorage) var imageData: Data
 
     var scale: Double
