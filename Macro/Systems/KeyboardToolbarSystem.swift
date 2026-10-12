@@ -708,11 +708,15 @@ struct FloatingKeyboardModifier: ViewModifier {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 18, weight: .semibold))
-                            .frame(width: height, height: height)
-                            .contentShape(.circle)
+                            .foregroundStyle(.primary)
+                            .frame(
+                                width: max(0, height - 30),
+                                height: max(0, height - 30)
+                            )
                     }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .circle)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
                 }
 
                 Spacer(minLength: 0)
