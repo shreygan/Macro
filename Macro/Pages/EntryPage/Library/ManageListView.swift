@@ -28,7 +28,6 @@ struct ManageListView: View {
     @State private var usageByName: [String: LibraryListUsage] = [:]
     @FocusState private var focusedField: EditingField?
     @State private var scrollPosition = ScrollPosition()
-    @Environment(\.tabBarHeight) private var tabBarHeight
 
     private enum EditingField: Hashable {
         case rename(PersistentIdentifier)
@@ -128,17 +127,10 @@ struct ManageListView: View {
                     }
                     .padding([.top, .horizontal])
                 }
-                .padding(.bottom)
                 .animation(Self.listAnimation, value: items)
             }
             .scrollPosition($scrollPosition)
-            .contentMargins(
-                .bottom,
-                tabBarHeight > 0 ? tabBarHeight + 12 : 0,
-                for: .scrollContent
-            )
-            .contentMargins(.bottom, tabBarHeight, for: .scrollIndicators)
-            .ignoresSafeArea(.container, edges: tabBarHeight > 0 ? .bottom : [])
+            .tabBarScrollInsets(ignoring: .container)
         }
         .withCustomKeyboardToolbar()
         .withGlobalSwipeDismissal()
