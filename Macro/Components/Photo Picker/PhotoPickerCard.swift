@@ -23,6 +23,7 @@ struct PhotoPickerCard: View {
     @Binding var isLoading: Bool
 
     var isEditing: Bool = true
+    var onViewAll: (() -> Void)? = nil
 
     @State private var showCamera = false
     @State private var showPhotoLibrary = false
@@ -32,8 +33,37 @@ struct PhotoPickerCard: View {
     @State private var showAddSlide: Bool = false
     @State private var isEmptyStateLoading: Bool = false
     @State private var loadTask: Task<Void, Never>?
+    @State private var showViewer = false
+
+    @Namespace private var photoNamespace
 
     let maxPhotos = 5
+
+    private var pageCount: Int {
+        images.count + (images.count < maxPhotos && showAddSlide ? 1 : 0)
+    }
+
+    private var pageSelection: Binding<Int?> {
+        Binding(
+            get: { currentTabIndex },
+            set: { currentTabIndex = $0 ?? 0 }
+        )
+    }
+
+    private var currentPhotoID: UUID? {
+        images.indices.contains(currentTabIndex) ? images[currentTabIndex].id : nil
+    }
+
+    private var viewerSelection: Binding<UUID?> {
+        Binding(
+            get: { currentPhotoID },
+            set: { id in
+                if let index = images.firstIndex(where: { $0.id == id }) {
+                    currentTabIndex = index
+                }
+            }
+        )
+    }
 
     private var availableSelectionCount: Int {
         maxPhotos - images.filter({ $0.pickerItem == nil }).count
@@ -49,56 +79,86 @@ struct PhotoPickerCard: View {
                     Color.clear
                         .aspectRatio(1, contentMode: .fit)
                         .overlay(
-                            TabView(selection: $currentTabIndex) {
-                                ForEach(images.indices, id: \.self) { index in
-                                    InteractivePhotoView(photo: $images[index])
-                                        .overlay(alignment: .topTrailing) {
-                                            Button(action: {
-                                                deleteImage(at: index)
-                                            }) {
-                                                Image(systemName: "trash")
-                                                    .font(
-                                                        .system(
-                                                            size: 12,
-                                                            weight: .bold
-                                                        )
-                                                    )
-                                                    .foregroundColor(
-                                                        .red.opacity(0.85)
-                                                    )
-                                                    .frame(
-                                                        width: 30,
-                                                        height: 30
-                                                    )
-                                                    .contentShape(.circle)
-                                            }
-                                            .buttonStyle(.plain)
-                                            .glassEffect(
-                                                .regular.interactive(),
-                                                in: .circle
+                            ScrollView(.horizontal) {
+                                HStack(spacing: 0) {
+                                    ForEach(images.indices, id: \.self) { index in
+                                        InteractivePhotoView(
+                                            photo: $images[index],
+                                            isAdjustable: isEditing,
+                                            onTap: { showViewer = true }
+                                        )
+                                            .matchedTransitionSource(
+                                                id: images[index].id,
+                                                in: photoNamespace
                                             )
-                                            .padding(12)
-                                            .opacity(isEditing ? 1 : 0)
-                                            .scaleEffect(isEditing ? 1 : 0.5)
-                                            .disabled(!isEditing)
-                                        }
-                                        .padding(.horizontal, 5)
-                                        .tag(index)
-                                }
+                                            .overlay(alignment: .topTrailing) {
+                                                Button(action: {
+                                                    deleteImage(at: index)
+                                                }) {
+                                                    Image(systemName: "trash")
+                                                        .font(
+                                                            .system(
+                                                                size: 12,
+                                                                weight: .bold
+                                                            )
+                                                        )
+                                                        .foregroundColor(
+                                                            .red.opacity(0.85)
+                                                        )
+                                                }
+                                                .buttonStyle(PhotoOverlayButtonStyle())
+                                                .padding(5)
+                                                .opacity(isEditing ? 1 : 0)
+                                                .scaleEffect(isEditing ? 1 : 0.5)
+                                                .disabled(!isEditing)
+                                            }
+                                            .padding(.horizontal, 5)
+                                            .containerRelativeFrame([.horizontal, .vertical])
+                                            .id(index)
+                                    }
 
-                                if images.count < maxPhotos && showAddSlide {
-                                    carouselAddSlide
-                                        .padding(.horizontal, 5)
-                                        .tag(images.count)
+                                    if images.count < maxPhotos && showAddSlide {
+                                        carouselAddSlide
+                                            .padding(.horizontal, 5)
+                                            .containerRelativeFrame([.horizontal, .vertical])
+                                            .id(images.count)
+                                    }
                                 }
+                                .scrollTargetLayout()
                             }
-                            .tabViewStyle(.page(indexDisplayMode: .always))
+                            .scrollTargetBehavior(.paging)
+                            .scrollIndicators(.hidden)
+                            .scrollPosition(id: pageSelection)
                             .padding(.horizontal, -5)
                         )
+                        .overlay(alignment: .bottom) {
+                            PageControl(
+                                numberOfPages: pageCount,
+                                currentPage: pageSelection
+                            )
+                            .padding(.bottom, 12)
+                        }
+                        .overlay(alignment: .topLeading) {
+                            if let onViewAll {
+                                Button(action: onViewAll) {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                        .font(.buttonIcon)
+                                        .foregroundStyle(.primary)
+                                }
+                                .buttonStyle(PhotoOverlayButtonStyle())
+                                .padding(5)
+                                .accessibilityLabel("View All Photos")
+                            }
+                        }
                         .clipped()
                 }
                 .padding()
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .transition(
+                    .asymmetric(
+                        insertion: .scale(scale: 0.95),
+                        removal: .opacity.combined(with: .scale(scale: 0.95))
+                    )
+                )
             }
         }
         .animation(
@@ -233,34 +293,53 @@ struct PhotoPickerCard: View {
             }
             .ignoresSafeArea()
         }
+        .fullScreenCover(isPresented: $showViewer) {
+            LoggedPhotoViewer(photos: images, selection: viewerSelection)
+                .navigationTransition(
+                    .zoom(sourceID: currentPhotoID, in: photoNamespace)
+                )
+        }
     }
 
     @ViewBuilder
     private var emptyStateMenu: some View {
         GlassEffectContainer(spacing: 10) {
-            Menu {
-                photoMenuOptions
-            } label: {
-                ZStack {
-                    if isEmptyStateLoading {
-                        HStack(spacing: 10) {
-                            ProgressView()
-                            Text("Loading Photos...")
-                                .foregroundStyle(.secondary)
-                        }
-                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                    } else {
-                        Label("Add Photos", systemImage: "camera")
+            HStack(spacing: 10) {
+                Menu {
+                    photoMenuOptions
+                } label: {
+                    ZStack {
+                        if isEmptyStateLoading {
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                Text("Loading Photos...")
+                                    .foregroundStyle(.secondary)
+                            }
                             .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        } else {
+                            Label("Add Photos", systemImage: "camera")
+                                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        }
                     }
+                    .font(.prominentButton)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 24)
+                    .animation(.snappy, value: isEmptyStateLoading)
                 }
-                .font(.prominentButton)
-                .frame(maxWidth: .infinity)
-                .frame(height: 24)
-                .animation(.snappy, value: isEmptyStateLoading)
+                .buttonStyle(.glass)
+                .allowsHitTesting(!isEmptyStateLoading)
+
+                if let onViewAll {
+                    Button(action: onViewAll) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.prominentButton)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .accessibilityLabel("View All Photos")
+                }
             }
-            .buttonStyle(.glass)
-            .allowsHitTesting(!isEmptyStateLoading)
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)
@@ -324,6 +403,69 @@ struct PhotoPickerCard: View {
 
             if currentTabIndex >= images.count {
                 currentTabIndex = max(0, images.count - 1)
+            }
+        }
+    }
+}
+
+private struct PhotoOverlayButtonStyle: ButtonStyle {
+    private let size: CGFloat = 30
+    private let tapInset: CGFloat = 7
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: size, height: size)
+            .glassEffect(.regular.interactive(), in: .circle)
+            .padding(tapInset)
+            .contentShape(.circle)
+    }
+}
+
+private struct PageControl: UIViewRepresentable {
+    let numberOfPages: Int
+    @Binding var currentPage: Int?
+
+    func makeUIView(context: Context) -> UIPageControl {
+        let control = UIPageControl()
+        control.currentPageIndicatorTintColor = .white
+        control.pageIndicatorTintColor = .white.withAlphaComponent(0.4)
+        control.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.pageChanged(_:)),
+            for: .valueChanged
+        )
+        return control
+    }
+
+    func updateUIView(_ control: UIPageControl, context: Context) {
+        context.coordinator.parent = self
+        control.numberOfPages = numberOfPages
+        control.currentPage = currentPage ?? 0
+    }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        uiView: UIPageControl,
+        context: Context
+    ) -> CGSize? {
+        uiView.numberOfPages = numberOfPages
+        return uiView.intrinsicContentSize
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    final class Coordinator: NSObject {
+        var parent: PageControl
+
+        init(parent: PageControl) {
+            self.parent = parent
+        }
+
+        @objc func pageChanged(_ control: UIPageControl) {
+            withAnimation {
+                parent.currentPage = control.currentPage
             }
         }
     }
