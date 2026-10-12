@@ -22,6 +22,7 @@ struct MealRow<Content: View>: View {
     var action: (() -> Void)?
     var isSelected: Bool?
     var tag: LocalizedStringKey?
+    var nameLineLimit: Int?
 
     let content: Content
 
@@ -157,7 +158,7 @@ struct MealRow<Content: View>: View {
                         Text(name)
                             .font(.compactTitle)
                             .foregroundColor(.primary)
-                            .lineLimit(2)
+                            .lineLimit(nameLineLimit)
                             .fixedSize(horizontal: false, vertical: true)
 
                         if let icon = icon {
@@ -319,6 +320,12 @@ struct MealRow<Content: View>: View {
     func nameTag(_ tag: LocalizedStringKey?) -> Self {
         var row = self
         row.tag = tag
+        return row
+    }
+
+    func nameLineLimit(_ limit: Int?) -> Self {
+        var row = self
+        row.nameLineLimit = limit
         return row
     }
 }

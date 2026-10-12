@@ -76,7 +76,6 @@ struct LibraryView<Header: View>: View {
 
     @State private var selectedChip: LibraryChip = .all
     @State private var listToManage: LibraryListKind? = nil
-    @Environment(\.tabBarHeight) private var tabBarHeight
 
     @State private var foodToLog: FoodItem? = nil
 
@@ -337,16 +336,10 @@ struct LibraryView<Header: View>: View {
                                 food.favoriteEntry != nil
                             }
                         )
-                        .padding([.horizontal, .bottom])
+                        .padding(.horizontal)
                     }
                 }
-                .contentMargins(
-                    .bottom,
-                    tabBarHeight > 0 ? tabBarHeight + 12 : 0,
-                    for: .scrollContent
-                )
-                .contentMargins(.bottom, tabBarHeight, for: .scrollIndicators)
-                .ignoresSafeArea(edges: tabBarHeight > 0 ? .bottom : [])
+                .tabBarScrollInsets()
                 .id(selectedChip)
                 .transition(.opacity)
                 .zIndex(2)

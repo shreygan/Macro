@@ -17,9 +17,11 @@ struct LoggedEntryDetailView: View {
     var isPushedView: Bool = true
     var isReadOnly: Bool = false
     var showsLibraryLink: Bool = true
+    private let dismissesAfterEditing: Bool
 
     @State private var isEditing: Bool = false
     @State private var foodToLogAgain: FoodItem? = nil
+    @State private var popAfterLogAgain = false
     @State private var showAddToLibrary = false
     @State private var foodToView: FoodItem? = nil
     @State private var isDismissing = false
@@ -55,6 +57,8 @@ struct LoggedEntryDetailView: View {
     @State private var stickyNote: String
     @State private var pinnedNoteText: String
     @State private var showingAllNotes: Bool = false
+    @State private var showingAllPhotos: Bool = false
+    @State private var hasPhotoHistory: Bool = false
 
     @State private var selectedPhotos: [LoggedPhoto] = []
     @State private var isLoadingPhotos = false
@@ -84,12 +88,15 @@ struct LoggedEntryDetailView: View {
         entry: LoggedEntry,
         isPushedView: Bool = true,
         isReadOnly: Bool = false,
-        showsLibraryLink: Bool = true
+        showsLibraryLink: Bool = true,
+        startsEditing: Bool = false
     ) {
         self.entry = entry
         self.isPushedView = isPushedView
         self.isReadOnly = isReadOnly
         self.showsLibraryLink = showsLibraryLink
+        self.dismissesAfterEditing = startsEditing && !isReadOnly
+        _isEditing = State(initialValue: dismissesAfterEditing)
 
         _name = State(initialValue: entry.name)
         _sourceSelection = State(initialValue: entry.source?.source ?? "")
@@ -123,7 +130,6 @@ struct LoggedEntryDetailView: View {
         _selectedPhotos = State(
             initialValue: EntryHelper.loggedPhotos(from: entry.photos)
         )
-
         _draftIngredients = State(
             initialValue: LogRecipeIngredient.makeDrafts(for: entry)
         )
@@ -334,7 +340,9 @@ struct LoggedEntryDetailView: View {
                         PhotoPickerCard(
                             images: $selectedPhotos,
                             isLoading: $isLoadingPhotos,
-                            isEditing: isEditing
+                            isEditing: isEditing,
+                            onViewAll: hasPhotoHistory && !isReadOnly
+                                ? { showingAllPhotos = true } : nil
                         )
                     }
 
@@ -435,10 +443,9 @@ struct LoggedEntryDetailView: View {
                         }
                     }
                     .padding([.top, .horizontal])
-
-                    Spacer()
                 }
             }
+            .tabBarScrollInsets(ignoring: .container)
             .safeAreaBar(edge: .top) {
                 Card {
                     MealRow(
@@ -457,6 +464,7 @@ struct LoggedEntryDetailView: View {
                         fat: fat,
                         fiber: fiber
                     )
+                    .nameLineLimit(3)
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 24)
@@ -474,12 +482,40 @@ struct LoggedEntryDetailView: View {
                 )
             }
         }
-        .sheet(isPresented: $showingAllNotes) {
+        .navigationDestination(isPresented: $showingAllNotes) {
             if let food = entry.originalFoodItem {
-                NotesHistoryView(food: food, currentEntryID: entry.id)
+                NotesHistoryView(
+                    food: food,
+                    currentEntryID: entry.id,
+                    isPushedView: true
+                )
             }
         }
-        .sheet(item: $foodToLogAgain) { foodToLog in
+        .navigationDestination(isPresented: $showingAllPhotos) {
+            if let food = entry.originalFoodItem {
+                PhotoHistoryView(
+                    food: food,
+                    currentEntryID: entry.id,
+                    isPushedView: true
+                )
+            }
+        }
+        .task(id: entry.originalFoodItem?.id) {
+            guard let food = entry.originalFoodItem else {
+                hasPhotoHistory = false
+                return
+            }
+            hasPhotoHistory = FoodItemStore.hasPhotoHistory(
+                for: food,
+                excluding: entry.id,
+                in: modelContext
+            )
+        }
+        .sheet(item: $foodToLogAgain, onDismiss: {
+            guard popAfterLogAgain else { return }
+            popAfterLogAgain = false
+            dismiss()
+        }) { foodToLog in
             NavigationStack {
                 if foodToLog.type == .recipe {
                     LogRecipeView(
@@ -487,14 +523,14 @@ struct LoggedEntryDetailView: View {
                         previousEntry: entry,
                         isPushedView: false
                     )
-                    .environment(\.rootDismiss) { dismiss() }
+                    .environment(\.rootDismiss) { finishLogAgain() }
                 } else {
                     LogEntryView(
                         food: foodToLog,
                         previousEntry: entry,
                         isPushedView: false
                     )
-                    .environment(\.rootDismiss) { dismiss() }
+                    .environment(\.rootDismiss) { finishLogAgain() }
                 }
             }
         }
@@ -520,8 +556,13 @@ struct LoggedEntryDetailView: View {
             }
             .environment(\.tabBarHeight, 0)
         }
-        .navigationTitle(name.isEmpty ? "Unnamed Entry" : name)
+        .navigationTitle(
+            entry.entryType.map {
+                String(localized: "Logged \($0.rawValue.capitalized)")
+            } ?? String(localized: "Logged Entry")
+        )
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(isEditing)
         .toolbar {
             if !isEditing && !isReadOnly {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -537,6 +578,10 @@ struct LoggedEntryDetailView: View {
                 if isEditing {
                     Button {
                         UIApplication.shared.dismissKeyboard()
+                        if dismissesAfterEditing {
+                            if saveChanges() { dismiss() }
+                            return
+                        }
                         withAnimation {
                             if saveChanges() {
                                 isEditing = false
@@ -599,6 +644,10 @@ struct LoggedEntryDetailView: View {
                 if isEditing {
                     Button {
                         UIApplication.shared.dismissKeyboard()
+                        if dismissesAfterEditing {
+                            dismiss()
+                            return
+                        }
                         withAnimation {
                             discardChanges()
                             isEditing = false
@@ -904,6 +953,15 @@ struct LoggedEntryDetailView: View {
         }
         dismiss()
         toastCenter?.show(.entryDeleted(snapshot, in: modelContext, presenter: toastCenter))
+    }
+
+    private func finishLogAgain() {
+        if isPushedView {
+            popAfterLogAgain = true
+            foodToLogAgain = nil
+        } else {
+            dismiss()
+        }
     }
 
     private func linkToLibrary(_ food: FoodItem) {

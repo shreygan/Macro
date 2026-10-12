@@ -10,6 +10,8 @@ import UIKit
 
 struct InteractivePhotoView: View {
     @Binding var photo: LoggedPhoto
+    var isAdjustable: Bool = true
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
         GeometryReader { geometry in
@@ -24,13 +26,17 @@ struct InteractivePhotoView: View {
                 )
                 .clipped()
                 .overlay(
-                    TwoFingerGestureOverlay { scaleDelta, translationDelta in
-                        applyGestures(
-                            scaleDelta: scaleDelta,
-                            translationDelta: translationDelta,
-                            size: geometry.size
-                        )
-                    }
+                    TwoFingerGestureOverlay(
+                        isEnabled: isAdjustable,
+                        onGesture: { scaleDelta, translationDelta in
+                            applyGestures(
+                                scaleDelta: scaleDelta,
+                                translationDelta: translationDelta,
+                                size: geometry.size
+                            )
+                        },
+                        onTap: onTap
+                    )
                 )
         }
         .aspectRatio(1, contentMode: .fit)
@@ -71,7 +77,9 @@ struct InteractivePhotoView: View {
 }
 
 struct TwoFingerGestureOverlay: UIViewRepresentable {
+    var isEnabled: Bool = true
     var onGesture: (CGFloat, CGSize) -> Void
+    var onTap: (() -> Void)? = nil
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
@@ -92,13 +100,25 @@ struct TwoFingerGestureOverlay: UIViewRepresentable {
         pinch.delegate = context.coordinator
         pan.delegate = context.coordinator
 
+        let tap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleTap)
+        )
+
         view.addGestureRecognizer(pinch)
         view.addGestureRecognizer(pan)
+        view.addGestureRecognizer(tap)
 
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.onGesture = onGesture
+        context.coordinator.onTap = onTap
+        uiView.gestureRecognizers?
+            .filter { $0 is UIPinchGestureRecognizer || $0 is UIPanGestureRecognizer }
+            .forEach { $0.isEnabled = isEnabled }
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onGesture: onGesture)
@@ -106,6 +126,7 @@ struct TwoFingerGestureOverlay: UIViewRepresentable {
 
     class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var onGesture: (CGFloat, CGSize) -> Void
+        var onTap: (() -> Void)?
 
         init(onGesture: @escaping (CGFloat, CGSize) -> Void) {
             self.onGesture = onGesture
@@ -115,6 +136,10 @@ struct TwoFingerGestureOverlay: UIViewRepresentable {
             let scaleDelta = gesture.scale
             gesture.scale = 1.0
             onGesture(scaleDelta, .zero)
+        }
+
+        @objc func handleTap() {
+            onTap?()
         }
 
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {

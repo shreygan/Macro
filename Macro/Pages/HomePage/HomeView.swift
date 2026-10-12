@@ -27,6 +27,7 @@ struct HomeView: View {
     @State private var foodToView: FoodItem? = nil
 
     @State private var clickedEntry: LoggedEntry? = nil
+    @State private var entryToEdit: LoggedEntry? = nil
 
     @State private var clickedDraft: EntryDraft? = nil
 
@@ -117,7 +118,11 @@ struct HomeView: View {
         if dayCircleMode != .off {
             if let score {
                 if score.allHit {
-                    parts.append(String(localized: "All goals hit"))
+                    parts.append(
+                        isDraftDay
+                            ? String(localized: "All goals hit, pending drafts")
+                            : String(localized: "All goals hit")
+                    )
                 } else if !score.isScored {
                     parts.append(String(localized: "Logged"))
                 } else {
@@ -134,7 +139,8 @@ struct HomeView: View {
                 parts.append(String(localized: "Nothing logged"))
             }
         }
-        if isDraftDay {
+        let isPendingStar = dayCircleMode != .off && score?.allHit == true
+        if isDraftDay && !isPendingStar {
             parts.append(String(localized: "Has drafts"))
         }
         return parts.joined(separator: ", ")
@@ -192,7 +198,13 @@ struct HomeView: View {
     }
 
     private func currDate(for date: Date) -> String {
-        return date.formatted(.dateTime.weekday(.wide).month(.wide).day())
+        let format = Date.FormatStyle.dateTime.weekday(.wide).month(.wide).day()
+        let sameYear = Calendar.current.isDate(
+            date,
+            equalTo: .now,
+            toGranularity: .year
+        )
+        return date.formatted(sameYear ? format : format.year())
     }
 
     private var currentWeekDates: [Date] {
@@ -349,7 +361,7 @@ struct HomeView: View {
                                     }
 
                                     Button {
-                                        clickedEntry = entry
+                                        entryToEdit = entry
                                     } label: {
                                         Label(
                                             "Edit Entry",
@@ -522,7 +534,7 @@ struct HomeView: View {
                                                     )
                                                 )
                                                 .overlay(alignment: .bottom) {
-                                                    draftDot(isVisible: isDraftDay)
+                                                    DraftDot(isVisible: isDraftDay)
                                                 }
                                             }
                                             .frame(minWidth: 44)
@@ -548,10 +560,10 @@ struct HomeView: View {
                                                     )
                                                 )
 
-                                                DayProgressCircle(score: scores[date])
-                                                    .overlay(alignment: .bottom) {
-                                                        draftDot(isVisible: isDraftDay)
-                                                    }
+                                                DayProgressCircle(
+                                                    score: scores[date],
+                                                    hasDrafts: isDraftDay
+                                                )
                                             }
                                         }
                                     }
@@ -563,11 +575,7 @@ struct HomeView: View {
                                         navigateToDate(to: date)
                                     }
                                     .accessibilityElement(children: .ignore)
-                                    .accessibilityLabel(
-                                        date.formatted(
-                                            .dateTime.weekday(.wide).month(.wide).day()
-                                        )
-                                    )
+                                    .accessibilityLabel(currDate(for: date))
                                     .accessibilityValue(
                                         dayAccessibilityValue(
                                             score: scores[date],
@@ -748,6 +756,17 @@ struct HomeView: View {
                 NavigationStack {
                     LoggedEntryDetailView(entry: entry, isPushedView: false)
                 }
+                .environment(\.tabBarHeight, 0)
+            }
+            .sheet(item: $entryToEdit) { entry in
+                NavigationStack {
+                    LoggedEntryDetailView(
+                        entry: entry,
+                        isPushedView: false,
+                        startsEditing: true
+                    )
+                }
+                .environment(\.tabBarHeight, 0)
             }
             .sheet(item: $clickedDraft) { draft in
                 if draft.isAvailable, let food = draft.foodItem {
@@ -786,6 +805,7 @@ struct HomeView: View {
                 NavigationStack {
                     FoodDetailView(food: food, isPushedView: false)
                 }
+                .environment(\.tabBarHeight, 0)
             }
             .sheet(item: $entryToLogAgain) { previousEntry in
                 NavigationStack {
@@ -806,24 +826,6 @@ struct HomeView: View {
                     }
                 }
             }
-        }
-    }
-}
-
-private func draftDot(isVisible: Bool) -> some View {
-    ZStack {
-        if isVisible {
-            Circle()
-                .fill(Color.white)
-                .overlay(
-                    Circle().strokeBorder(
-                        Color.gray,
-                        lineWidth: 1.5
-                    )
-                )
-                .frame(width: 8, height: 8)
-                .offset(y: 4)
-                .transition(.opacity)
         }
     }
 }

@@ -119,8 +119,10 @@ enum EntryHelper {
             day = "Today"
         } else if calendar.isDateInYesterday(date) {
             day = "Yesterday"
-        } else {
+        } else if calendar.isDate(date, equalTo: .now, toGranularity: .year) {
             day = date.formatted(.dateTime.weekday(.abbreviated).month().day())
+        } else {
+            day = date.formatted(.dateTime.month().day().year())
         }
 
         return "\(day), \(time)"

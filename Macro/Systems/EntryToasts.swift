@@ -32,9 +32,8 @@ extension Toast {
             symbol: "trash",
             tint: .red,
             title: String(localized: "Entry Deleted"),
-            message: String(
-                localized: "\(record.name) · \(EntryHelper.formatMacro(record.calories)) kcal"
-            ),
+            message: record.name,
+            messageDetail: String(localized: "\(EntryHelper.formatMacro(record.calories)) kcal"),
             action: Toast.Action(title: String(localized: "Undo")) { [weak presenter] in
                 do {
                     try withAnimation {
@@ -142,14 +141,17 @@ extension Toast {
             kind: .success,
             symbol: "checkmark",
             title: title,
-            message: String(
-                localized: "\(entry.name) · \(EntryHelper.formatMacro(entry.calories)) kcal"
-            ),
+            message: entry.name,
+            messageDetail: String(localized: "\(EntryHelper.formatMacro(entry.calories)) kcal"),
             action: Toast.Action(title: String(localized: "Edit")) { [weak presenter] in
                 guard !entry.isDeleted, entry.modelContext != nil else { return }
                 presenter?.presentSheet(
                     NavigationStack {
-                        LoggedEntryDetailView(entry: entry, isPushedView: false)
+                        LoggedEntryDetailView(
+                            entry: entry,
+                            isPushedView: false,
+                            startsEditing: true
+                        )
                     }
                     .modelContext(context)
                     .textInputAutocapitalization(.never)

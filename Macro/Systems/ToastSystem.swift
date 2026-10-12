@@ -33,6 +33,7 @@ struct Toast: Identifiable {
     var tint: Color = .accentColor
     var title: String
     var message: String? = nil
+    var messageDetail: String? = nil
     var duration: TimeInterval? = nil
     var action: Action? = nil
     var secondaryAction: Action? = nil
@@ -334,9 +335,16 @@ struct ToastView: View {
                     .foregroundStyle(.primary)
 
                 if let message = toast.message {
-                    Text(message)
-                        .font(.compactValue)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 0) {
+                        Text(message)
+
+                        if let detail = toast.messageDetail {
+                            Text(verbatim: " · \(detail)")
+                                .fixedSize()
+                        }
+                    }
+                    .font(.compactValue)
+                    .foregroundStyle(.secondary)
                 }
             }
             .lineLimit(1)

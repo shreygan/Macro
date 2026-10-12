@@ -13,6 +13,29 @@ extension EnvironmentValues {
     @Entry var tabBarHeight: CGFloat = 0
 }
 
+private struct TabBarScrollInsets: ViewModifier {
+    @Environment(\.tabBarHeight) private var tabBarHeight
+
+    let regions: SafeAreaRegions
+
+    func body(content: Content) -> some View {
+        content
+            .contentMargins(
+                .bottom,
+                tabBarHeight > 0 ? tabBarHeight + 28 : 16,
+                for: .scrollContent
+            )
+            .contentMargins(.bottom, tabBarHeight, for: .scrollIndicators)
+            .ignoresSafeArea(regions, edges: tabBarHeight > 0 ? .bottom : [])
+    }
+}
+
+extension View {
+    func tabBarScrollInsets(ignoring regions: SafeAreaRegions = .all) -> some View {
+        modifier(TabBarScrollInsets(regions: regions))
+    }
+}
+
 struct MainView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.toastCenter) private var toastCenter

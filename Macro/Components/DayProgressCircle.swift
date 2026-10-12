@@ -173,6 +173,7 @@ struct WeekGoalScores<Content: View>: View {
 
 struct DayProgressCircle: View {
     var score: DayGoalScore?
+    var hasDrafts = false
 
     private let size: CGFloat = 40
 
@@ -203,12 +204,39 @@ struct DayProgressCircle: View {
         }
         .overlay {
             if score?.allHit == true {
-                Image(systemName: "star.fill")
+                Image(systemName: hasDrafts ? "star" : "star.fill")
                     .font(.smallIcon)
                     .foregroundStyle(.background)
+                    .contentTransition(.symbolEffect(.replace))
                     .transition(.scale.combined(with: .opacity))
             }
         }
+        .overlay(alignment: .bottom) {
+            DraftDot(isVisible: hasDrafts)
+        }
         .animation(.easeInOut(duration: 0.3), value: score)
+        .animation(.easeInOut(duration: 0.25), value: hasDrafts)
+    }
+}
+
+struct DraftDot: View {
+    let isVisible: Bool
+
+    var body: some View {
+        ZStack {
+            if isVisible {
+                Circle()
+                    .fill(Color.white)
+                    .overlay(
+                        Circle().strokeBorder(
+                            Color.gray,
+                            lineWidth: 1.5
+                        )
+                    )
+                    .frame(width: 8, height: 8)
+                    .offset(y: 4)
+                    .transition(.opacity)
+            }
+        }
     }
 }

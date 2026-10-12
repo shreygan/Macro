@@ -18,12 +18,12 @@ enum DayCircleMode: String, CaseIterable, Codable {
         case .goalProgress:
             String(
                 localized:
-                    "Fills based on how close you got to each goal. Today fills as you approach your limits. A star means you hit every goal."
+                    "Fills based on how close you got to each goal. Today fills as you approach your limits. A star means you hit every goal, and it's outlined if that day still has drafts."
             )
         case .oneGoal:
             String(
                 localized:
-                    "Fills based on how close you got to a single goal you choose. A star means you hit it."
+                    "Fills based on how close you got to a single goal you choose. A star means you hit it, and it's outlined if that day still has drafts."
             )
         case .loggedDays:
             String(localized: "Fills on days you logged anything. No scoring.")

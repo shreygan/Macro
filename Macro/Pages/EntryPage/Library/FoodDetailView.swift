@@ -20,7 +20,6 @@ struct FoodDetailView: View {
 private struct FoodDetailContent: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.tabBarHeight) private var tabBarHeight
     @Environment(\.toastCenter) private var toastCenter
 
     let food: FoodItem
@@ -37,13 +36,22 @@ private struct FoodDetailContent: View {
     @State private var foodToEdit: FoodItem? = nil
     @State private var foodToDelete: FoodItem? = nil
     @State private var showingAllNotes = false
-    @State private var selectedEntry: LoggedEntry? = nil
+    @State private var showingAllPhotos = false
+    @State private var photoFramingWidth: CGFloat = 0
+    @State private var selectedEntry: LogSelection? = nil
     @State private var entryToLogAgain: LoggedEntry? = nil
     @State private var foodToShow: FoodItem? = nil
     @State private var showingAllLogs = false
     @State private var isDismissing = false
+    @State private var headerHeight: CGFloat = 0
+    @State private var pageHeight: CGFloat = 0
 
     private let recentLogLimit = 5
+    private let maxPinnedHeaderFraction: CGFloat = 0.25
+
+    private var isHeaderPinned: Bool {
+        pageHeight == 0 || headerHeight <= pageHeight * maxPinnedHeaderFraction
+    }
 
     init(food: FoodItem, isPushedView: Bool = true) {
         self.food = food
@@ -164,8 +172,13 @@ private struct FoodDetailContent: View {
                     .onAppear { dismissOnce() }
             }
         }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { height in
+            pageHeight = height
+        }
         .withGlobalSwipeDismissal()
-        .navigationTitle(isAvailable ? food.name : "")
+        .navigationTitle(isAvailable ? typeName : "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -201,6 +214,19 @@ private struct FoodDetailContent: View {
         .navigationDestination(isPresented: $showingAllLogs) {
             FoodLogsView(food: food)
         }
+        .navigationDestination(isPresented: $showingAllNotes) {
+            NotesHistoryView(food: food, isPushedView: true)
+        }
+        .navigationDestination(isPresented: $showingAllPhotos) {
+            PhotoHistoryView(food: food, isPushedView: true)
+        }
+        .navigationDestination(item: $selectedEntry) { selection in
+            LoggedEntryDetailView(
+                entry: selection.entry,
+                showsLibraryLink: false,
+                startsEditing: selection.startsEditing
+            )
+        }
         .sheet(item: $foodToLog) { food in
             LogFoodSheet(food: food)
         }
@@ -216,21 +242,8 @@ private struct FoodDetailContent: View {
                 EditEntryView(foodItem: food)
             }
         }
-        .sheet(item: $selectedEntry) { entry in
-            NavigationStack {
-                LoggedEntryDetailView(
-                    entry: entry,
-                    isPushedView: false,
-                    showsLibraryLink: false
-                )
-            }
-            .environment(\.tabBarHeight, 0)
-        }
         .sheet(item: $entryToLogAgain) { entry in
             LogAgainSheet(entry: entry)
-        }
-        .sheet(isPresented: $showingAllNotes) {
-            NotesHistoryView(food: food)
         }
         .deleteFoodAlert(
             food: $foodToDelete,
@@ -241,9 +254,15 @@ private struct FoodDetailContent: View {
     private var content: some View {
         ScrollView {
             VStack {
-                actionStrip
-                    .padding(.horizontal)
-                    .padding(.bottom, 6)
+                VStack(spacing: 24) {
+                    if !isHeaderPinned {
+                        headerCard
+                    }
+
+                    actionStrip
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 6)
 
                 Card("Details") {
                     RowGroup(.divider) {
@@ -326,6 +345,13 @@ private struct FoodDetailContent: View {
                     .padding([.top, .horizontal])
                 }
 
+                FoodPhotosCard(
+                    logs: logs,
+                    framingWidth: photoFramingWidth,
+                    onViewLog: { selectedEntry = LogSelection(entry: $0) },
+                    onShowAll: { showingAllPhotos = true }
+                )
+
                 if food.type == .recipe && !ingredients.isEmpty {
                     Card("Ingredients") {
                         RowGroup(.divider) {
@@ -369,27 +395,36 @@ private struct FoodDetailContent: View {
                         .transition(.opacity)
                 }
             }
-            .padding(.bottom)
             .animation(.easeInOut(duration: 0.25), value: drafts.isEmpty)
             .animation(.easeInOut(duration: 0.25), value: logs.isEmpty)
         }
-        .contentMargins(
-            .bottom,
-            tabBarHeight > 0 ? tabBarHeight + 12 : 0,
-            for: .scrollContent
-        )
-        .contentMargins(.bottom, tabBarHeight, for: .scrollIndicators)
-        .ignoresSafeArea(edges: tabBarHeight > 0 ? .bottom : [])
+        .tabBarScrollInsets()
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            photoFramingWidth = max(0, width - 32)
+        }
         .safeAreaBar(edge: .top) {
-            Card {
-                MealRow(
-                    food: food,
-                    servingUnits: portionUnitOptions,
-                    icon: food.type.appSymbol
-                )
+            if isHeaderPinned {
+                headerCard
+                    .padding(.horizontal)
+                    .padding(.bottom, 24)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
+        }
+    }
+
+    private var headerCard: some View {
+        Card {
+            MealRow(
+                food: food,
+                servingUnits: portionUnitOptions,
+                icon: food.type.appSymbol
+            )
+        }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { height in
+            headerHeight = height
         }
     }
 
@@ -457,7 +492,10 @@ private struct FoodDetailContent: View {
             LogHistoryList(
                 logs: Array(logs.prefix(recentLogLimit)),
                 servingUnits: portionUnitOptions,
-                onSelect: { selectedEntry = $0 },
+                onSelect: { selectedEntry = LogSelection(entry: $0) },
+                onEdit: {
+                    selectedEntry = LogSelection(entry: $0, startsEditing: true)
+                },
                 onLogAgain: { entryToLogAgain = $0 },
                 onDelete: deleteEntry
             )
@@ -499,7 +537,7 @@ private struct FoodDetailContent: View {
     private func statColumn(value: String, label: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .font(.statValue)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -605,6 +643,114 @@ private struct FoodDetailContent: View {
     }
 }
 
+private struct LogSelection: Hashable {
+    let entry: LoggedEntry
+    var startsEditing = false
+}
+
+private struct FoodPhotosCard: View {
+    let logs: [LoggedEntry]
+    let framingWidth: CGFloat
+    var onViewLog: (LoggedEntry) -> Void
+    var onShowAll: () -> Void
+
+    @State private var viewerPhoto: EntryPhoto? = nil
+    @State private var viewerSelection: PersistentIdentifier? = nil
+
+    @Namespace private var photoNamespace
+
+    private let recentPhotoLimit = 10
+
+    var body: some View {
+        let items = PhotoLog.logs(from: logs).flatMap { log in
+            log.photos.map { PhotoViewerItem(photo: $0, entry: log.entry) }
+        }
+
+        if !items.isEmpty {
+            card(items)
+                .padding([.top, .horizontal])
+                .fullScreenCover(item: $viewerPhoto) { photo in
+                    PhotoViewer(items: items, selection: $viewerSelection)
+                        .navigationTransition(
+                            .zoom(
+                                sourceID: viewerSelection ?? photo.persistentModelID,
+                                in: photoNamespace
+                            )
+                        )
+                }
+        }
+    }
+
+    private func card(_ items: [PhotoViewerItem]) -> some View {
+        let recentPhotos = items.prefix(recentPhotoLimit)
+
+        return Card("Photos") {
+            RowGroup(.divider) {
+                ScrollView(.horizontal) {
+                    LazyHStack(spacing: 8) {
+                        ForEach(Array(recentPhotos)) { item in
+                            Button {
+                                viewerSelection = item.id
+                                viewerPhoto = item.photo
+                            } label: {
+                                EntryPhotoImage(
+                                    photo: item.photo,
+                                    framingWidth: framingWidth
+                                )
+                                .frame(width: 72, height: 72)
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: 12,
+                                        style: .continuous
+                                    )
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .contentShape(
+                                .contextMenuPreview,
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            )
+                            .contextMenu {
+                                Button {
+                                    onViewLog(item.entry)
+                                } label: {
+                                    Label("View Log", systemImage: "list.bullet.rectangle")
+                                }
+                            }
+                            .matchedTransitionSource(id: item.id, in: photoNamespace)
+                            .accessibilityLabel(
+                                "Photo from \(EntryHelper.logDateText(item.entry.timestamp))"
+                            )
+                        }
+                    }
+                }
+                .contentMargins(.horizontal, 16, for: .scrollContent)
+                .scrollIndicators(.hidden)
+                .frame(height: 72)
+                .padding(.vertical, 12)
+
+                Button {
+                    onShowAll()
+                } label: {
+                    BaseRowLayout(title: "All Photos") {
+                        HStack(spacing: 8) {
+                            Text(items.count.formatted())
+                                .font(.rowValue)
+                                .foregroundStyle(.secondary)
+
+                            Image(systemName: "chevron.right")
+                                .font(.chevron)
+                                .foregroundStyle(Color.tertiaryText)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
 private struct FoodLogsView: View {
     let food: FoodItem
 
@@ -615,14 +761,13 @@ private struct FoodLogsView: View {
 
 private struct FoodLogsContent: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.tabBarHeight) private var tabBarHeight
     @Environment(\.toastCenter) private var toastCenter
 
     @Query private var logs: [LoggedEntry]
     @Query(sort: \ServingSizeUnit.displayOrder) private var portionUnitOptions:
         [ServingSizeUnit]
 
-    @State private var selectedEntry: LoggedEntry? = nil
+    @State private var selectedEntry: LogSelection? = nil
     @State private var entryToLogAgain: LoggedEntry? = nil
 
     init(food: FoodItem) {
@@ -672,7 +817,13 @@ private struct FoodLogsContent: View {
                             LogHistoryList(
                                 logs: month.logs,
                                 servingUnits: portionUnitOptions,
-                                onSelect: { selectedEntry = $0 },
+                                onSelect: { selectedEntry = LogSelection(entry: $0) },
+                                onEdit: {
+                                    selectedEntry = LogSelection(
+                                        entry: $0,
+                                        startsEditing: true
+                                    )
+                                },
                                 onLogAgain: { entryToLogAgain = $0 },
                                 onDelete: deleteEntry
                             )
@@ -682,29 +833,19 @@ private struct FoodLogsContent: View {
                         .transition(.opacity)
                     }
                 }
-                .padding(.bottom)
                 .animation(.easeInOut(duration: 0.25), value: months.map(\.id))
             }
-            .contentMargins(
-                .bottom,
-                tabBarHeight > 0 ? tabBarHeight + 12 : 0,
-                for: .scrollContent
-            )
-            .contentMargins(.bottom, tabBarHeight, for: .scrollIndicators)
-            .ignoresSafeArea(edges: tabBarHeight > 0 ? .bottom : [])
+            .tabBarScrollInsets()
         }
         .withGlobalSwipeDismissal()
         .navigationTitle("All Logs")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $selectedEntry) { entry in
-            NavigationStack {
-                LoggedEntryDetailView(
-                    entry: entry,
-                    isPushedView: false,
-                    showsLibraryLink: false
-                )
-            }
-            .environment(\.tabBarHeight, 0)
+        .navigationDestination(item: $selectedEntry) { selection in
+            LoggedEntryDetailView(
+                entry: selection.entry,
+                showsLibraryLink: false,
+                startsEditing: selection.startsEditing
+            )
         }
         .sheet(item: $entryToLogAgain) { entry in
             LogAgainSheet(entry: entry)
@@ -716,6 +857,7 @@ private struct LogHistoryList: View {
     let logs: [LoggedEntry]
     let servingUnits: [ServingSizeUnit]
     var onSelect: (LoggedEntry) -> Void
+    var onEdit: (LoggedEntry) -> Void
     var onLogAgain: (LoggedEntry) -> Void
     var onDelete: (LoggedEntry) -> Void
 
@@ -737,7 +879,7 @@ private struct LogHistoryList: View {
                     }
 
                     Button {
-                        onSelect(entry)
+                        onEdit(entry)
                     } label: {
                         Label("Edit Entry", systemImage: "pencil")
                     }

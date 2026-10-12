@@ -170,8 +170,10 @@ struct DayCirclesView: View {
                     .frame(maxWidth: .infinity)
                     .transition(.opacity)
             } else {
+                let pendingIndex = sampleScores.lastIndex { $0?.allHit == true }
+
                 ForEach(Array(sampleScores.enumerated()), id: \.offset) { index, score in
-                    DayProgressCircle(score: score)
+                    DayProgressCircle(score: score, hasDrafts: index == pendingIndex)
 
                     if index < sampleScores.count - 1 {
                         Spacer(minLength: 0)
