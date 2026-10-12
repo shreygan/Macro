@@ -82,6 +82,29 @@ enum FoodItemStore {
         )
     }
 
+    static func hasPhotoHistory(
+        for food: FoodItem,
+        excluding entryID: UUID? = nil,
+        in context: ModelContext
+    ) -> Bool {
+        let foodID = food.id
+        let predicate: Predicate<EntryPhoto>
+        if let entryID {
+            predicate = #Predicate {
+                $0.parentEntry?.originalFoodItem?.id == foodID
+                    && $0.parentEntry?.parentEntry == nil
+                    && $0.parentEntry?.id != entryID
+            }
+        } else {
+            predicate = #Predicate {
+                $0.parentEntry?.originalFoodItem?.id == foodID
+                    && $0.parentEntry?.parentEntry == nil
+            }
+        }
+        let count = (try? context.fetchCount(FetchDescriptor(predicate: predicate))) ?? 0
+        return count > 0
+    }
+
     static func recipeIngredients(
         using food: FoodItem,
         in context: ModelContext
