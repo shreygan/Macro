@@ -20,6 +20,8 @@ extension Font {
 
     static let rowValue = Font.system(size: FontSize.row)
 
+    static let statValue = Font.system(size: FontSize.row, weight: .semibold, design: .rounded)
+
     static let compactTitle = Font.system(size: 14, weight: .medium)
 
     static let compactValue = Font.system(size: 14)
