@@ -76,6 +76,7 @@ struct LibraryView<Header: View>: View {
 
     @State private var selectedChip: LibraryChip = .all
     @State private var listToManage: LibraryListKind? = nil
+    @State private var isManagingSavedLocations = false
 
     @State private var foodToLog: FoodItem? = nil
 
@@ -376,6 +377,9 @@ struct LibraryView<Header: View>: View {
         .navigationDestination(item: $listToManage) { kind in
             ManageListView(kind: kind)
         }
+        .navigationDestination(isPresented: $isManagingSavedLocations) {
+            ManageSavedLocationsView()
+        }
         .onAppear {
             var transaction = Transaction()
             transaction.disablesAnimations = true
@@ -397,6 +401,7 @@ struct LibraryView<Header: View>: View {
         .onChange(of: popToRootTrigger) {
             selectedFood = nil
             listToManage = nil
+            isManagingSavedLocations = false
         }
         .onChange(of: sourceOptions.map(\.source)) { _, names in
             selectedSources.formIntersection(names)
@@ -703,6 +708,12 @@ struct LibraryView<Header: View>: View {
                 } label: {
                     Label("Edit \(kind.title)", systemImage: kind.symbol)
                 }
+            }
+
+            Button {
+                isManagingSavedLocations = true
+            } label: {
+                Label("Edit Locations", systemImage: AppSymbols.location.rawValue)
             }
         } label: {
             Image(systemName: "ellipsis")
