@@ -18,7 +18,7 @@ struct LogHistoryRow: View {
         return category
     }
 
-    private var subtitle: String {
+    private var subtitle: Text {
         var parts = [
             EntryHelper.portionText(
                 quantity: entry.loggedQuantity,
@@ -33,11 +33,7 @@ struct LogHistoryRow: View {
             parts.insert(source, at: 0)
         }
 
-        if let location = entry.location, !location.isEmpty {
-            parts.append(location)
-        }
-
-        return parts.joined(separator: " · ")
+        return Text.detailLine(parts, location: entry.locationName) ?? Text("")
     }
 
     private var hasNote: Bool {
@@ -65,7 +61,7 @@ struct LogHistoryRow: View {
                 titleText
                     .lineLimit(1)
 
-                Text(subtitle)
+                subtitle
                     .font(.subtitle)
                     .foregroundStyle(Color.tertiaryText)
                     .lineLimit(1)
@@ -78,18 +74,7 @@ struct LogHistoryRow: View {
 
             Spacer(minLength: 0)
 
-            if hasNote || hasPhotos {
-                HStack(spacing: 6) {
-                    if hasNote {
-                        Image(systemName: "note.text")
-                    }
-                    if hasPhotos {
-                        Image(systemName: "photo")
-                    }
-                }
-                .font(.detail)
-                .foregroundStyle(Color.tertiaryText)
-            }
+            AttachmentHints(hasNote: hasNote, hasPhotos: hasPhotos)
 
             if action != nil {
                 Image(systemName: "chevron.right")
@@ -144,6 +129,28 @@ struct LogHistoryRow: View {
     }
 }
 
+struct AttachmentHints: View {
+    let hasNote: Bool
+    let hasPhotos: Bool
+
+    var body: some View {
+        if hasNote || hasPhotos {
+            HStack(spacing: 6) {
+                if hasNote {
+                    Image(systemName: "note.text")
+                        .accessibilityLabel("Has Note")
+                }
+                if hasPhotos {
+                    Image(systemName: "photo")
+                        .accessibilityLabel("Has Photos")
+                }
+            }
+            .font(.detail)
+            .foregroundStyle(Color.tertiaryText)
+        }
+    }
+}
+
 #Preview {
     let today = LoggedEntry(
         name: "Brown Rice",
@@ -161,7 +168,7 @@ struct LogHistoryRow: View {
         name: "Brown Rice",
         typeRawValue: "ingredient",
         timestamp: Date().addingTimeInterval(-6 * 86400),
-        location: "Home",
+        location: EntryLocation(name: "Home"),
         loggedQuantity: 1,
         loggedUnit: "serving",
         calories: 216,
