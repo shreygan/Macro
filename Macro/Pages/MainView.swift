@@ -39,6 +39,7 @@ extension View {
 struct MainView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.toastCenter) private var toastCenter
+    @Environment(\.scenePhase) private var scenePhase
 
     enum TabSelection: ProminentTabItem {
         case home, stats, library
@@ -97,6 +98,10 @@ struct MainView: View {
             value: isOnboardingComplete
         )
         .environment(\.eraseAllData, eraseAllData)
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await PendingLocationNamer.run(in: modelContext)
+        }
     }
 
     private var tabContent: some View {
@@ -153,9 +158,15 @@ struct MainView: View {
 
     private func quickLog(_ food: FoodItem) {
         do {
+            let location = QuickLogger.readyLocation(for: food, in: modelContext)
             let entry = try withAnimation {
-                try QuickLogger.log(food, in: modelContext)
+                try QuickLogger.log(food, location: location, in: modelContext)
             }
+            QuickLogger.finishLocation(
+                of: entry,
+                awaitingCurrent: location == nil,
+                in: modelContext
+            )
             if let toastCenter {
                 toastCenter.show(
                     .entryLogged(

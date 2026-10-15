@@ -40,6 +40,7 @@ struct EditEntryView: View {
 
     @State private var name: String
     @State private var source: String
+    @State private var defaultLocation: EntryLocation?
     @State private var category: String
     @State private var foodGroup: String
 
@@ -85,6 +86,7 @@ struct EditEntryView: View {
         _source = State(
             initialValue: draftItem?.source ?? foodItem.source?.source ?? ""
         )
+        _defaultLocation = State(initialValue: foodItem.defaultLocation)
         _category = State(
             initialValue: draftItem?.category ?? foodItem.category?.category
                 ?? ""
@@ -320,6 +322,7 @@ struct EditEntryView: View {
             foodItem.fiber = parseDouble(fiberValue)
             foodItem.isCustomDefaultServing = isCustomDefaultServing
             foodItem.customServingSize = parseOptionalDouble(customServingSize)
+            foodItem.defaultLocation = defaultLocation
             if trimmedNote.isEmpty {
                 foodItem.stickyNote = nil
             } else {
@@ -380,6 +383,7 @@ struct EditEntryView: View {
                 fiber: parseDouble(fiberValue),
                 isCustomDefaultServing: isCustomDefaultServing,
                 customServingSize: parseOptionalDouble(customServingSize),
+                defaultLocation: defaultLocation,
                 stickyNote: resolvedStickyNote
             )
 
@@ -435,6 +439,14 @@ struct EditEntryView: View {
                                 options: savedSources.visibleNames(keeping: source),
                                 selection: $source
                             )
+
+                            if !isImportMode {
+                                DefaultLocationRow(
+                                    location: $defaultLocation,
+                                    sourceName: source,
+                                    foodID: foodItem.id
+                                )
+                            }
 
                             if type == .food {
                                 FullWidthDropdownRow(

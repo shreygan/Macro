@@ -37,7 +37,8 @@ struct LogRecipeView: View {
 
     @State private var date = Date()
     @State private var time = Date()
-    @State private var location: String
+    @State private var locationSelection: LocationSelection
+    private let initialLocationSelection: LocationSelection
 
     @State private var portionQuantity: String
     @State private var portionUnitSelection: String
@@ -224,6 +225,19 @@ struct LogRecipeView: View {
         return calendar.date(from: combinedComponents) ?? Date()
     }
 
+    private func usePhotoTime(_ capturedAt: Date) {
+        withAnimation(.snappy(duration: 0.3)) {
+            date = capturedAt
+            time = capturedAt
+        }
+    }
+
+    private func usePhotoLocation(_ location: EntryLocation) {
+        withAnimation(.snappy(duration: 0.3)) {
+            locationSelection = .place(location)
+        }
+    }
+
     private func parseDouble(_ string: String) -> Double {
         let normalized = string.replacingOccurrences(of: ",", with: ".")
         return Double(normalized) ?? 0.0
@@ -231,6 +245,7 @@ struct LogRecipeView: View {
 
     private func saveEntry() {
         let combinedDate = combineDateAndTime(date: date, time: time)
+        let location = locationSelection.resolvedLocation
 
         let trimmedNote = newNote.trimmingCharacters(
             in: .whitespacesAndNewlines
@@ -297,7 +312,11 @@ struct LogRecipeView: View {
             source: resolvedSource,
             category: resolvedCategory,
             timestamp: combinedDate,
-            location: location.isEmpty ? nil : location,
+            location: location,
+            savedLocation: SavedLocation.find(
+                id: location?.savedLocationID,
+                in: modelContext
+            ),
             loggedQuantity: parseDouble(portionQuantity),
             loggedUnit: portionUnitSelection,
             calories: displayCalories,
@@ -321,6 +340,7 @@ struct LogRecipeView: View {
         mainLog.photos = photoEntities
 
         modelContext.insert(mainLog)
+        RecentLocationStore.record(location, in: modelContext)
 
         for (index, draft) in draftIngredients.enumerated() {
             let baseDraftQuantity = parseDouble(draft.quantity)
@@ -332,7 +352,8 @@ struct LogRecipeView: View {
                 originalFoodItem: draft.ingredientItem,
                 parentEntry: mainLog,
                 timestamp: combinedDate,
-                location: location.isEmpty ? nil : location,
+                location: location,
+                savedLocation: mainLog.savedLocation,
                 loggedQuantity: scaledQuantity,
                 loggedUnit: draft.unit,
                 calories: draft.activeCalories * activeMultiplier,
@@ -410,6 +431,7 @@ struct LogRecipeView: View {
                     fiber: totalBaseFiber,
                     isCustomDefaultServing: recipe.isCustomDefaultServing,
                     customServingSize: recipe.customServingSize,
+                    defaultLocation: recipe.defaultLocation,
                     stickyNote: pinnedNote.map { Note(text: $0) }
                 )
 
@@ -451,6 +473,11 @@ struct LogRecipeView: View {
         do {
             try modelContext.save()
             didFinishLogging = true
+            QuickLogger.finishLocation(
+                of: mainLog,
+                awaitingCurrent: locationSelection.isCurrent && location == nil,
+                in: modelContext
+            )
 
             if let toastCenter {
                 toastCenter.show(
@@ -483,13 +510,15 @@ struct LogRecipeView: View {
     }
 
     private var draftState: LogRecipeDraftState {
-        LogRecipeDraftState(
+        let draftLocation = locationSelection.draftLocation
+        return LogRecipeDraftState(
             name: name,
             sourceSelection: sourceSelection,
             categorySelection: categorySelection,
             date: date,
             time: time,
-            location: location,
+            location: draftLocation.location,
+            usesCurrentLocation: draftLocation.usesCurrentLocation,
             portionQuantity: portionQuantity,
             portionUnitSelection: portionUnitSelection,
             ingredients: draftIngredients.map(DraftIngredientSnapshot.init),
@@ -583,7 +612,12 @@ struct LogRecipeView: View {
             initialValue: previousEntry?.category?.category ?? startCategory
         )
 
-        _location = State(initialValue: previousEntry?.location ?? "TODO")
+        let startingLocation = LocationSelection.defaultForNewLog(
+            food: recipe,
+            repeating: previousEntry
+        )
+        self.initialLocationSelection = startingLocation
+        _locationSelection = State(initialValue: startingLocation)
 
         let startingPortionDouble: Double
         if recipe.isCustomDefaultServing, let custom = recipe.customServingSize
@@ -645,7 +679,12 @@ struct LogRecipeView: View {
 
             _date = State(initialValue: state.date)
             _time = State(initialValue: state.time)
-            _location = State(initialValue: state.location)
+            _locationSelection = State(
+                initialValue: LocationSelection(
+                    state.location,
+                    usesCurrentLocation: state.usesCurrentLocation ?? false
+                )
+            )
 
             _portionQuantity = State(initialValue: state.portionQuantity)
             _portionUnitSelection = State(
@@ -704,7 +743,16 @@ struct LogRecipeView: View {
                                     dateSelection: $date,
                                     timeSelection: $time
                                 )
-                                PillRow(title: "Location", text: $location)
+                                LocationRow(
+                                    selection: $locationSelection,
+                                    food: recipe,
+                                    photos: selectedPhotos,
+                                    logDate: date,
+                                    nearbyName: DefaultLocationResolver.nearbyName(
+                                        for: recipe,
+                                        in: modelContext
+                                    )
+                                )
                             }
                         }
                         .padding([.leading, .trailing])
@@ -721,7 +769,12 @@ struct LogRecipeView: View {
                             images: $selectedPhotos,
                             isLoading: $isLoadingPhotos,
                             onViewAll: hasPhotoHistory
-                                ? { showingAllPhotos = true } : nil
+                                ? { showingAllPhotos = true } : nil,
+                            onUseTime: usePhotoTime,
+                            onUseLocation: usePhotoLocation,
+                            entryDate: date,
+                            entryTime: time,
+                            entryLocation: locationSelection.resolvedLocation
                         )
 
                         Card {
@@ -849,7 +902,7 @@ struct LogRecipeView: View {
                                         portionQuantity = initialPortionQuantity
                                         portionUnitSelection =
                                             initialPortionUnitSelection
-                                        location = "TODO"
+                                        locationSelection = initialLocationSelection
 
                                         stickyNote = originalNoteText
                                         newNote = ""

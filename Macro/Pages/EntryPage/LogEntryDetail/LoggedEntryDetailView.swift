@@ -41,7 +41,7 @@ struct LoggedEntryDetailView: View {
 
     @State private var date: Date
     @State private var time: Date
-    @State private var location: String
+    @State private var locationSelection: LocationSelection
 
     @State private var portionQuantity: String
     @State private var portionUnitSelection: String
@@ -107,7 +107,7 @@ struct LoggedEntryDetailView: View {
 
         _date = State(initialValue: entry.timestamp)
         _time = State(initialValue: entry.timestamp)
-        _location = State(initialValue: entry.location ?? "")
+        _locationSelection = State(initialValue: LocationSelection(entry.location))
 
         _portionQuantity = State(
             initialValue: EntryHelper.format(entry.loggedQuantity)
@@ -319,6 +319,15 @@ struct LoggedEntryDetailView: View {
                                 dateSelection: $date,
                                 timeSelection: $time
                             )
+
+                            LocationRow(
+                                selection: $locationSelection,
+                                food: entry.originalFoodItem,
+                                photos: selectedPhotos,
+                                logDate: date,
+                                isEnabled: isEditing,
+                                promptsForPermission: false
+                            )
                         }
                     }
                     .padding(.horizontal)
@@ -342,7 +351,12 @@ struct LoggedEntryDetailView: View {
                             isLoading: $isLoadingPhotos,
                             isEditing: isEditing,
                             onViewAll: hasPhotoHistory && !isReadOnly
-                                ? { showingAllPhotos = true } : nil
+                                ? { showingAllPhotos = true } : nil,
+                            onUseTime: usePhotoTime,
+                            onUseLocation: usePhotoLocation,
+                            entryDate: date,
+                            entryTime: time,
+                            entryLocation: locationSelection.resolvedLocation
                         )
                     }
 
@@ -717,6 +731,19 @@ struct LoggedEntryDetailView: View {
         }
     }
 
+    private func usePhotoTime(_ capturedAt: Date) {
+        withAnimation(.snappy(duration: 0.3)) {
+            date = capturedAt
+            time = capturedAt
+        }
+    }
+
+    private func usePhotoLocation(_ location: EntryLocation) {
+        withAnimation(.snappy(duration: 0.3)) {
+            locationSelection = .place(location)
+        }
+    }
+
     private func updateMacrosFromMultiplier() {
         if isRecipe {
             // Recipes derive their macros from the logged ingredients rather
@@ -784,7 +811,15 @@ struct LoggedEntryDetailView: View {
                 in: modelContext
             )
         }
-        entry.location = location.isEmpty ? nil : location
+        let newLocation = locationSelection.resolvedLocation
+        let awaitsCurrent = locationSelection.isCurrent && newLocation == nil
+        if !awaitsCurrent, newLocation != entry.location {
+            RecentLocationStore.record(newLocation, in: modelContext)
+            entry.setLocation(newLocation, in: modelContext)
+            for child in entry.childEntries ?? [] {
+                child.setLocation(newLocation, in: modelContext)
+            }
+        }
 
         let trimmedSource = sourceSelection.trimmingCharacters(
             in: .whitespacesAndNewlines
@@ -903,6 +938,7 @@ struct LoggedEntryDetailView: View {
                     originalFoodItem: draft.ingredientItem,
                     timestamp: entry.timestamp,
                     location: entry.location,
+                    savedLocation: entry.savedLocation,
                     loggedQuantity:
                         (Double(
                             draft.quantity.replacingOccurrences(
@@ -923,6 +959,12 @@ struct LoggedEntryDetailView: View {
 
         do {
             try modelContext.save()
+            QuickLogger.finishLocation(
+                of: entry,
+                awaitingCurrent: awaitsCurrent,
+                replacing: entry.storedLocation,
+                in: modelContext
+            )
             return true
         } catch {
             toastCenter?.show(
@@ -989,7 +1031,7 @@ struct LoggedEntryDetailView: View {
 
         date = entry.timestamp
         time = entry.timestamp
-        location = entry.location ?? ""
+        locationSelection = LocationSelection(entry.location)
 
         portionQuantity = EntryHelper.format(entry.loggedQuantity)
         portionUnitSelection = entry.loggedUnit
@@ -1077,7 +1119,7 @@ struct LoggedEntryDetailView: View {
             category: mockCategory,
             foodGroup: nil,
             timestamp: Date(),
-            location: "Home Kitchen",
+            location: EntryLocation(name: "Home Kitchen"),
             loggedQuantity: 1.5,
             loggedUnit: "serving",
             calories: 225.0,

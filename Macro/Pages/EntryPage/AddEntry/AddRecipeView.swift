@@ -26,6 +26,7 @@ struct AddRecipeView: View {
 
     @State private var name: String = ""
     @State private var source: String = ""
+    @State private var defaultLocation: EntryLocation?
     @State private var category: String = ""
 
     @State private var servingSize: String = "1"
@@ -78,6 +79,7 @@ struct AddRecipeView: View {
         } else if let draft, let state = draft.decodeState(AddRecipeDraftState.self) {
             _name = State(initialValue: state.name)
             _source = State(initialValue: state.source)
+            _defaultLocation = State(initialValue: state.defaultLocation)
             _category = State(initialValue: state.category)
             _servingSize = State(initialValue: state.servingSize)
             _servingSizeUnit = State(initialValue: state.servingSizeUnit)
@@ -120,7 +122,8 @@ struct AddRecipeView: View {
             isCustomDefaultServing: isCustomDefaultServing,
             customServingSize: customServingSize,
             ingredients: draftIngredients.map(DraftIngredientSnapshot.init),
-            stickyNote: stickyNote
+            stickyNote: stickyNote,
+            defaultLocation: defaultLocation
         )
     }
 
@@ -360,6 +363,7 @@ struct AddRecipeView: View {
             fiber: totalFiber,
             isCustomDefaultServing: isCustomDefaultServing,
             customServingSize: parseOptionalDouble(customServingSize),
+            defaultLocation: defaultLocation,
             stickyNote: resolvedStickyNote
         )
 
@@ -436,6 +440,11 @@ struct AddRecipeView: View {
                                             && trimmed != "-"
                                     },
                                     selection: $source
+                                )
+
+                                DefaultLocationRow(
+                                    location: $defaultLocation,
+                                    sourceName: source
                                 )
 
                                 FullWidthDropdownRow(
