@@ -28,7 +28,10 @@ class LoggedEntry {
     var foodGroup: FoodGroupSource?
 
     var timestamp: Date
-    var location: String?
+
+    var storedLocation: EntryLocation?
+    var needsLocationName: Bool = false
+    var savedLocation: SavedLocation?
 
     var loggedQuantity: Double
     var loggedUnit: String
@@ -58,7 +61,8 @@ class LoggedEntry {
         category: CategorySource? = nil,
         foodGroup: FoodGroupSource? = nil,
         timestamp: Date = Date(),
-        location: String? = nil,
+        location: EntryLocation? = nil,
+        savedLocation: SavedLocation? = nil,
         loggedQuantity: Double,
         loggedUnit: String,
         calories: Double,
@@ -80,7 +84,9 @@ class LoggedEntry {
         self.category = category
         self.foodGroup = foodGroup
         self.timestamp = timestamp
-        self.location = location
+        self.storedLocation = location
+        self.needsLocationName = location?.needsName ?? false
+        self.savedLocation = savedLocation
         self.loggedQuantity = loggedQuantity
         self.loggedUnit = loggedUnit
         self.calories = calories
@@ -97,5 +103,34 @@ class LoggedEntry {
     var entryType: EntryType? {
         get { EntryType(rawValue: typeRawValue) }
         set { typeRawValue = newValue?.rawValue ?? "" }
+    }
+
+    var location: EntryLocation? {
+        guard var location = storedLocation else { return nil }
+        if let savedLocation {
+            location.name = savedLocation.name
+            location.savedLocationID = savedLocation.id
+        } else {
+            location.savedLocationID = nil
+        }
+        return location
+    }
+
+    var locationName: String? {
+        guard !needsLocationName, let name = location?.name, !name.isEmpty else { return nil }
+        return name
+    }
+
+    func setLocation(_ location: EntryLocation?, in context: ModelContext) {
+        setLocation(
+            location,
+            savedLocation: SavedLocation.find(id: location?.savedLocationID, in: context)
+        )
+    }
+
+    func setLocation(_ location: EntryLocation?, savedLocation: SavedLocation?) {
+        storedLocation = location
+        needsLocationName = location?.needsName ?? false
+        self.savedLocation = savedLocation
     }
 }

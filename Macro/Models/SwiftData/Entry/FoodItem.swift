@@ -35,6 +35,8 @@ class FoodItem {
     var isCustomDefaultServing: Bool
     var customServingSize: Double?
 
+    var defaultLocation: EntryLocation?
+
     var dateAdded: Date
 
     @Relationship(deleteRule: .cascade)
@@ -68,6 +70,7 @@ class FoodItem {
         fiber: Double,
         isCustomDefaultServing: Bool,
         customServingSize: Double? = nil,
+        defaultLocation: EntryLocation? = nil,
         stickyNote: Note? = nil,
         dateAdded: Date = Date()
     ) {
@@ -89,6 +92,7 @@ class FoodItem {
         self.fiber = fiber
         self.isCustomDefaultServing = isCustomDefaultServing
         self.customServingSize = customServingSize
+        self.defaultLocation = defaultLocation
         self.stickyNote = stickyNote
         self.dateAdded = dateAdded
     }

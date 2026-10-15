@@ -21,6 +21,8 @@ struct MacroApp: App {
             FavoriteEntry.self,
             LoggedEntry.self,
             EntryDraft.self,
+            SavedLocation.self,
+            RecentLocation.self,
         ])
 
         let modelConfiguration = ModelConfiguration(
