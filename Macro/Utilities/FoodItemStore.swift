@@ -146,12 +146,12 @@ enum FoodItemStore {
             else { continue }
             if var stats = result[id] {
                 stats.recipeIDs.insert(recipe.id)
-                stats.lastUsed = max(stats.lastUsed, recipe.dateAdded)
+                stats.lastUsed = max(stats.lastUsed, ingredient.dateAdded)
                 result[id] = stats
             } else {
                 result[id] = FoodRecipeStats(
                     recipeIDs: [recipe.id],
-                    lastUsed: recipe.dateAdded
+                    lastUsed: ingredient.dateAdded
                 )
             }
         }

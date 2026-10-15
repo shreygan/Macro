@@ -386,6 +386,9 @@ struct LogRecipeView: View {
                 recipe.servingWeight =
                     calculatedTotalWeight > 0 ? calculatedTotalWeight : nil
 
+                let previousDates = RecipeIngredient.datesByItem(
+                    recipe.recipeIngredients ?? []
+                )
                 if let existingIngredients = recipe.recipeIngredients {
                     for old in existingIngredients {
                         modelContext.delete(old)
@@ -411,6 +414,11 @@ struct LogRecipeView: View {
                     )
                     newIngredient.ingredientItem = draft.ingredientItem
                     newIngredient.parentRecipe = recipe
+                    if let id = draft.ingredientItem?.id,
+                        let date = previousDates[id]
+                    {
+                        newIngredient.dateAdded = date
+                    }
                     modelContext.insert(newIngredient)
                     recipe.recipeIngredients?.append(newIngredient)
                 }

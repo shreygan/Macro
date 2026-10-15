@@ -18,6 +18,7 @@ class RecipeIngredient {
     var quantity: Double
     var unit: String
     var displayOrder: Int
+    var dateAdded: Date = Date.now
 
     // Cached data incase Ingredient deleted
     var name: String
@@ -63,6 +64,15 @@ class RecipeIngredient {
         self.baseCarbs = baseCarbs
         self.baseFat = baseFat
         self.baseFiber = baseFiber
+    }
+
+    static func datesByItem(_ ingredients: [RecipeIngredient]) -> [UUID: Date] {
+        var result: [UUID: Date] = [:]
+        for ingredient in ingredients {
+            guard let id = ingredient.ingredientItem?.id else { continue }
+            result[id] = min(result[id] ?? ingredient.dateAdded, ingredient.dateAdded)
+        }
+        return result
     }
 
     var calories: Double {
