@@ -55,9 +55,9 @@ struct LogFoodSheet: View {
     var body: some View {
         Group {
             if food.type == .recipe {
-                LogRecipeView(recipe: food, draft: draft, isPushedView: false)
+                LogRecipeView(recipe: food, draft: draft)
             } else {
-                LogEntryView(food: food, draft: draft, isPushedView: false)
+                LogEntryView(food: food, draft: draft)
             }
         }
         .environment(\.rootDismiss, nil)
