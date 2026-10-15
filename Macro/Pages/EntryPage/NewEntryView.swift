@@ -8,7 +8,7 @@
 import SwiftData
 import SwiftUI
 
-private struct NewFoodRequest: Identifiable {
+private struct NewFoodRequest: Identifiable, Hashable {
     let id = UUID()
     let name: String
     var source: String = ""
@@ -65,9 +65,9 @@ struct NewEntryView: View {
 
     @State private var searchText = ""
 
-    @State private var showAddIngredientSheet = false
-    @State private var showAddFoodSheet = false
-    @State private var showAddRecipeSheet = false
+    @State private var showAddIngredient = false
+    @State private var showAddFood = false
+    @State private var showAddRecipe = false
     @State private var foodToCreate: NewFoodRequest? = nil
     @State private var foodToLog: FoodItem? = nil
     @State private var recipeToLog: FoodItem? = nil
@@ -206,6 +206,31 @@ struct NewEntryView: View {
         )
     }
 
+    @ViewBuilder
+    private func resumedDraftView(_ draft: EntryDraft) -> some View {
+        if draft.isAvailable {
+            switch draft.kind {
+            case .logFood, .logRecipe:
+                if let food = draft.foodItem {
+                    if draft.kind == .logRecipe {
+                        LogRecipeView(recipe: food, draft: draft, isPushedView: true)
+                    } else {
+                        LogEntryView(food: food, draft: draft, isPushedView: true)
+                    }
+                }
+            case .addRecipe:
+                AddRecipeView(offersLogNow: true, isPushedView: true, draft: draft)
+            case .addFood, nil:
+                AddEntryView(
+                    entryType: draft.entryType ?? .food,
+                    isPushedView: true,
+                    offersLogNow: true,
+                    draft: draft
+                )
+            }
+        }
+    }
+
     private func emptyText(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .font(.compactTitle)
@@ -256,7 +281,7 @@ struct NewEntryView: View {
                                         title: "Add Ingredient",
                                         bottomPadding: 2
                                     ) {
-                                        showAddIngredientSheet = true
+                                        showAddIngredient = true
                                     }
 
                                     ButtonRow(
@@ -264,14 +289,14 @@ struct NewEntryView: View {
                                         title: "Add Food",
                                         bottomPadding: 2
                                     ) {
-                                        showAddFoodSheet = true
+                                        showAddFood = true
                                     }
 
                                     ButtonRow(
                                         icon: .appSymbol(.recipe),
                                         title: "Add Recipe",
                                     ) {
-                                        showAddRecipeSheet = true
+                                        showAddRecipe = true
                                     }
                                 }
                                 .padding([.leading, .trailing])
@@ -427,6 +452,40 @@ struct NewEntryView: View {
                         onDelete: { deleteDraft($0) }
                     )
                 }
+                .navigationDestination(isPresented: $showAddIngredient) {
+                    AddEntryView(
+                        entryType: .ingredient,
+                        isPushedView: true,
+                        offersLogNow: true
+                    )
+                }
+                .navigationDestination(isPresented: $showAddFood) {
+                    AddEntryView(
+                        entryType: .food,
+                        isPushedView: true,
+                        offersLogNow: true
+                    )
+                }
+                .navigationDestination(item: $foodToCreate) { request in
+                    AddEntryView(
+                        entryType: .food,
+                        isPushedView: true,
+                        offersLogNow: true,
+                        prefill: .named(request.name, source: request.source)
+                    )
+                }
+                .navigationDestination(isPresented: $showAddRecipe) {
+                    AddRecipeView(offersLogNow: true, isPushedView: true)
+                }
+                .navigationDestination(item: $foodToLog) { food in
+                    LogEntryView(food: food, isPushedView: true)
+                }
+                .navigationDestination(item: $recipeToLog) { recipe in
+                    LogRecipeView(recipe: recipe, isPushedView: true)
+                }
+                .navigationDestination(item: $draftToResume) { draft in
+                    resumedDraftView(draft)
+                }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
@@ -446,84 +505,6 @@ struct NewEntryView: View {
             .animation(.easeInOut(duration: 0.25), value: showsNoResults)
         }
         .environment(\.rootDismiss, { finishLogging() })
-        .sheet(isPresented: $showAddIngredientSheet) {
-            AddEntryView(
-                entryType: .ingredient,
-                offersLogNow: true
-            )
-            .environment(\.rootDismiss) { finishLogging() }
-        }
-        .sheet(isPresented: $showAddFoodSheet) {
-            AddEntryView(
-                entryType: .food,
-                offersLogNow: true
-            )
-            .environment(\.rootDismiss) { finishLogging() }
-        }
-        .sheet(item: $foodToCreate) { request in
-            AddEntryView(
-                entryType: .food,
-                offersLogNow: true,
-                prefill: .named(request.name, source: request.source)
-            )
-            .environment(\.rootDismiss) { finishLogging() }
-        }
-        .sheet(isPresented: $showAddRecipeSheet) {
-            AddRecipeView(offersLogNow: true)
-                .environment(\.rootDismiss) { finishLogging() }
-        }
-        .sheet(item: $draftToResume) { draft in
-            if draft.isAvailable {
-                switch draft.kind {
-                case .logFood, .logRecipe:
-                    if let food = draft.foodItem {
-                        Group {
-                            if draft.kind == .logRecipe {
-                                LogRecipeView(
-                                    recipe: food,
-                                    draft: draft,
-                                    isPushedView: false
-                                )
-                            } else {
-                                LogEntryView(
-                                    food: food,
-                                    draft: draft,
-                                    isPushedView: false
-                                )
-                            }
-                        }
-                        .environment(\.rootDismiss) {
-                            finishLogging()
-                        }
-                    }
-                case .addRecipe:
-                    AddRecipeView(
-                        offersLogNow: true,
-                        draft: draft
-                    )
-                    .environment(\.rootDismiss) { finishLogging() }
-                case .addFood, nil:
-                    AddEntryView(
-                        entryType: draft.entryType ?? .food,
-                        offersLogNow: true,
-                        draft: draft
-                    )
-                    .environment(\.rootDismiss) { finishLogging() }
-                }
-            }
-        }
-        .sheet(item: $foodToLog) { food in
-            LogEntryView(food: food, isPushedView: false)
-                .environment(\.rootDismiss) {
-                    finishLogging()
-                }
-        }
-        .sheet(item: $recipeToLog) { recipe in
-            LogRecipeView(recipe: recipe, isPushedView: false)
-                .environment(\.rootDismiss) {
-                    finishLogging()
-                }
-        }
         .sheet(isPresented: $showReorderFavoritesSheet) {
             ReorderFavoritesView()
         }

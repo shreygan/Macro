@@ -58,6 +58,7 @@ struct AddEntryView: View {
 
     @State private var draftID: UUID
     private let isResumedDraft: Bool
+    private let initialDraftState: AddEntryDraftState
     @State private var didFinishAdding = false
 
     init(
@@ -77,6 +78,7 @@ struct AddEntryView: View {
 
         _draftID = State(initialValue: draft?.id ?? UUID())
         self.isResumedDraft = draft != nil
+        self.initialDraftState = prefill ?? .empty
 
         if let state = draft?.decodeState(AddEntryDraftState.self) ?? prefill {
             _name = State(initialValue: state.name)
@@ -131,11 +133,12 @@ struct AddEntryView: View {
         )
     }
 
-    private func saveDraft(reportingFailure: Bool = true) {
+    @discardableResult
+    private func saveDraft() -> Bool {
         let state = draftState
         guard state != .empty else {
             DraftStore.delete(id: draftID, in: modelContext)
-            return
+            return false
         }
 
         do {
@@ -147,35 +150,41 @@ struct AddEntryView: View {
                 state: state,
                 in: modelContext
             )
+            return true
         } catch {
-            guard reportingFailure else { return }
             toastCenter?.show(.failure(String(localized: "Couldn't Save Draft")))
+            return false
         }
     }
 
-    private func saveDraftAndClose() {
-        saveDraft()
+    private func handleClose() {
+        guard isDraftEnabled && !didFinishAdding else { return }
         didFinishAdding = true
-        dismiss()
-    }
 
-    private func discardAndClose() {
         if isResumedDraft {
-            if draftState != .empty { saveDraft(reportingFailure: false) }
-            do {
-                if let record = try EntryDeleter.deleteDraft(id: draftID, in: modelContext) {
-                    toastCenter?.show(
-                        .draftDeleted(record, in: modelContext, presenter: toastCenter)
-                    )
-                }
-            } catch {
-                toastCenter?.show(.failure(String(localized: "Couldn't Delete Draft")))
-            }
+            saveDraft()
         } else {
-            DraftStore.delete(id: draftID, in: modelContext)
+            saveDraftOnClose()
         }
-        didFinishAdding = true
-        dismiss()
+    }
+
+    private func saveDraftOnClose() {
+        guard draftState != initialDraftState, saveDraft() else {
+            DraftStore.delete(id: draftID, in: modelContext)
+            return
+        }
+
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        toastCenter?.show(
+            .draftSaved(
+                id: draftID,
+                name: trimmedName.isEmpty
+                    ? String(localized: "New \(entryType.rawValue.capitalized)")
+                    : trimmedName,
+                in: modelContext,
+                presenter: toastCenter
+            )
+        )
     }
 
     var formattedSubtitle: String {
@@ -588,21 +597,11 @@ struct AddEntryView: View {
             .toolbar {
                 if !isPushedView {
                     ToolbarItem(placement: .topBarLeading) {
-                        if isDraftEnabled {
-                            DraftCloseButton(
-                                isResumedDraft: isResumedDraft,
-                                canSaveDraft: draftState != .empty,
-                                onClose: { dismiss() },
-                                onSaveDraft: saveDraftAndClose,
-                                onDiscard: discardAndClose
-                            )
-                        } else {
-                            Button {
-                                dismiss()
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .foregroundStyle(.primary)
-                            }
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .foregroundStyle(.primary)
                         }
                     }
                 }
@@ -673,14 +672,12 @@ struct AddEntryView: View {
                 saveDraft()
             }
         }
-        .onDisappear {
-            guard isDraftEnabled && !didFinishAdding else { return }
-
-            if isResumedDraft {
-                saveDraft()
-            } else {
-                DraftStore.delete(id: draftID, in: modelContext)
-            }
+        .onLeave { handleClose() }
+        .onDisappear { handleClose() }
+        .onDraftDeleted(id: draftID, isEnabled: isResumedDraft) {
+            guard !didFinishAdding else { return }
+            didFinishAdding = true
+            dismiss()
         }
     }
 

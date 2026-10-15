@@ -366,13 +366,7 @@ struct LibraryView<Header: View>: View {
         .searchDictationBehavior(.automatic)
         .searchPresentationToolbarBehavior(.avoidHidingContent)
         .navigationDestination(item: $selectedFood) { food in
-            if isTabRoot {
-                FoodDetailView(food: food)
-            } else if food.type == .recipe {
-                LogRecipeView(recipe: food)
-            } else {
-                LogEntryView(food: food)
-            }
+            FoodDetailView(food: food)
         }
         .navigationDestination(item: $listToManage) { kind in
             ManageListView(kind: kind)

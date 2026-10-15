@@ -16,6 +16,7 @@ struct AddRecipeView: View {
     @Environment(\.toastCenter) private var toastCenter
 
     var offersLogNow: Bool
+    var isPushedView: Bool = false
     var onCreate: ((FoodItem) -> Void)?
 
     @Query(sort: \EntrySource.displayOrder) var savedSources: [EntrySource]
@@ -48,14 +49,17 @@ struct AddRecipeView: View {
     @State private var draftID: UUID
     private let isResumedDraft: Bool
     @State private var didFinishAdding = false
+    @State private var initialDraftState: AddRecipeDraftState?
 
     init(
         offersLogNow: Bool = false,
+        isPushedView: Bool = false,
         draft: EntryDraft? = nil,
         prefill: AddRecipePrefill? = nil,
         onCreate: ((FoodItem) -> Void)? = nil
     ) {
         self.offersLogNow = offersLogNow
+        self.isPushedView = isPushedView
         self.onCreate = onCreate
 
         _draftID = State(initialValue: draft?.id ?? UUID())
@@ -121,17 +125,18 @@ struct AddRecipeView: View {
             servingWeightUnit: servingWeightUnit,
             isCustomDefaultServing: isCustomDefaultServing,
             customServingSize: customServingSize,
-            ingredients: draftIngredients.map(DraftIngredientSnapshot.init),
+            ingredients: draftIngredients.map { DraftIngredientSnapshot($0) },
             stickyNote: stickyNote,
             defaultLocation: defaultLocation
         )
     }
 
-    private func saveDraft(reportingFailure: Bool = true) {
+    @discardableResult
+    private func saveDraft() -> Bool {
         let state = draftState
         guard state != .empty else {
             DraftStore.delete(id: draftID, in: modelContext)
-            return
+            return false
         }
 
         do {
@@ -143,35 +148,39 @@ struct AddRecipeView: View {
                 state: state,
                 in: modelContext
             )
+            return true
         } catch {
-            guard reportingFailure else { return }
             toastCenter?.show(.failure(String(localized: "Couldn't Save Draft")))
+            return false
         }
     }
 
-    private func saveDraftAndClose() {
-        saveDraft()
+    private func handleClose() {
+        guard isDraftEnabled && !didFinishAdding else { return }
         didFinishAdding = true
-        dismiss()
-    }
 
-    private func discardAndClose() {
         if isResumedDraft {
-            if draftState != .empty { saveDraft(reportingFailure: false) }
-            do {
-                if let record = try EntryDeleter.deleteDraft(id: draftID, in: modelContext) {
-                    toastCenter?.show(
-                        .draftDeleted(record, in: modelContext, presenter: toastCenter)
-                    )
-                }
-            } catch {
-                toastCenter?.show(.failure(String(localized: "Couldn't Delete Draft")))
-            }
+            saveDraft()
         } else {
-            DraftStore.delete(id: draftID, in: modelContext)
+            saveDraftOnClose()
         }
-        didFinishAdding = true
-        dismiss()
+    }
+
+    private func saveDraftOnClose() {
+        guard let initialDraftState, draftState != initialDraftState, saveDraft() else {
+            DraftStore.delete(id: draftID, in: modelContext)
+            return
+        }
+
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        toastCenter?.show(
+            .draftSaved(
+                id: draftID,
+                name: trimmedName.isEmpty ? String(localized: "New Recipe") : trimmedName,
+                in: modelContext,
+                presenter: toastCenter
+            )
+        )
     }
 
     var totalCalories: Double {
@@ -406,324 +415,327 @@ struct AddRecipeView: View {
         }
     }
 
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.background.ignoresSafeArea()
+    private var form: some View {
+        ZStack {
+            Color.background.ignoresSafeArea()
 
-                ScrollView {
-                    VStack {
-                        Text(
-                            "recipe_description"
-                        )
-                        .font(.subtitle)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-                        .padding(.bottom, 4)
-                        .multilineTextAlignment(.center)
+            ScrollView {
+                VStack {
+                    Text(
+                        "recipe_description"
+                    )
+                    .font(.subtitle)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
+                    .multilineTextAlignment(.center)
 
-                        Card {
-                            RowGroup(.divider) {
-                                FullWidthInputRow(
-                                    placeholder: "Name",
-                                    text: $name
-                                )
-                                FullWidthDropdownRow(
-                                    placeholder: "Source",
-                                    options: [""]
-                                        + savedSources.visibleNames(keeping: source).filter
-                                    {
+                    Card {
+                        RowGroup(.divider) {
+                            FullWidthInputRow(
+                                placeholder: "Name",
+                                text: $name
+                            )
+                            FullWidthDropdownRow(
+                                placeholder: "Source",
+                                options: [""]
+                                    + savedSources.visibleNames(keeping: source).filter
+                                {
+                                    let trimmed = $0.trimmingCharacters(
+                                        in: .whitespacesAndNewlines
+                                    )
+                                    return !trimmed.isEmpty
+                                        && trimmed != "-"
+                                },
+                                selection: $source
+                            )
+
+                            DefaultLocationRow(
+                                location: $defaultLocation,
+                                sourceName: source
+                            )
+
+                            FullWidthDropdownRow(
+                                placeholder: "Category",
+                                options: [""]
+                                    + savedCategories.visibleNames(keeping: category)
+                                    .filter {
                                         let trimmed = $0.trimmingCharacters(
                                             in: .whitespacesAndNewlines
                                         )
                                         return !trimmed.isEmpty
                                             && trimmed != "-"
                                     },
-                                    selection: $source
-                                )
-
-                                DefaultLocationRow(
-                                    location: $defaultLocation,
-                                    sourceName: source
-                                )
-
-                                FullWidthDropdownRow(
-                                    placeholder: "Category",
-                                    options: [""]
-                                        + savedCategories.visibleNames(keeping: category)
-                                        .filter {
-                                            let trimmed = $0.trimmingCharacters(
-                                                in: .whitespacesAndNewlines
-                                            )
-                                            return !trimmed.isEmpty
-                                                && trimmed != "-"
-                                        },
-                                    selection: $category
-                                )
-
-                            }
-                        }
-                        .padding([.leading, .trailing])
-
-                        Card {
-                            WrappedInputRow(
-                                placeholder: "Pinned Note",
-                                text: $stickyNote,
-                                isEditable: true,
-                                characterLimit: 2000
+                                selection: $category
                             )
+
                         }
-                        .padding([.top, .leading, .trailing])
+                    }
+                    .padding([.leading, .trailing])
 
-                        Card {
-                            RowGroup(.divider) {
-                                BaseRowLayout(title: "Recipe Makes") {
-                                    InputPill(
-                                        text: $servingSize,
-                                        keyboardType: .decimalPad
-                                    )
-                                    DropdownPill(
-                                        options: servingUnits.map { $0.unit },
-                                        selection: $servingSizeUnit
-                                    )
-                                }
+                    Card {
+                        WrappedInputRow(
+                            placeholder: "Pinned Note",
+                            text: $stickyNote,
+                            isEditable: true,
+                            characterLimit: 2000
+                        )
+                    }
+                    .padding([.top, .leading, .trailing])
 
-                                BaseRowLayout(title: "Total Weight") {
-                                    InputPill(
-                                        text: $servingWeight,
-                                        keyboardType: .decimalPad,
-                                        placeholder: calculatedTotalWeight > 0
-                                            && allIngredientsHaveWeight
-                                            ? String(
-                                                format: "%g",
-                                                calculatedTotalWeight
-                                            )
-                                            : "-"
-                                    )
-                                    DropdownPill(
-                                        options: availableWeightUnits,
-                                        displayCustomOption: false,
-                                        selection: $servingWeightUnit
-                                    )
-                                }
+                    Card {
+                        RowGroup(.divider) {
+                            BaseRowLayout(title: "Recipe Makes") {
+                                InputPill(
+                                    text: $servingSize,
+                                    keyboardType: .decimalPad
+                                )
+                                DropdownPill(
+                                    options: servingUnits.map { $0.unit },
+                                    selection: $servingSizeUnit
+                                )
+                            }
+
+                            BaseRowLayout(title: "Total Weight") {
+                                InputPill(
+                                    text: $servingWeight,
+                                    keyboardType: .decimalPad,
+                                    placeholder: calculatedTotalWeight > 0
+                                        && allIngredientsHaveWeight
+                                        ? String(
+                                            format: "%g",
+                                            calculatedTotalWeight
+                                        )
+                                        : "-"
+                                )
+                                DropdownPill(
+                                    options: availableWeightUnits,
+                                    displayCustomOption: false,
+                                    selection: $servingWeightUnit
+                                )
                             }
                         }
-                        .padding([.top, .leading, .trailing])
+                    }
+                    .padding([.top, .leading, .trailing])
 
-                        Card("Ingredients") {
-                            RowGroup(.divider) {
-                                ForEach($draftIngredients) { $draft in
-                                    let unitConversionBinding = Binding<String>(
-                                        get: { draft.unit },
-                                        set: { draft.updateUnit(to: $0) }
-                                    )
+                    Card("Ingredients") {
+                        RowGroup(.divider) {
+                            ForEach($draftIngredients) { $draft in
+                                let unitConversionBinding = Binding<String>(
+                                    get: { draft.unit },
+                                    set: { draft.updateUnit(to: $0) }
+                                )
 
-                                    CustomSwipeRow {
-                                        MealRow(
-                                            name: draft.name,
-                                            source: draft.displaySource,
-                                            isCustomDefaultServing: draft
-                                                .isCustomDefaultServing,
-                                            customServingSize:
-                                                EntryHelper.format(
-                                                    draft.activeMultiplier
-                                                        * draft.baseServingSize
-                                                ),
-                                            servingSize: EntryHelper.format(
+                                CustomSwipeRow {
+                                    MealRow(
+                                        name: draft.name,
+                                        source: draft.displaySource,
+                                        isCustomDefaultServing: draft
+                                            .isCustomDefaultServing,
+                                        customServingSize:
+                                            EntryHelper.format(
                                                 draft.activeMultiplier
                                                     * draft.baseServingSize
                                             ),
-                                            servingSizeUnit: draft
-                                                .servingUnitName,
-                                            servingWeight: EntryHelper.format(
-                                                draft.activeWeight
-                                            ),
-                                            servingWeightUnit: draft
-                                                .baseServingWeightUnit,
-                                            servingUnits: servingUnits,
-                                            calorie: EntryHelper.format(
-                                                draft.activeCalories
-                                            ),
-                                            protein: EntryHelper.format(
-                                                draft.activeProtein
-                                            ),
-                                            carbs: EntryHelper.format(
-                                                draft.activeCarbs
-                                            ),
-                                            fat: EntryHelper.format(
-                                                draft.activeFat
-                                            ),
-                                            fiber: EntryHelper.format(
-                                                draft.activeFiber
-                                            ),
-                                            icon: shouldShowIngredientIcons
-                                                ? draft.displayType.appSymbol
-                                                : nil
-                                        ) {
-                                            HStack(spacing: 8) {
-                                                InputPill(
-                                                    text: $draft.quantity,
-                                                    keyboardType: .decimalPad
-                                                )
+                                        servingSize: EntryHelper.format(
+                                            draft.activeMultiplier
+                                                * draft.baseServingSize
+                                        ),
+                                        servingSizeUnit: draft
+                                            .servingUnitName,
+                                        servingWeight: EntryHelper.format(
+                                            draft.activeWeight
+                                        ),
+                                        servingWeightUnit: draft
+                                            .baseServingWeightUnit,
+                                        servingUnits: servingUnits,
+                                        calorie: EntryHelper.format(
+                                            draft.activeCalories
+                                        ),
+                                        protein: EntryHelper.format(
+                                            draft.activeProtein
+                                        ),
+                                        carbs: EntryHelper.format(
+                                            draft.activeCarbs
+                                        ),
+                                        fat: EntryHelper.format(
+                                            draft.activeFat
+                                        ),
+                                        fiber: EntryHelper.format(
+                                            draft.activeFiber
+                                        ),
+                                        icon: shouldShowIngredientIcons
+                                            ? draft.displayType.appSymbol
+                                            : nil
+                                    ) {
+                                        HStack(spacing: 8) {
+                                            InputPill(
+                                                text: $draft.quantity,
+                                                keyboardType: .decimalPad
+                                            )
 
-                                                DropdownPill(
-                                                    options: draft.unitOptions,
-                                                    displayCustomOption: false,
-                                                    selection:
-                                                        unitConversionBinding
-                                                )
-                                            }
-                                        }
-                                    } onDelete: {
-                                        if let index =
-                                            draftIngredients.firstIndex(where: {
-                                                $0.id == draft.id
-                                            })
-                                        {
-                                            withAnimation(.snappy) {
-                                                _ = draftIngredients.remove(
-                                                    at: index
-                                                )
-                                            }
+                                            DropdownPill(
+                                                options: draft.unitOptions,
+                                                displayCustomOption: false,
+                                                selection:
+                                                    unitConversionBinding
+                                            )
                                         }
                                     }
-                                    .transition(
-                                        .asymmetric(
-                                            insertion: .identity,
-                                            removal: .opacity.combined(
-                                                with: .scale(scale: 0.9)
+                                } onDelete: {
+                                    if let index =
+                                        draftIngredients.firstIndex(where: {
+                                            $0.id == draft.id
+                                        })
+                                    {
+                                        withAnimation(.snappy) {
+                                            _ = draftIngredients.remove(
+                                                at: index
                                             )
+                                        }
+                                    }
+                                }
+                                .transition(
+                                    .asymmetric(
+                                        insertion: .identity,
+                                        removal: .opacity.combined(
+                                            with: .scale(scale: 0.9)
                                         )
                                     )
-                                }
-                            } bottomContent: {
-                                ButtonRow(
-                                    icon: .customSymbol("plus.circle.fill"),
-                                    title: "Add Ingredient"
-                                ) {
-                                    showIngredientSelectionSheet = true
-                                }
-                            }
-                        }
-                        .padding([.top, .leading, .trailing])
-
-                        Card {
-                            RowGroup(.divider) {
-                                ToggleRow(
-                                    title: "Set Custom Default Serving",
-                                    isOn: $isCustomDefaultServing
                                 )
+                            }
+                        } bottomContent: {
+                            ButtonRow(
+                                icon: .customSymbol("plus.circle.fill"),
+                                title: "Add Ingredient"
+                            ) {
+                                showIngredientSelectionSheet = true
+                            }
+                        }
+                    }
+                    .padding([.top, .leading, .trailing])
 
-                                if isCustomDefaultServing {
-                                    BaseRowLayout(
-                                        title: "Serving Size",
-                                        titleExtension: "(\(servingSizeUnit))"
-                                    ) {
-                                        InputPill(
-                                            text: $customServingSize,
-                                            keyboardType: .decimalPad
-                                        )
-                                    }
+                    Card {
+                        RowGroup(.divider) {
+                            ToggleRow(
+                                title: "Set Custom Default Serving",
+                                isOn: $isCustomDefaultServing
+                            )
+
+                            if isCustomDefaultServing {
+                                BaseRowLayout(
+                                    title: "Serving Size",
+                                    titleExtension: "(\(servingSizeUnit))"
+                                ) {
+                                    InputPill(
+                                        text: $customServingSize,
+                                        keyboardType: .decimalPad
+                                    )
                                 }
                             }
                         }
-                        .padding([.top, .leading, .trailing])
+                    }
+                    .padding([.top, .leading, .trailing])
 
-                        Spacer()
-                    }
+                    Spacer()
                 }
-                .withCustomKeyboardToolbar()
-                .navigationTitle("Add New Recipe")
-                .navigationBarTitleDisplayMode(.inline)
-                .sheet(isPresented: $showIngredientSelectionSheet) {
-                    IngredientSelectionView(
-                        inRecipeIDs: Set(draftIngredients.compactMap(\.item?.id))
-                    ) { selectedItems in
-                        draftIngredients.append(
-                            contentsOf: selectedItems.map {
-                                DraftRecipeIngredient(item: $0)
-                            }
-                        )
-                    }
-                }
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        if isDraftEnabled {
-                            DraftCloseButton(
-                                isResumedDraft: isResumedDraft,
-                                canSaveDraft: draftState != .empty,
-                                onClose: { dismiss() },
-                                onSaveDraft: saveDraftAndClose,
-                                onDiscard: discardAndClose
-                            )
-                        } else {
-                            Button {
-                                dismiss()
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .foregroundStyle(.primary)
-                            }
+            }
+            .withCustomKeyboardToolbar()
+            .navigationTitle("Add New Recipe")
+            .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showIngredientSelectionSheet) {
+                IngredientSelectionView(
+                    inRecipeIDs: Set(draftIngredients.compactMap(\.item?.id))
+                ) { selectedItems in
+                    draftIngredients.append(
+                        contentsOf: selectedItems.map {
+                            DraftRecipeIngredient(item: $0)
                         }
-                    }
-
-                    ToolbarItem(placement: .confirmationAction) {
+                    )
+                }
+            }
+            .toolbar {
+                if !isPushedView {
+                    ToolbarItem(placement: .topBarLeading) {
                         Button {
-                            addRecipe()
+                            dismiss()
                         } label: {
-                            Image(systemName: "plus")
+                            Image(systemName: "xmark")
                                 .foregroundStyle(.primary)
                         }
-                        .disabled(!isRecipeValid)
-                        .tint(Color.accentColor)
-                        .buttonStyle(.glassProminent)
                     }
-                }
-                .safeAreaBar(edge: .top) {
-                    Card {
-                        MealRow(
-                            name: name.isEmpty
-                                ? "New Recipe"
-                                : name,
-                            source: source,
-                            isCustomDefaultServing: isCustomDefaultServing,
-                            customServingSize: customServingSize,
-                            servingSize: "1",
-                            servingSizeUnit: servingSizeUnit,
-                            servingWeight: allIngredientsHaveWeight
-                                ? String(
-                                    format: "%g",
-                                    totalRecipeWeight
-                                        / (Double(servingSize) ?? 1.0)
-                                ) : "",
-                            servingWeightUnit: servingWeightUnit,
-                            servingUnits: servingUnits,
-                            calorie: EntryHelper.format(displayCalories),
-                            protein: EntryHelper.format(displayProtein),
-                            carbs: EntryHelper.format(displayCarbs),
-                            fat: EntryHelper.format(displayFat),
-                            fiber: EntryHelper.format(displayFiber)
-                        )
-                        .nameLineLimit(3)
-                    }
-                    .padding([.leading, .trailing])
-                    .padding(.bottom, 24)
                 }
 
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        addRecipe()
+                    } label: {
+                        Image(systemName: "plus")
+                            .foregroundStyle(.primary)
+                    }
+                    .disabled(!isRecipeValid)
+                    .tint(Color.accentColor)
+                    .buttonStyle(.glassProminent)
+                }
             }
-            .environment(focusManager)
+            .safeAreaBar(edge: .top) {
+                Card {
+                    MealRow(
+                        name: name.isEmpty
+                            ? "New Recipe"
+                            : name,
+                        source: source,
+                        isCustomDefaultServing: isCustomDefaultServing,
+                        customServingSize: customServingSize,
+                        servingSize: "1",
+                        servingSizeUnit: servingSizeUnit,
+                        servingWeight: allIngredientsHaveWeight
+                            ? String(
+                                format: "%g",
+                                totalRecipeWeight
+                                    / (Double(servingSize) ?? 1.0)
+                            ) : "",
+                        servingWeightUnit: servingWeightUnit,
+                        servingUnits: servingUnits,
+                        calorie: EntryHelper.format(displayCalories),
+                        protein: EntryHelper.format(displayProtein),
+                        carbs: EntryHelper.format(displayCarbs),
+                        fat: EntryHelper.format(displayFat),
+                        fiber: EntryHelper.format(displayFiber)
+                    )
+                    .nameLineLimit(3)
+                }
+                .padding([.leading, .trailing])
+                .padding(.bottom, 24)
+            }
+
         }
+        .environment(focusManager)
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background && isDraftEnabled && !didFinishAdding {
                 saveDraft()
             }
         }
-        .onDisappear {
-            guard isDraftEnabled && !didFinishAdding else { return }
+        .onAppear {
+            if initialDraftState == nil {
+                initialDraftState = draftState
+            }
+        }
+        .onLeave { handleClose() }
+        .onDisappear { handleClose() }
+        .onDraftDeleted(id: draftID, isEnabled: isResumedDraft) {
+            guard !didFinishAdding else { return }
+            didFinishAdding = true
+            dismiss()
+        }
+    }
 
-            if isResumedDraft {
-                saveDraft()
-            } else {
-                DraftStore.delete(id: draftID, in: modelContext)
+    var body: some View {
+        if isPushedView {
+            form
+        } else {
+            NavigationStack {
+                form
             }
         }
     }

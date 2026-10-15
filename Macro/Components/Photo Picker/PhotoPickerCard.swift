@@ -49,6 +49,8 @@ struct PhotoPickerCard: View {
     var entryDate: Date? = nil
     var entryTime: Date? = nil
     var entryLocation: EntryLocation? = nil
+    var onPickerItemsChange: (([PhotosPickerItem]) -> Void)? = nil
+    var onCoverChange: ((Bool) -> Void)? = nil
 
     @State private var showCamera = false
     @State private var showPhotoLibrary = false
@@ -231,6 +233,9 @@ struct PhotoPickerCard: View {
             guard loadTask == nil else { return }
             syncPickerSelection()
         }
+        .onChange(of: showCamera || showViewer) { _, isCovered in
+            onCoverChange?(isCovered)
+        }
         .onChange(of: isLoading) { _, newValue in
             guard !newValue, let loadTask else { return }
             loadTask.cancel()
@@ -239,6 +244,8 @@ struct PhotoPickerCard: View {
             syncPickerSelection()
         }
         .onChange(of: selectedPhotosPickerItems) { oldItems, newItems in
+            onPickerItemsChange?(newItems)
+
             let hasUnloadedItems = newItems.contains { item in
                 !images.contains { $0.pickerItem == item }
             }
@@ -249,31 +256,12 @@ struct PhotoPickerCard: View {
 
             loadTask?.cancel()
             loadTask = Task {
-                let cameraPhotos = images.filter { $0.pickerItem == nil }
-                var updatedLibraryPhotos: [LoggedPhoto] = []
-
-                for item in newItems {
-                    if let existingPhoto = images.first(where: {
-                        $0.pickerItem == item
-                    }) {
-                        updatedLibraryPhotos.append(existingPhoto)
-                    } else {
-                        if let data = try? await item.loadTransferable(
-                            type: Data.self
-                        ),
-                            let uiImage = UIImage(data: data)
-                        {
-                            updatedLibraryPhotos.append(
-                                LoggedPhoto(
-                                    image: uiImage,
-                                    originalData: data,
-                                    pickerItem: item
-                                )
-                            )
-                        }
-                    }
-                    if Task.isCancelled { return }
-                }
+                guard
+                    let loadedPhotos = await Self.loadPhotos(
+                        for: newItems,
+                        keeping: images
+                    )
+                else { return }
 
                 await MainActor.run {
                     guard !Task.isCancelled, !hasUnloadedItems || isLoading
@@ -283,7 +271,7 @@ struct PhotoPickerCard: View {
                     let previouslyEmpty = images.isEmpty
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8))
                     {
-                        images = cameraPhotos + updatedLibraryPhotos
+                        images = loadedPhotos
                     }
                     if hasUnloadedItems { isLoading = false }
                     if images.isEmpty {
@@ -344,6 +332,29 @@ struct PhotoPickerCard: View {
                     .zoom(sourceID: currentPhotoID, in: photoNamespace)
                 )
         }
+    }
+
+    static func loadPhotos(
+        for items: [PhotosPickerItem],
+        keeping images: [LoggedPhoto]
+    ) async -> [LoggedPhoto]? {
+        let cameraPhotos = images.filter { $0.pickerItem == nil }
+        var libraryPhotos: [LoggedPhoto] = []
+
+        for item in items {
+            if let existingPhoto = images.first(where: { $0.pickerItem == item }) {
+                libraryPhotos.append(existingPhoto)
+            } else if let data = try? await item.loadTransferable(type: Data.self),
+                let uiImage = UIImage(data: data)
+            {
+                libraryPhotos.append(
+                    LoggedPhoto(image: uiImage, originalData: data, pickerItem: item)
+                )
+            }
+            if Task.isCancelled { return nil }
+        }
+
+        return cameraPhotos + libraryPhotos
     }
 
     private var entryTimestamp: Date? {

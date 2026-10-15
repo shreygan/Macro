@@ -1551,14 +1551,12 @@ private struct LogAgainSheet: View {
                 if food.type == .recipe {
                     LogRecipeView(
                         recipe: food,
-                        previousEntry: entry,
-                        isPushedView: false
+                        previousEntry: entry
                     )
                 } else {
                     LogEntryView(
                         food: food,
-                        previousEntry: entry,
-                        isPushedView: false
+                        previousEntry: entry
                     )
                 }
             }

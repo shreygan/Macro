@@ -773,14 +773,12 @@ struct HomeView: View {
                     if draft.kind == .logRecipe {
                         LogRecipeView(
                             recipe: food,
-                            draft: draft,
-                            isPushedView: false
+                            draft: draft
                         )
                     } else {
                         LogEntryView(
                             food: food,
-                            draft: draft,
-                            isPushedView: false
+                            draft: draft
                         )
                     }
                 }
@@ -808,19 +806,17 @@ struct HomeView: View {
                 .environment(\.tabBarHeight, 0)
             }
             .sheet(item: $entryToLogAgain) { previousEntry in
-                NavigationStack {
+                Group {
                     if let foodToLog = previousEntry.originalFoodItem {
                         if foodToLog.type == .recipe {
                             LogRecipeView(
                                 recipe: foodToLog,
-                                previousEntry: previousEntry,
-                                isPushedView: false
+                                previousEntry: previousEntry
                             )
                         } else {
                             LogEntryView(
                                 food: foodToLog,
-                                previousEntry: previousEntry,
-                                isPushedView: false
+                                previousEntry: previousEntry
                             )
                         }
                     }

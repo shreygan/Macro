@@ -5,6 +5,7 @@
 //  Created by Priyanka Sangha on 2026-05-10.
 //
 
+import PhotosUI
 import SwiftData
 import SwiftUI
 
@@ -25,7 +26,7 @@ struct LogEntryView: View {
 
     let food: FoodItem
     @State private var name: String
-    var isPushedView: Bool = true
+    var isPushedView: Bool = false
 
     private let isCustomDefaultServing: Bool
     private let customServingSize: String
@@ -80,6 +81,8 @@ struct LogEntryView: View {
 
     @State private var selectedPhotos: [LoggedPhoto]
     @State private var isLoadingPhotos = false
+    @State private var pickerItems: [PhotosPickerItem] = []
+    @State private var isPhotoCoverShown = false
 
     @State private var dateAdded: Date
 
@@ -93,6 +96,7 @@ struct LogEntryView: View {
 
     @State private var initialDraftState: LogEntryDraftState?
     @State private var initialPhotoData: [Data] = []
+    @State private var initialLocation: LocationSelection?
 
     var isEdited: Bool {
         sourceSelection != (food.source?.source ?? "")
@@ -474,7 +478,8 @@ struct LogEntryView: View {
         )
     }
 
-    private func saveDraft(reportingFailure: Bool = true) {
+    @discardableResult
+    private func saveDraft() -> Bool {
         do {
             try DraftStore.upsert(
                 id: draftID,
@@ -487,15 +492,73 @@ struct LogEntryView: View {
                 photos: selectedPhotos,
                 in: modelContext
             )
+            return true
         } catch {
-            guard reportingFailure else { return }
             toastCenter?.show(.failure(String(localized: "Couldn't Save Draft")))
+            return false
         }
     }
 
+    private func finishLoadingDraftPhotos() {
+        guard isLoadingPhotos else { return }
+
+        let id = draftID
+        let items = pickerItems
+        let loadedPhotos = selectedPhotos
+        let context = modelContext
+        let toastCenter = toastCenter
+
+        Task {
+            guard
+                let photos = await PhotoPickerCard.loadPhotos(
+                    for: items,
+                    keeping: loadedPhotos
+                )
+            else { return }
+
+            do {
+                try DraftStore.replacePhotos(ofDraft: id, with: photos, in: context)
+            } catch {
+                toastCenter?.show(.failure(String(localized: "Couldn't Save Draft Photos")))
+            }
+        }
+    }
+
+    private func handleClose() {
+        guard !didFinishLogging, !isPhotoCoverShown else { return }
+        didFinishLogging = true
+
+        if isResumedDraft {
+            if saveDraft() { finishLoadingDraftPhotos() }
+        } else {
+            saveDraftOnClose()
+        }
+    }
+
+    private func saveDraftOnClose() {
+        guard hasDraftChanges || isLoadingPhotos, saveDraft() else {
+            DraftStore.delete(id: draftID, in: modelContext)
+            return
+        }
+        finishLoadingDraftPhotos()
+
+        toastCenter?.show(
+            .draftSaved(
+                id: draftID,
+                name: name.isEmpty ? food.name : name,
+                in: modelContext,
+                presenter: toastCenter
+            )
+        )
+    }
+
     private var hasDraftChanges: Bool {
-        guard let initialDraftState else { return false }
-        return draftState != initialDraftState
+        guard let initialDraftState, let initialLocation else { return false }
+        var state = draftState
+        state.location = initialDraftState.location
+        state.usesCurrentLocation = initialDraftState.usesCurrentLocation
+        return state != initialDraftState
+            || locationSelection.isChosenDifferently(from: initialLocation)
             || selectedPhotos.map(\.originalData) != initialPhotoData
     }
 
@@ -507,36 +570,11 @@ struct LogEntryView: View {
         }
     }
 
-    private func saveDraftAndClose() {
-        saveDraft()
-        didFinishLogging = true
-        dismiss()
-    }
-
-    private func discardAndClose() {
-        if isResumedDraft {
-            saveDraft(reportingFailure: false)
-            do {
-                if let record = try EntryDeleter.deleteDraft(id: draftID, in: modelContext) {
-                    toastCenter?.show(
-                        .draftDeleted(record, in: modelContext, presenter: toastCenter)
-                    )
-                }
-            } catch {
-                toastCenter?.show(.failure(String(localized: "Couldn't Delete Draft")))
-            }
-        } else {
-            DraftStore.delete(id: draftID, in: modelContext)
-        }
-        didFinishLogging = true
-        dismiss()
-    }
-
     init(
         food: FoodItem,
         previousEntry: LoggedEntry? = nil,
         draft: EntryDraft? = nil,
-        isPushedView: Bool = true,
+        isPushedView: Bool = false,
     ) {
         self.food = food
         self.isPushedView = isPushedView
@@ -725,429 +763,419 @@ struct LogEntryView: View {
         }
     }
 
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.background.ignoresSafeArea()
+    private var form: some View {
+        ZStack {
+            Color.background.ignoresSafeArea()
 
-                ScrollView {
-                    VStack {
-                        Card {
-                            RowGroup(.divider) {
-                                DropdownPillRow(
-                                    title: "Source",
-                                    options: [""]
-                                        + sourceOptions.visibleNames(
-                                            keeping: sourceSelection
-                                        ).filter
-                                    {
-                                        !$0.trimmingCharacters(
-                                            in: .whitespacesAndNewlines
-                                        ).isEmpty
-                                    },
-                                    selection: $sourceSelection
-                                )
-
-                                if food.type == .food {
-                                    DropdownPillRow(
-                                        title: "Category",
-                                        options: [""]
-                                            + categoryOptions.visibleNames(
-                                                keeping: categorySelection
-                                            ).filter {
-                                                !$0.trimmingCharacters(
-                                                    in: .whitespacesAndNewlines
-                                                ).isEmpty
-                                            },
-                                        selection: $categorySelection
-                                    )
-                                } else {
-                                    DropdownPillRow(
-                                        title: "Food Group",
-                                        options: [""]
-                                            + foodGroupOptions.visibleNames(
-                                                keeping: foodGroupSelection
-                                            ).filter {
-                                                !$0.trimmingCharacters(
-                                                    in: .whitespacesAndNewlines
-                                                ).isEmpty
-                                            },
-                                        selection: $foodGroupSelection
-                                    )
-                                }
-
-                                DateTimePillRow(
-                                    title: "Date & Time",
-                                    dateSelection: $date,
-                                    timeSelection: $time
-                                )
-
-                                LocationRow(
-                                    selection: $locationSelection,
-                                    food: food,
-                                    photos: selectedPhotos,
-                                    logDate: date,
-                                    nearbyName: DefaultLocationResolver.nearbyName(
-                                        for: food,
-                                        in: modelContext
-                                    )
-                                )
-                            }
-                        }
-                        .padding([.leading, .trailing])
-
-                        NotesCard(
-                            pinnedNote: $stickyNote,
-                            logNote: $newNote,
-                            pinnedUpdated: pinnedNoteUpdated,
-                            onViewAll: { showingAllNotes = true }
-                        )
-                        .padding([.top, .leading, .trailing])
-
-                        PhotoPickerCard(
-                            images: $selectedPhotos,
-                            isLoading: $isLoadingPhotos,
-                            onViewAll: hasPhotoHistory
-                                ? { showingAllPhotos = true } : nil,
-                            onUseTime: usePhotoTime,
-                            onUseLocation: usePhotoLocation,
-                            entryDate: date,
-                            entryTime: time,
-                            entryLocation: locationSelection.resolvedLocation
-                        )
-
-                        Card {
-                            BaseRowLayout(title: "Portion") {
-                                HStack(spacing: 8) {
-                                    InputPill(
-                                        text: $portionQuantity,
-                                        keyboardType: .decimalPad
-                                    )
-                                    DropdownPill(
-                                        options: availableUnits,
-                                        displayCustomOption: false,
-                                        selection: $portionUnitSelection,
-                                    )
-                                }
-                            }
-                        }
-                        .padding([.leading, .trailing])
-
-                        Card {
-                            RowGroup(.divider) {
-                                TextInputRow(
-                                    icon: .calorie,
-                                    title: "Calories",
-                                    titleExtension: "(kcal)",
-                                    text: $calorie,
-                                    keyboardType: .decimalPad,
-                                    isEnabled: manualOverrideToggle
-                                )
-
-                                TextInputRow(
-                                    icon: .protein,
-                                    title: "Protein",
-                                    titleExtension: "(g)",
-                                    text: $protein,
-                                    keyboardType: .decimalPad,
-                                    isEnabled: manualOverrideToggle
-                                )
-
-                                TextInputRow(
-                                    icon: .carbs,
-                                    title: "Carbohydrates",
-                                    titleExtension: "(g)",
-                                    text: $carbs,
-                                    keyboardType: .decimalPad,
-                                    isEnabled: manualOverrideToggle
-                                )
-
-                                TextInputRow(
-                                    icon: .fat,
-                                    title: "Fat",
-                                    titleExtension: "(g)",
-                                    text: $fat,
-                                    keyboardType: .decimalPad,
-                                    isEnabled: manualOverrideToggle
-                                )
-
-                                TextInputRow(
-                                    icon: .fiber,
-                                    title: "Fiber",
-                                    titleExtension: "(g)",
-                                    text: $fiber,
-                                    keyboardType: .decimalPad,
-                                    isEnabled: manualOverrideToggle
-                                )
-
-                                ToggleRow(
-                                    title: "Manual Override",
-                                    isOn: $manualOverrideToggle
-                                )
-                            }
-                        }
-                        .padding([.top, .leading, .trailing])
-
-                        Spacer()
-                    }
-                }
-                .safeAreaBar(edge: .top) {
+            ScrollView {
+                VStack {
                     Card {
-                        MealRow(
-                            name: name.isEmpty
-                                ? "New \(food.type.rawValue.capitalized)"
-                                : name,
-                            source: sourceSelection,
-                            isCustomDefaultServing: false,
-                            customServingSize: "",
-                            servingSize: displayServingSize,
-                            servingSizeUnit: food.servingUnit?.unit
-                                ?? "serving",
-                            servingWeight: displayServingWeight,
-                            servingWeightUnit: food.servingWeightUnit,
-                            servingUnits: portionUnitOptions,
-                            calorie: calorie,
-                            protein: protein,
-                            carbs: carbs,
-                            fat: fat,
-                            fiber: fiber
-                        )
-                        .nameLineLimit(3)
+                        RowGroup(.divider) {
+                            DropdownPillRow(
+                                title: "Source",
+                                options: [""]
+                                    + sourceOptions.visibleNames(
+                                        keeping: sourceSelection
+                                    ).filter
+                                {
+                                    !$0.trimmingCharacters(
+                                        in: .whitespacesAndNewlines
+                                    ).isEmpty
+                                },
+                                selection: $sourceSelection
+                            )
+
+                            if food.type == .food {
+                                DropdownPillRow(
+                                    title: "Category",
+                                    options: [""]
+                                        + categoryOptions.visibleNames(
+                                            keeping: categorySelection
+                                        ).filter {
+                                            !$0.trimmingCharacters(
+                                                in: .whitespacesAndNewlines
+                                            ).isEmpty
+                                        },
+                                    selection: $categorySelection
+                                )
+                            } else {
+                                DropdownPillRow(
+                                    title: "Food Group",
+                                    options: [""]
+                                        + foodGroupOptions.visibleNames(
+                                            keeping: foodGroupSelection
+                                        ).filter {
+                                            !$0.trimmingCharacters(
+                                                in: .whitespacesAndNewlines
+                                            ).isEmpty
+                                        },
+                                    selection: $foodGroupSelection
+                                )
+                            }
+
+                            DateTimePillRow(
+                                title: "Date & Time",
+                                dateSelection: $date,
+                                timeSelection: $time
+                            )
+
+                            LocationRow(
+                                selection: $locationSelection,
+                                food: food,
+                                photos: selectedPhotos,
+                                logDate: date,
+                                nearbyName: DefaultLocationResolver.nearbyName(
+                                    for: food,
+                                    in: modelContext
+                                )
+                            )
+                        }
                     }
                     .padding([.leading, .trailing])
-                    .padding(.bottom, 24)
-                }
-                .withCustomKeyboardToolbar()
-                .navigationTitle(
-                    food.type == .food ? "Log Food" : "Log Ingredient"
-                )
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    if !isPushedView {
-                        ToolbarItem(placement: .topBarLeading) {
-                            DraftCloseButton(
-                                isResumedDraft: isResumedDraft,
-                                canSaveDraft: !isLoadingPhotos,
-                                onClose: { dismiss() },
-                                onSaveDraft: saveDraftAndClose,
-                                onDiscard: discardAndClose
+
+                    NotesCard(
+                        pinnedNote: $stickyNote,
+                        logNote: $newNote,
+                        pinnedUpdated: pinnedNoteUpdated,
+                        onViewAll: { showingAllNotes = true }
+                    )
+                    .padding([.top, .leading, .trailing])
+
+                    PhotoPickerCard(
+                        images: $selectedPhotos,
+                        isLoading: $isLoadingPhotos,
+                        onViewAll: hasPhotoHistory
+                            ? { showingAllPhotos = true } : nil,
+                        onUseTime: usePhotoTime,
+                        onUseLocation: usePhotoLocation,
+                        entryDate: date,
+                        entryTime: time,
+                        entryLocation: locationSelection.resolvedLocation,
+                        onPickerItemsChange: { pickerItems = $0 },
+                        onCoverChange: { isPhotoCoverShown = $0 }
+                    )
+
+                    Card {
+                        BaseRowLayout(title: "Portion") {
+                            HStack(spacing: 8) {
+                                InputPill(
+                                    text: $portionQuantity,
+                                    keyboardType: .decimalPad
+                                )
+                                DropdownPill(
+                                    options: availableUnits,
+                                    displayCustomOption: false,
+                                    selection: $portionUnitSelection,
+                                )
+                            }
+                        }
+                    }
+                    .padding([.leading, .trailing])
+
+                    Card {
+                        RowGroup(.divider) {
+                            TextInputRow(
+                                icon: .calorie,
+                                title: "Calories",
+                                titleExtension: "(kcal)",
+                                text: $calorie,
+                                keyboardType: .decimalPad,
+                                isEnabled: manualOverrideToggle
+                            )
+
+                            TextInputRow(
+                                icon: .protein,
+                                title: "Protein",
+                                titleExtension: "(g)",
+                                text: $protein,
+                                keyboardType: .decimalPad,
+                                isEnabled: manualOverrideToggle
+                            )
+
+                            TextInputRow(
+                                icon: .carbs,
+                                title: "Carbohydrates",
+                                titleExtension: "(g)",
+                                text: $carbs,
+                                keyboardType: .decimalPad,
+                                isEnabled: manualOverrideToggle
+                            )
+
+                            TextInputRow(
+                                icon: .fat,
+                                title: "Fat",
+                                titleExtension: "(g)",
+                                text: $fat,
+                                keyboardType: .decimalPad,
+                                isEnabled: manualOverrideToggle
+                            )
+
+                            TextInputRow(
+                                icon: .fiber,
+                                title: "Fiber",
+                                titleExtension: "(g)",
+                                text: $fiber,
+                                keyboardType: .decimalPad,
+                                isEnabled: manualOverrideToggle
+                            )
+
+                            ToggleRow(
+                                title: "Manual Override",
+                                isOn: $manualOverrideToggle
                             )
                         }
                     }
+                    .padding([.top, .leading, .trailing])
 
-                    ToolbarItemGroup(placement: .automatic) {
-                        Menu {
-                            ForEach(LogSaveOption.allCases) { option in
-                                Button {
-                                    saveOption = option
-                                } label: {
-                                    if saveOption == option {
-                                        Label(
-                                            option.rawValue,
-                                            systemImage: "checkmark"
-                                        )
-                                    } else {
-                                        Text(option.rawValue)
-                                    }
+                    Spacer()
+                }
+            }
+            .safeAreaBar(edge: .top) {
+                Card {
+                    MealRow(
+                        name: name.isEmpty
+                            ? "New \(food.type.rawValue.capitalized)"
+                            : name,
+                        source: sourceSelection,
+                        isCustomDefaultServing: false,
+                        customServingSize: "",
+                        servingSize: displayServingSize,
+                        servingSizeUnit: food.servingUnit?.unit
+                            ?? "serving",
+                        servingWeight: displayServingWeight,
+                        servingWeightUnit: food.servingWeightUnit,
+                        servingUnits: portionUnitOptions,
+                        calorie: calorie,
+                        protein: protein,
+                        carbs: carbs,
+                        fat: fat,
+                        fiber: fiber
+                    )
+                    .nameLineLimit(3)
+                }
+                .padding([.leading, .trailing])
+                .padding(.bottom, 24)
+            }
+            .withCustomKeyboardToolbar()
+            .navigationTitle(
+                food.type == .food ? "Log Food" : "Log Ingredient"
+            )
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if !isPushedView {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                }
+
+                ToolbarItemGroup(placement: .automatic) {
+                    Menu {
+                        ForEach(LogSaveOption.allCases) { option in
+                            Button {
+                                saveOption = option
+                            } label: {
+                                if saveOption == option {
+                                    Label(
+                                        option.rawValue,
+                                        systemImage: "checkmark"
+                                    )
+                                } else {
+                                    Text(option.rawValue)
                                 }
-                                .disabled(!isEdited && option != .logOnly)
                             }
+                            .disabled(!isEdited && option != .logOnly)
+                        }
 
+                        if hasChangedFromOriginal {
                             Divider()
 
-                            Button(
-                                "Save as Draft",
-                                systemImage: "square.and.arrow.down",
-                                action: saveDraftAndClose
-                            )
-                            .disabled(isLoadingPhotos)
+                            Button(role: .destructive) {
+                                isResettingPortion = true
+                                withAnimation {
+                                    name = food.name
+                                    sourceSelection =
+                                        food.source?.source ?? ""
+                                    categorySelection =
+                                        food.category?.category ?? ""
+                                    foodGroupSelection =
+                                        food.foodGroup?.foodGroup ?? ""
+                                    locationSelection = initialLocationSelection
 
-                            if hasChangedFromOriginal {
-                                Divider()
+                                    portionQuantity =
+                                        originalPortionQuantity
+                                    portionUnitSelection =
+                                        originalPortionUnitSelection
 
-                                Button(role: .destructive) {
-                                    isResettingPortion = true
-                                    withAnimation {
-                                        name = food.name
-                                        sourceSelection =
-                                            food.source?.source ?? ""
-                                        categorySelection =
-                                            food.category?.category ?? ""
-                                        foodGroupSelection =
-                                            food.foodGroup?.foodGroup ?? ""
-                                        locationSelection = initialLocationSelection
-
-                                        portionQuantity =
-                                            originalPortionQuantity
-                                        portionUnitSelection =
-                                            originalPortionUnitSelection
-
-                                        manualOverrideToggle = false
-                                        calorie = EntryHelper.scale(
-                                            calorieStatic,
-                                            by: activeMultiplier
-                                        )
-                                        protein = EntryHelper.scale(
-                                            proteinStatic,
-                                            by: activeMultiplier
-                                        )
-                                        carbs = EntryHelper.scale(
-                                            carbsStatic,
-                                            by: activeMultiplier
-                                        )
-                                        fat = EntryHelper.scale(
-                                            fatStatic,
-                                            by: activeMultiplier
-                                        )
-                                        fiber = EntryHelper.scale(
-                                            fiberStatic,
-                                            by: activeMultiplier
-                                        )
-                                        calorieDynamic = calorie
-                                        proteinDynamic = protein
-                                        carbsDynamic = carbs
-                                        fatDynamic = fat
-                                        fiberDynamic = fiber
-
-                                        stickyNote = originalNoteText
-                                        newNote = ""
-
-                                        selectedPhotos = []
-                                        isLoadingPhotos = false
-
-                                        saveOption = .logOnly
-                                    }
-                                    DispatchQueue.main.async {
-                                        isResettingPortion = false
-                                    }
-                                } label: {
-                                    Label(
-                                        "Reset to Original",
-                                        systemImage: "arrow.counterclockwise"
+                                    manualOverrideToggle = false
+                                    calorie = EntryHelper.scale(
+                                        calorieStatic,
+                                        by: activeMultiplier
                                     )
+                                    protein = EntryHelper.scale(
+                                        proteinStatic,
+                                        by: activeMultiplier
+                                    )
+                                    carbs = EntryHelper.scale(
+                                        carbsStatic,
+                                        by: activeMultiplier
+                                    )
+                                    fat = EntryHelper.scale(
+                                        fatStatic,
+                                        by: activeMultiplier
+                                    )
+                                    fiber = EntryHelper.scale(
+                                        fiberStatic,
+                                        by: activeMultiplier
+                                    )
+                                    calorieDynamic = calorie
+                                    proteinDynamic = protein
+                                    carbsDynamic = carbs
+                                    fatDynamic = fat
+                                    fiberDynamic = fiber
+
+                                    stickyNote = originalNoteText
+                                    newNote = ""
+
+                                    selectedPhotos = []
+                                    isLoadingPhotos = false
+
+                                    saveOption = .logOnly
                                 }
+                                DispatchQueue.main.async {
+                                    isResettingPortion = false
+                                }
+                            } label: {
+                                Label(
+                                    "Reset to Original",
+                                    systemImage: "arrow.counterclockwise"
+                                )
                             }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                                .foregroundStyle(.primary)
                         }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .foregroundStyle(.primary)
                     }
+                }
 
-                    ToolbarItemGroup(placement: .topBarTrailing) {
-                        Button {
-                            saveEntry()
-                        } label: {
-                            Image(systemName: "plus")
-                                .foregroundStyle(.primary)
-                        }
-                        .tint(Color.accentColor)
-                        .buttonStyle(.glassProminent)
-                        .disabled(isLoadingPhotos)
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        saveEntry()
+                    } label: {
+                        Image(systemName: "plus")
+                            .foregroundStyle(.primary)
                     }
+                    .tint(Color.accentColor)
+                    .buttonStyle(.glassProminent)
+                    .disabled(isLoadingPhotos)
                 }
-                .onChange(of: isEdited) { oldVal, newVal in
-                    if !newVal && saveOption != .logOnly {
-                        saveOption = .logOnly
-                    }
+            }
+            .onChange(of: isEdited) { oldVal, newVal in
+                if !newVal && saveOption != .logOnly {
+                    saveOption = .logOnly
                 }
-                .onChange(of: portionUnitSelection) { oldUnit, newUnit in
-                    guard !isResettingPortion, oldUnit != newUnit,
-                        let weight = food.servingWeight
-                    else { return }
-                    let currentQuantity = Double(portionQuantity) ?? 0
-                    let baseUnit = food.servingUnit?.unit ?? "serving"
+            }
+            .onChange(of: portionUnitSelection) { oldUnit, newUnit in
+                guard !isResettingPortion, oldUnit != newUnit,
+                    let weight = food.servingWeight
+                else { return }
+                let currentQuantity = Double(portionQuantity) ?? 0
+                let baseUnit = food.servingUnit?.unit ?? "serving"
 
-                    if oldUnit == baseUnit && newUnit == food.servingWeightUnit
-                    {
-                        let newQuantity =
-                            (currentQuantity / food.servingSize) * weight
-                        portionQuantity = newQuantity.formatted(
-                            .number.precision(.fractionLength(0...2))
-                        )
+                if oldUnit == baseUnit && newUnit == food.servingWeightUnit
+                {
+                    let newQuantity =
+                        (currentQuantity / food.servingSize) * weight
+                    portionQuantity = newQuantity.formatted(
+                        .number.precision(.fractionLength(0...2))
+                    )
 
-                    } else if oldUnit == food.servingWeightUnit
-                        && newUnit == baseUnit
-                    {
-                        let newQuantity =
-                            (currentQuantity / weight) * food.servingSize
-                        portionQuantity = newQuantity.formatted(
-                            .number.precision(.fractionLength(0...2))
-                        )
-                    }
+                } else if oldUnit == food.servingWeightUnit
+                    && newUnit == baseUnit
+                {
+                    let newQuantity =
+                        (currentQuantity / weight) * food.servingSize
+                    portionQuantity = newQuantity.formatted(
+                        .number.precision(.fractionLength(0...2))
+                    )
                 }
-                .onChange(of: portionQuantity) { _, _ in
-                    if !manualOverrideToggle {
-                        calorie = EntryHelper.scale(
-                            calorieStatic,
-                            by: activeMultiplier
-                        )
-                        protein = EntryHelper.scale(
-                            proteinStatic,
-                            by: activeMultiplier
-                        )
-                        carbs = EntryHelper.scale(
-                            carbsStatic,
-                            by: activeMultiplier
-                        )
-                        fat = EntryHelper.scale(fatStatic, by: activeMultiplier)
-                        fiber = EntryHelper.scale(
-                            fiberStatic,
-                            by: activeMultiplier
-                        )
+            }
+            .onChange(of: portionQuantity) { _, _ in
+                if !manualOverrideToggle {
+                    calorie = EntryHelper.scale(
+                        calorieStatic,
+                        by: activeMultiplier
+                    )
+                    protein = EntryHelper.scale(
+                        proteinStatic,
+                        by: activeMultiplier
+                    )
+                    carbs = EntryHelper.scale(
+                        carbsStatic,
+                        by: activeMultiplier
+                    )
+                    fat = EntryHelper.scale(fatStatic, by: activeMultiplier)
+                    fiber = EntryHelper.scale(
+                        fiberStatic,
+                        by: activeMultiplier
+                    )
 
-                        calorieDynamic = calorie
-                        proteinDynamic = protein
-                        carbsDynamic = carbs
-                        fatDynamic = fat
-                        fiberDynamic = fiber
-                    }
+                    calorieDynamic = calorie
+                    proteinDynamic = protein
+                    carbsDynamic = carbs
+                    fatDynamic = fat
+                    fiberDynamic = fiber
                 }
-                .onChange(of: manualOverrideToggle) { oldValue, isManual in
-                    if isManual {
-                        calorie = calorieDynamic
-                        protein = proteinDynamic
-                        carbs = carbsDynamic
-                        fat = fatDynamic
-                        fiber = fiberDynamic
-                    } else {
-                        calorie = EntryHelper.scale(
-                            calorieStatic,
-                            by: activeMultiplier
-                        )
-                        protein = EntryHelper.scale(
-                            proteinStatic,
-                            by: activeMultiplier
-                        )
-                        carbs = EntryHelper.scale(
-                            carbsStatic,
-                            by: activeMultiplier
-                        )
-                        fat = EntryHelper.scale(fatStatic, by: activeMultiplier)
-                        fiber = EntryHelper.scale(
-                            fiberStatic,
-                            by: activeMultiplier
-                        )
-                    }
+            }
+            .onChange(of: manualOverrideToggle) { oldValue, isManual in
+                if isManual {
+                    calorie = calorieDynamic
+                    protein = proteinDynamic
+                    carbs = carbsDynamic
+                    fat = fatDynamic
+                    fiber = fiberDynamic
+                } else {
+                    calorie = EntryHelper.scale(
+                        calorieStatic,
+                        by: activeMultiplier
+                    )
+                    protein = EntryHelper.scale(
+                        proteinStatic,
+                        by: activeMultiplier
+                    )
+                    carbs = EntryHelper.scale(
+                        carbsStatic,
+                        by: activeMultiplier
+                    )
+                    fat = EntryHelper.scale(fatStatic, by: activeMultiplier)
+                    fiber = EntryHelper.scale(
+                        fiberStatic,
+                        by: activeMultiplier
+                    )
                 }
-                .onChange(of: calorie) {
-                    if manualOverrideToggle { calorieDynamic = calorie }
-                }
-                .onChange(of: protein) {
-                    if manualOverrideToggle { proteinDynamic = protein }
-                }
-                .onChange(of: carbs) {
-                    if manualOverrideToggle { carbsDynamic = carbs }
-                }
-                .onChange(of: fat) {
-                    if manualOverrideToggle { fatDynamic = fat }
-                }
-                .onChange(of: fiber) {
-                    if manualOverrideToggle { fiberDynamic = fiber }
-                }
-                .onChange(of: isEdited) { oldVal, newVal in
-                    if !newVal && saveOption != .logOnly {
-                        saveOption = .logOnly
-                    }
+            }
+            .onChange(of: calorie) {
+                if manualOverrideToggle { calorieDynamic = calorie }
+            }
+            .onChange(of: protein) {
+                if manualOverrideToggle { proteinDynamic = protein }
+            }
+            .onChange(of: carbs) {
+                if manualOverrideToggle { carbsDynamic = carbs }
+            }
+            .onChange(of: fat) {
+                if manualOverrideToggle { fatDynamic = fat }
+            }
+            .onChange(of: fiber) {
+                if manualOverrideToggle { fiberDynamic = fiber }
+            }
+            .onChange(of: isEdited) { oldVal, newVal in
+                if !newVal && saveOption != .logOnly {
+                    saveOption = .logOnly
                 }
             }
         }
@@ -1155,6 +1183,7 @@ struct LogEntryView: View {
             if initialDraftState == nil {
                 initialDraftState = draftState
                 initialPhotoData = selectedPhotos.map(\.originalData)
+                initialLocation = locationSelection
             }
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -1162,14 +1191,12 @@ struct LogEntryView: View {
                 autoSaveDraft()
             }
         }
-        .onDisappear {
+        .onLeave { handleClose() }
+        .onDisappear { handleClose() }
+        .onDraftDeleted(id: draftID, isEnabled: isResumedDraft) {
             guard !didFinishLogging else { return }
-
-            if isResumedDraft {
-                saveDraft()
-            } else {
-                DraftStore.delete(id: draftID, in: modelContext)
-            }
+            didFinishLogging = true
+            dismiss()
         }
         .sheet(isPresented: $showingAllNotes) {
             NotesHistoryView(food: food)
@@ -1181,6 +1208,16 @@ struct LogEntryView: View {
                 for: food,
                 in: modelContext
             )
+        }
+    }
+
+    var body: some View {
+        if isPushedView {
+            form
+        } else {
+            NavigationStack {
+                form
+            }
         }
     }
 }

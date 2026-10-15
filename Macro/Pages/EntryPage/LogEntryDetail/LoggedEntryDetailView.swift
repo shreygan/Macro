@@ -530,19 +530,17 @@ struct LoggedEntryDetailView: View {
             popAfterLogAgain = false
             dismiss()
         }) { foodToLog in
-            NavigationStack {
+            Group {
                 if foodToLog.type == .recipe {
                     LogRecipeView(
                         recipe: foodToLog,
-                        previousEntry: entry,
-                        isPushedView: false
+                        previousEntry: entry
                     )
                     .environment(\.rootDismiss) { finishLogAgain() }
                 } else {
                     LogEntryView(
                         food: foodToLog,
-                        previousEntry: entry,
-                        isPushedView: false
+                        previousEntry: entry
                     )
                     .environment(\.rootDismiss) { finishLogAgain() }
                 }

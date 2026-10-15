@@ -90,6 +90,32 @@ extension Toast {
         )
     }
 
+    static func draftSaved(
+        id: UUID,
+        name: String,
+        in context: ModelContext,
+        presenter: ToastCenter?
+    ) -> Toast {
+        Toast(
+            group: entryGroup,
+            symbol: "square.and.arrow.down",
+            tint: .secondary,
+            title: String(localized: "Draft Saved"),
+            message: name,
+            action: Toast.Action(title: String(localized: "Discard")) { [weak presenter] in
+                do {
+                    let record = try withAnimation {
+                        try EntryDeleter.deleteDraft(id: id, in: context)
+                    }
+                    guard let record else { return }
+                    presenter?.show(.draftDeleted(record, in: context, presenter: presenter))
+                } catch {
+                    presenter?.show(.failure(String(localized: "Couldn't Delete Draft")))
+                }
+            }
+        )
+    }
+
     static func foodDeleted(
         _ record: DeletedFoodRecord,
         in context: ModelContext,
