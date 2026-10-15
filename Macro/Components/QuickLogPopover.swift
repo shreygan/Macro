@@ -85,6 +85,9 @@ struct QuickLogPopover: View {
         .frame(width: 280)
         .fixedSize(horizontal: false, vertical: true)
         .sensoryFeedback(.selection, trigger: hoveredID) { _, newID in newID != nil }
+        .task {
+            _ = await LocationManager.shared.currentLocation()
+        }
         .onChange(of: popoverDrag.releaseCount) {
             if let food = food(at: popoverDrag.releaseLocation, in: allFoods) {
                 select(food)

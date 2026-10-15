@@ -358,6 +358,7 @@ enum LoggedEntryUpdater {
                 parentEntry: log,
                 timestamp: log.timestamp,
                 location: log.location,
+                savedLocation: log.savedLocation,
                 loggedQuantity: ingredient.quantity * multiplier,
                 loggedUnit: ingredient.unit,
                 calories: ingredient.baseCalories * ingredientMultiplier,

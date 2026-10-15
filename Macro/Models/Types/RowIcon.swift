@@ -15,3 +15,8 @@ enum RowIcon {
     /// For custom asset catalog images. Passes the Image itself.
     case custom(Image)
 }
+
+enum RowThumbnail {
+    case placeholder
+    case image(UIImage)
+}

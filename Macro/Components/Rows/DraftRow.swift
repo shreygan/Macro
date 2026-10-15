@@ -11,6 +11,7 @@ struct DraftRow: View {
     var name: String
     var nameSuffix: String?
     var subtitle: String
+    var location: String?
     var icon: AppSymbols?
     var status: String?
     var statusSymbol: String?
@@ -32,6 +33,7 @@ struct DraftRow: View {
                 draft.timestamp.map(EntryHelper.logDateText) ?? "No Date"
             self.nameSuffix = details.category
             self.subtitle = details.subtitle
+            self.location = details.location
             let edited = draft.updatedAt.formatted(
                 .relative(presentation: .named)
             )
@@ -76,16 +78,16 @@ struct DraftRow: View {
     private static func historyDetails(
         for draft: EntryDraft,
         units: [ServingSizeUnit]
-    ) -> (category: String?, subtitle: String) {
+    ) -> (category: String?, subtitle: String, location: String?) {
         let source: String
         let category: String
-        let location: String
+        let location: EntryLocation?
         let detail: String
 
         switch draft.kind {
         case .logFood:
             guard let state = draft.decodeState(LogEntryDraftState.self)
-            else { return (nil, "") }
+            else { return (nil, "", nil) }
             source = state.sourceSelection
             category = state.categorySelection
             location = state.location
@@ -96,7 +98,7 @@ struct DraftRow: View {
             )
         case .logRecipe:
             guard let state = draft.decodeState(LogRecipeDraftState.self)
-            else { return (nil, "") }
+            else { return (nil, "", nil) }
             source = state.sourceSelection
             category = state.categorySelection
             location = state.location
@@ -106,7 +108,7 @@ struct DraftRow: View {
                 units: units
             )
         default:
-            return (nil, buildSubtitle(for: draft, units: units))
+            return (nil, buildSubtitle(for: draft, units: units), nil)
         }
 
         var parts = [detail]
@@ -115,13 +117,10 @@ struct DraftRow: View {
         {
             parts.insert(source, at: 0)
         }
-        if !location.isEmpty {
-            parts.append(location)
-        }
 
         let categoryText =
             category.isEmpty || category == "None" ? nil : category
-        return (categoryText, parts.joined(separator: " · "))
+        return (categoryText, parts.joined(separator: " · "), location?.name)
     }
 
     private static func buildSubtitle(
@@ -201,8 +200,8 @@ struct DraftRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                if !subtitle.isEmpty {
-                    Text(subtitle)
+                if let subtitleText = Text.detailLine([subtitle], location: location) {
+                    subtitleText
                         .font(.subtitle)
                         .foregroundColor(.tertiaryText)
                         .lineLimit(1)

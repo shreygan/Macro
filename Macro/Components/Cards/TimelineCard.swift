@@ -37,6 +37,36 @@ private enum TimelineItem: Identifiable {
     }
 
     var isDraft: Bool { draft != nil }
+
+    var detail: Text? {
+        let (category, location) = categoryAndLocation
+        return Text.detailLine([category], location: location)
+    }
+
+    private var categoryAndLocation: (String?, String?) {
+        switch self {
+        case .entry(let entry):
+            return (entry.category?.category, entry.locationName)
+        case .draft(let draft):
+            let category: String
+            let location: EntryLocation?
+            switch draft.kind {
+            case .logFood:
+                guard let state = draft.decodeState(LogEntryDraftState.self)
+                else { return (nil, nil) }
+                category = state.categorySelection
+                location = state.location
+            case .logRecipe:
+                guard let state = draft.decodeState(LogRecipeDraftState.self)
+                else { return (nil, nil) }
+                category = state.categorySelection
+                location = state.location
+            default:
+                return (nil, nil)
+            }
+            return (category == "None" ? nil : category, location?.name)
+        }
+    }
 }
 
 struct TimelineCard<MenuContent: View>: View {
@@ -116,6 +146,10 @@ struct TimelineCard<MenuContent: View>: View {
             action: {
                 clickedEntry = entry
             }
+        )
+        .attachmentHints(
+            hasNote: !(entry.logNote ?? "").isEmpty,
+            hasPhotos: !(entry.photos ?? []).isEmpty
         )
 
         if MenuContent.self != EmptyView.self {
@@ -216,23 +250,25 @@ struct TimelineCard<MenuContent: View>: View {
                                 Text(formatTime(item.timestamp))
                                     .fontWeight(.semibold)
                                     .foregroundColor(.primary)
+                                    .fixedSize()
 
-                                if let categoryName = item.entry?.category?
-                                    .category,
-                                    !categoryName.isEmpty
-                                {
-                                    Text(", \(categoryName)")
+                                if let detail = item.detail {
+                                    Text(" · \(detail)")
                                         .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
                                 }
 
                                 if item.isDraft {
                                     Text("Draft")
                                         .tagStyle()
+                                        .fixedSize()
                                         .padding(.leading, 6)
                                 }
                             }
                             .font(.subtitle)
                             .padding(.leading, 4)
+                            .padding(.trailing, 16)
                             .padding(.bottom, 6)
 
                             if let entry = item.entry {

@@ -67,6 +67,24 @@ enum FoodItemStore {
         return FoodLogStats.byFood((try? context.fetch(descriptor)) ?? [])
     }
 
+    static func logStats(
+        for foods: [FoodItem],
+        in context: ModelContext
+    ) -> [UUID: FoodLogStats] {
+        var result: [UUID: FoodLogStats] = [:]
+        for food in foods {
+            var latest = topLevelLogsDescriptor(for: food)
+            latest.fetchLimit = 1
+            guard
+                let count = try? context.fetchCount(topLevelLogsDescriptor(for: food)),
+                count > 0,
+                let last = try? context.fetch(latest).first
+            else { continue }
+            result[food.id] = FoodLogStats(count: count, lastLogged: last.timestamp)
+        }
+        return result
+    }
+
     static func topLevelLogsDescriptor(
         for food: FoodItem
     ) -> FetchDescriptor<LoggedEntry> {

@@ -64,4 +64,15 @@ class RecipeIngredient {
         self.baseFat = baseFat
         self.baseFiber = baseFiber
     }
+
+    var calories: Double {
+        let multiplier = EntryHelper.ingredientMultiplier(
+            quantity: quantity,
+            unit: unit,
+            baseServingSize: baseServingSize,
+            baseServingWeight: baseServingWeight,
+            baseServingWeightUnit: baseServingWeightUnit
+        )
+        return multiplier.isFinite ? baseCalories * multiplier : 0
+    }
 }

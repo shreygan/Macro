@@ -23,6 +23,9 @@ struct MealRow<Content: View>: View {
     var isSelected: Bool?
     var tag: LocalizedStringKey?
     var nameLineLimit: Int?
+    var location: String?
+    var hasNote = false
+    var hasPhotos = false
 
     let content: Content
 
@@ -176,7 +179,7 @@ struct MealRow<Content: View>: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     ViewThatFits(in: .horizontal) {
-                        Text(subtitle)
+                        subtitleLine(subtitle)
                             .font(.subtitle)
                             .foregroundColor(.tertiaryText)
                             .lineLimit(1)
@@ -190,7 +193,7 @@ struct MealRow<Content: View>: View {
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                             }
-                            Text(bottomText)
+                            subtitleLine(bottomText)
                                 .font(.subtitle)
                                 .foregroundColor(.tertiaryText)
                                 .lineLimit(1)
@@ -209,6 +212,8 @@ struct MealRow<Content: View>: View {
             content
                 .layoutPriority(1)
                 .padding(.leading, -10)
+
+            AttachmentHints(hasNote: hasNote, hasPhotos: hasPhotos)
 
             if let isSelected {
                 Image(
@@ -245,6 +250,10 @@ struct MealRow<Content: View>: View {
         } else {
             rowContent
         }
+    }
+
+    private func subtitleLine(_ text: String) -> Text {
+        Text.detailLine([text], location: location) ?? Text(text)
     }
 
     private func buildMacroText(
@@ -326,6 +335,19 @@ struct MealRow<Content: View>: View {
     func nameLineLimit(_ limit: Int?) -> Self {
         var row = self
         row.nameLineLimit = limit
+        return row
+    }
+
+    func location(_ name: String?) -> Self {
+        var row = self
+        row.location = name
+        return row
+    }
+
+    func attachmentHints(hasNote: Bool, hasPhotos: Bool) -> Self {
+        var row = self
+        row.hasNote = hasNote
+        row.hasPhotos = hasPhotos
         return row
     }
 }

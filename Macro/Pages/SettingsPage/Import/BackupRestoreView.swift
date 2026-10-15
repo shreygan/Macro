@@ -206,6 +206,7 @@ struct BackupRestoreView: View {
             do {
                 let result = try await BackupRestorer(context: modelContext)
                     .restore(backup, mode: mode)
+                Task { await PendingLocationNamer.run(in: modelContext) }
                 isRestoring = false
                 toastCenter?.show(
                     Toast(

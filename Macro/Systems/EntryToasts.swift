@@ -22,6 +22,21 @@ extension Toast {
         )
     }
 
+    static func info(
+        _ title: String,
+        message: String? = nil,
+        symbol: String = "info"
+    ) -> Toast {
+        Toast(
+            group: entryGroup,
+            kind: .info,
+            symbol: symbol,
+            tint: .secondary,
+            title: title,
+            message: message
+        )
+    }
+
     static func entryDeleted(
         _ record: MacroBackup.LogRecord,
         in context: ModelContext,
@@ -128,6 +143,31 @@ extension Toast {
         )
     }
 
+    static func savedLocationDeleted(
+        _ record: DeletedSavedLocationRecord,
+        in context: ModelContext,
+        presenter: ToastCenter?
+    ) -> Toast {
+        Toast(
+            group: entryGroup,
+            symbol: "trash",
+            tint: .red,
+            title: String(localized: "Saved Location Deleted"),
+            message: record.name,
+            action: Toast.Action(title: String(localized: "Undo")) { [weak presenter] in
+                do {
+                    try withAnimation {
+                        try SavedLocation.restore(record, in: context)
+                    }
+                } catch {
+                    presenter?.show(
+                        .failure(String(localized: "Couldn't Restore Location"), message: record.name)
+                    )
+                }
+            }
+        )
+    }
+
     static func entryLogged(
         _ record: LogUndoRecord,
         title: String,
@@ -143,6 +183,11 @@ extension Toast {
             title: title,
             message: entry.name,
             messageDetail: String(localized: "\(EntryHelper.formatMacro(entry.calories)) kcal"),
+            location: {
+                guard !entry.isDeleted, entry.modelContext != nil, !entry.needsLocationName
+                else { return nil }
+                return entry.locationName
+            },
             action: Toast.Action(title: String(localized: "Edit")) { [weak presenter] in
                 guard !entry.isDeleted, entry.modelContext != nil else { return }
                 presenter?.presentSheet(

@@ -46,6 +46,7 @@ struct EditRecipeView: View {
 
     @State private var name: String
     @State private var source: String
+    @State private var defaultLocation: EntryLocation?
     @State private var category: String
 
     @State private var servingSize: String
@@ -94,6 +95,7 @@ struct EditRecipeView: View {
 
         _name = State(initialValue: recipe.name)
         _source = State(initialValue: recipe.source?.source ?? "")
+        _defaultLocation = State(initialValue: recipe.defaultLocation)
         _category = State(initialValue: recipe.category?.category ?? "")
 
         _servingSize = State(
@@ -357,6 +359,7 @@ struct EditRecipeView: View {
             recipe.servingWeightUnit = servingWeightUnit
             recipe.isCustomDefaultServing = isCustomDefaultServing
             recipe.customServingSize = parseOptionalDouble(customServingSize)
+            recipe.defaultLocation = defaultLocation
 
             if trimmedNote.isEmpty {
                 recipe.stickyNote = nil
@@ -435,6 +438,7 @@ struct EditRecipeView: View {
                 fiber: totalFiber,
                 isCustomDefaultServing: isCustomDefaultServing,
                 customServingSize: parseOptionalDouble(customServingSize),
+                defaultLocation: defaultLocation,
                 stickyNote: resolvedStickyNote
             )
 
@@ -498,6 +502,13 @@ struct EditRecipeView: View {
                                 options: savedSources.visibleNames(keeping: source),
                                 selection: $source
                             )
+                            if !isImportMode {
+                                DefaultLocationRow(
+                                    location: $defaultLocation,
+                                    sourceName: source,
+                                    foodID: recipe.id
+                                )
+                            }
                             FullWidthDropdownRow(
                                 placeholder: "Category",
                                 options: savedCategories.visibleNames(

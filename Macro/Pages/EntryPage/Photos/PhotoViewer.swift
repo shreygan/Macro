@@ -25,6 +25,7 @@ struct PhotoViewer: View {
 
     @State private var isChromeHidden = false
     @State private var logToShow: LoggedEntry?
+    @State private var metadata: [PersistentIdentifier: PhotoMetadata] = [:]
 
     private let chromeAnimation = Animation.easeInOut(duration: 0.2)
 
@@ -72,6 +73,41 @@ struct PhotoViewer: View {
                 .scrollIndicators(.hidden)
                 .ignoresSafeArea()
             }
+            .overlay(alignment: .bottom) {
+                if !isChromeHidden, let selectedItem {
+                    let photoMetadata = metadata[selectedItem.id]
+                    let showsViewLog = selectedItem.entry.id != currentEntryID
+                    PhotoCaption(
+                        coordinate: photoMetadata?.coordinate,
+                        capturedAt: photoMetadata?.capturedAt,
+                        logDate: selectedItem.entry.timestamp,
+                        logLocation: selectedItem.entry.location,
+                        nearbyCoordinates: neighbors(of: selectedItem.id).compactMap {
+                            metadata[$0.id]?.coordinate
+                        }
+                    ) {
+                        if showsViewLog {
+                            ViewLogButton {
+                                logToShow = selectedItem.entry
+                            }
+                            .transition(.opacity)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .animation(.snappy(duration: 0.3), value: showsViewLog)
+                    .padding([.horizontal, .bottom])
+                    .transition(.opacity)
+                }
+            }
+            .task(id: selectedItem?.id) {
+                guard let selectedItem else { return }
+                for item in [selectedItem] + neighbors(of: selectedItem.id) where metadata[item.id] == nil {
+                    guard let loaded = await EntryPhotoCache.shared.metadata(for: item.photo),
+                        !Task.isCancelled
+                    else { continue }
+                    metadata[item.id] = loaded
+                }
+            }
             .background {
                 if let subtitle {
                     Color.clear.navigationSubtitle(subtitle)
@@ -84,8 +120,7 @@ struct PhotoViewer: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarVisibility(
                 isChromeHidden ? .hidden : .visible,
-                for: .navigationBar,
-                .bottomBar
+                for: .navigationBar
             )
             .statusBarHidden(isChromeHidden)
             .persistentSystemOverlays(isChromeHidden ? .hidden : .automatic)
@@ -99,21 +134,6 @@ struct PhotoViewer: View {
                     }
                     .accessibilityLabel("Close")
                 }
-
-                if let selectedItem, selectedItem.entry.id != currentEntryID {
-                    ToolbarSpacer(.flexible, placement: .bottomBar)
-
-                    ToolbarItem(placement: .bottomBar) {
-                        Button {
-                            logToShow = selectedItem.entry
-                        } label: {
-                            Label("View Log", systemImage: "list.bullet.rectangle")
-                                .labelStyle(.titleAndIcon)
-                        }
-                    }
-
-                    ToolbarSpacer(.flexible, placement: .bottomBar)
-                }
             }
             .sheet(item: $logToShow) { entry in
                 NavigationStack {
@@ -126,6 +146,66 @@ struct PhotoViewer: View {
             }
         }
         .environment(\.tabBarHeight, 0)
+    }
+
+    private func neighbors(of id: PersistentIdentifier) -> [PhotoViewerItem] {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return [] }
+        return [index + 1, index - 1]
+            .filter { items.indices.contains($0) }
+            .map { items[$0] }
+    }
+}
+
+private struct ViewLogButton: View {
+    var action: () -> Void
+
+    @State private var availableWidth = CGFloat.infinity
+    @State private var iconLabelWidth: CGFloat = 0
+
+    private var showsIcon: Bool {
+        availableWidth >= iconLabelWidth
+    }
+
+    var body: some View {
+        label(showsIcon: false)
+            .hidden()
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: {
+                availableWidth = $0
+            }
+            .background {
+                label(showsIcon: true)
+                    .hidden()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: {
+                        iconLabelWidth = $0
+                    }
+            }
+            .overlay(alignment: .trailing) {
+                Button(action: action) {
+                    label(showsIcon: showsIcon)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .contentShape(.capsule)
+                .accessibilityLabel("View Log")
+                .animation(.snappy(duration: 0.3), value: showsIcon)
+            }
+    }
+
+    private func label(showsIcon: Bool) -> some View {
+        HStack(spacing: 6) {
+            if showsIcon {
+                Image(systemName: "list.bullet.rectangle")
+                    .transition(.opacity)
+            }
+
+            Text("View Log")
+        }
+        .font(.compactTitle)
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 14)
+        .frame(height: 36)
+        .fixedSize()
     }
 }
 
@@ -210,6 +290,10 @@ struct LoggedPhotoViewer: View {
 
     let photos: [LoggedPhoto]
     @Binding var selection: UUID?
+    var logDate: Date? = nil
+    var logLocation: EntryLocation? = nil
+    var onUseTime: ((Date) -> Void)? = nil
+    var onUseLocation: ((EntryLocation) -> Void)? = nil
 
     @State private var isChromeHidden = false
 
@@ -260,6 +344,24 @@ struct LoggedPhotoViewer: View {
                 .scrollPosition(id: $selection)
                 .scrollIndicators(.hidden)
                 .ignoresSafeArea()
+            }
+            .overlay(alignment: .bottom) {
+                if !isChromeHidden, let index = photos.firstIndex(where: { $0.id == selection }) {
+                    let photo = photos[index]
+                    PhotoCaption(
+                        coordinate: photo.coordinate,
+                        capturedAt: photo.capturedAt,
+                        logDate: logDate,
+                        logLocation: logLocation,
+                        nearbyCoordinates: [index + 1, index - 1]
+                            .filter { photos.indices.contains($0) }
+                            .compactMap { photos[$0].coordinate },
+                        onUseTime: onUseTime,
+                        onUseLocation: onUseLocation
+                    )
+                        .padding([.horizontal, .bottom])
+                        .transition(.opacity)
+                }
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)

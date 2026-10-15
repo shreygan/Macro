@@ -33,6 +33,7 @@ struct AddEntryView: View {
 
     @State private var name: String = ""
     @State private var source: String = ""
+    @State private var defaultLocation: EntryLocation?
     @State private var category: String = ""
     @State private var foodGroup: String = ""
 
@@ -80,6 +81,7 @@ struct AddEntryView: View {
         if let state = draft?.decodeState(AddEntryDraftState.self) ?? prefill {
             _name = State(initialValue: state.name)
             _source = State(initialValue: state.source)
+            _defaultLocation = State(initialValue: state.defaultLocation)
             _category = State(initialValue: state.category)
             _foodGroup = State(initialValue: state.foodGroup)
             _servingSize = State(initialValue: state.servingSize)
@@ -124,7 +126,8 @@ struct AddEntryView: View {
             ),
             isCustomDefaultServing: isCustomDefaultServing,
             customServingSize: customServingSize,
-            stickyNote: stickyNote
+            stickyNote: stickyNote,
+            defaultLocation: defaultLocation
         )
     }
 
@@ -358,6 +361,7 @@ struct AddEntryView: View {
             fiber: parseDouble(fiberValue),
             isCustomDefaultServing: isCustomDefaultServing,
             customServingSize: parseOptionalDouble(customServingSize),
+            defaultLocation: defaultLocation,
             stickyNote: resolvedStickyNote
         )
 
@@ -426,6 +430,11 @@ struct AddEntryView: View {
                                         ).isEmpty
                                     },
                                 selection: $source
+                            )
+
+                            DefaultLocationRow(
+                                location: $defaultLocation,
+                                sourceName: source
                             )
 
                             if entryType == .food {

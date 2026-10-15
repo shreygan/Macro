@@ -17,7 +17,7 @@ struct DraftLogEntry: Identifiable, Equatable {
     var category: String
     var foodGroup: String
     var timestamp: Date
-    var location: String?
+    var location: EntryLocation?
     var quantity: Double
     var unit: String
     var calories: Double

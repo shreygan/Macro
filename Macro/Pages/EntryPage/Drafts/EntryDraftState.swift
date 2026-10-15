@@ -102,7 +102,8 @@ struct LogEntryDraftState: Codable, Equatable {
 
     var date: Date
     var time: Date
-    var location: String
+    var location: EntryLocation?
+    var usesCurrentLocation: Bool?
 
     var portionQuantity: String
     var portionUnitSelection: String
@@ -124,7 +125,8 @@ struct LogRecipeDraftState: Codable, Equatable {
 
     var date: Date
     var time: Date
-    var location: String
+    var location: EntryLocation?
+    var usesCurrentLocation: Bool?
 
     var portionQuantity: String
     var portionUnitSelection: String
@@ -155,6 +157,8 @@ struct AddEntryDraftState: Codable, Equatable {
     var customServingSize: String
 
     var stickyNote: String
+
+    var defaultLocation: EntryLocation? = nil
 
     static let empty = AddEntryDraftState(
         name: "",
@@ -195,6 +199,8 @@ struct AddRecipeDraftState: Codable, Equatable {
     var ingredients: [DraftIngredientSnapshot]
 
     var stickyNote: String
+
+    var defaultLocation: EntryLocation? = nil
 
     static let empty = AddRecipeDraftState(
         name: "",

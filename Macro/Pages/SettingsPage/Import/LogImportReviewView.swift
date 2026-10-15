@@ -293,6 +293,8 @@ struct LogImportReviewView: View {
             fiber: EntryHelper.format(entry.fiber),
             icon: entry.entryType.flatMap { $0 == .food ? nil : $0.appSymbol }
         )
+        .location(entry.location?.name)
+        .attachmentHints(hasNote: !(entry.note ?? "").isEmpty, hasPhotos: false)
     }
 
     private func save() {
@@ -301,6 +303,7 @@ struct LogImportReviewView: View {
         if addMissingToLibrary {
             addToLibrary(missingFoods, library: &library, resolver: resolver)
         }
+        let savedLocations = (try? modelContext.fetch(FetchDescriptor<SavedLocation>())) ?? []
         let existingLogs =
             (try? modelContext.fetch(FetchDescriptor<LoggedEntry>())) ?? []
         var logsByID = Dictionary(
@@ -310,6 +313,7 @@ struct LogImportReviewView: View {
 
         var replacedIDs = Set<UUID>()
         var addedCount = 0
+        var locationUses: [(location: EntryLocation?, date: Date)] = []
 
         for draft in entries {
             if let duplicateID = draft.duplicateOf {
@@ -320,12 +324,25 @@ struct LogImportReviewView: View {
                     if let existing = logsByID[duplicateID],
                         replacedIDs.insert(duplicateID).inserted
                     {
-                        apply(draft, to: existing, resolver: resolver, library: library)
+                        apply(
+                            draft,
+                            to: existing,
+                            resolver: resolver,
+                            library: library,
+                            savedLocations: savedLocations
+                        )
                         for child in existing.childEntries ?? [] {
                             modelContext.delete(child)
                         }
                         existing.childEntries = []
-                        insertComponents(of: draft, into: existing, resolver: resolver, library: library)
+                        insertComponents(
+                            of: draft,
+                            into: existing,
+                            resolver: resolver,
+                            library: library,
+                            savedLocations: savedLocations
+                        )
+                        locationUses.append((existing.location, existing.timestamp))
                         continue
                     }
                 case .keepBoth:
@@ -336,12 +353,27 @@ struct LogImportReviewView: View {
             let id = draft.duplicateOf == nil
                 ? draft.importID.flatMap { logsByID[$0] == nil ? $0 : nil } ?? UUID()
                 : UUID()
-            let log = makeLog(draft, id: id, parent: nil, resolver: resolver, library: library)
+            let log = makeLog(
+                draft,
+                id: id,
+                parent: nil,
+                resolver: resolver,
+                library: library,
+                savedLocations: savedLocations
+            )
             modelContext.insert(log)
             logsByID[log.id] = log
-            insertComponents(of: draft, into: log, resolver: resolver, library: library)
+            insertComponents(
+                of: draft,
+                into: log,
+                resolver: resolver,
+                library: library,
+                savedLocations: savedLocations
+            )
+            locationUses.append((log.location, log.timestamp))
             addedCount += 1
         }
+        RecentLocationStore.record(locationUses, in: modelContext)
 
         do {
             try modelContext.save()
@@ -350,6 +382,7 @@ struct LogImportReviewView: View {
             importAlert = .saveFailed(error)
             return
         }
+        Task { await PendingLocationNamer.run(in: modelContext) }
 
         toastCenter?.show(
             .importComplete(
@@ -485,12 +518,20 @@ struct LogImportReviewView: View {
         of draft: DraftLogEntry,
         into parent: LoggedEntry,
         resolver: ImportResolver,
-        library: [FoodItem]
+        library: [FoodItem],
+        savedLocations: [SavedLocation]
     ) {
         for (index, component) in draft.components.enumerated() {
             var component = component
             component.displayOrder = index
-            let child = makeLog(component, id: UUID(), parent: parent, resolver: resolver, library: library)
+            let child = makeLog(
+                component,
+                id: UUID(),
+                parent: parent,
+                resolver: resolver,
+                library: library,
+                savedLocations: savedLocations
+            )
             modelContext.insert(child)
         }
     }
@@ -500,7 +541,8 @@ struct LogImportReviewView: View {
         id: UUID,
         parent: LoggedEntry?,
         resolver: ImportResolver,
-        library: [FoodItem]
+        library: [FoodItem],
+        savedLocations: [SavedLocation]
     ) -> LoggedEntry {
         let log = LoggedEntry(
             id: id,
@@ -516,7 +558,13 @@ struct LogImportReviewView: View {
             fat: draft.fat,
             fiber: draft.fiber
         )
-        apply(draft, to: log, resolver: resolver, library: library)
+        apply(
+            draft,
+            to: log,
+            resolver: resolver,
+            library: library,
+            savedLocations: savedLocations
+        )
         return log
     }
 
@@ -524,7 +572,8 @@ struct LogImportReviewView: View {
         _ draft: DraftLogEntry,
         to log: LoggedEntry,
         resolver: ImportResolver,
-        library: [FoodItem]
+        library: [FoodItem],
+        savedLocations: [SavedLocation]
     ) {
         log.name = draft.name
         log.typeRawValue = draft.typeRawValue
@@ -532,7 +581,10 @@ struct LogImportReviewView: View {
         log.category = resolver.category(draft.category)
         log.foodGroup = resolver.foodGroup(draft.foodGroup)
         log.timestamp = draft.timestamp
-        log.location = draft.location
+        let saved = draft.location.flatMap { SavedLocation.matching($0, in: savedLocations) }
+        var location = draft.location
+        location?.savedLocationID = saved?.id
+        log.setLocation(location, savedLocation: saved)
         log.loggedQuantity = draft.quantity
         log.loggedUnit = draft.unit
         log.calories = draft.calories

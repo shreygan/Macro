@@ -25,6 +25,8 @@ extension Color {
         }
     )
 
+    static let placeholderText = Color(uiColor: .placeholderText)
+
     static var background: Color {
         Color.gray.opacity(0.15)
     }

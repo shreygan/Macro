@@ -17,6 +17,7 @@ enum AppSymbols: String {
     case protein = "p.circle.fill"
     case carbs = "c.circle.fill"
     case fatfiber = "f.circle.fill"
+    case location = "mappin"
 
     var image: Image {
         Image(systemName: self.rawValue)
@@ -70,5 +71,25 @@ extension RowIcon {
             .foregroundColor(valueColor)
 
         return Text("\(prefix)\(imageText)\(valueText)")
+    }
+}
+
+extension Text {
+    static func location(_ name: String) -> Text {
+        let pin = Text(AppSymbols.location.image).font(.detail)
+        return Text("\(pin)\u{202F}\(name)")
+    }
+
+    static func detailLine(_ parts: [String?], location: String?) -> Text? {
+        let text = parts.compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+
+        guard let location, !location.isEmpty else {
+            return text.isEmpty ? nil : Text(text)
+        }
+
+        let pin = Text.location(location)
+        return text.isEmpty ? pin : Text("\(text) · \(pin)")
     }
 }

@@ -34,6 +34,7 @@ struct Toast: Identifiable {
     var title: String
     var message: String? = nil
     var messageDetail: String? = nil
+    var location: (() -> String?)? = nil
     var duration: TimeInterval? = nil
     var action: Action? = nil
     var secondaryAction: Action? = nil
@@ -259,6 +260,11 @@ struct ToastView: View {
         toast.action != nil && toast.secondaryAction != nil
     }
 
+    private var locationName: String? {
+        guard let name = toast.location?(), !name.isEmpty else { return nil }
+        return name
+    }
+
     private var shape: AnyShape {
         isStacked
             ? AnyShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
@@ -299,6 +305,7 @@ struct ToastView: View {
         )
         .padding(.horizontal, 12)
         .padding(.top, -0.5)
+        .animation(.smooth(duration: 0.3), value: locationName)
         .offset(y: dragOffset)
         .highPriorityGesture(dragGesture)
         .accessibilityElement(children: .contain)
@@ -335,20 +342,40 @@ struct ToastView: View {
                     .foregroundStyle(.primary)
 
                 if let message = toast.message {
-                    HStack(spacing: 0) {
-                        Text(message)
-
-                        if let detail = toast.messageDetail {
-                            Text(verbatim: " · \(detail)")
-                                .fixedSize()
-                        }
-                    }
-                    .font(.compactValue)
-                    .foregroundStyle(.secondary)
+                    messageLines(message)
+                        .font(.compactValue)
+                        .foregroundStyle(.secondary)
                 }
             }
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func messageLines(_ message: String) -> some View {
+        if let location = locationName {
+            ViewThatFits(in: .horizontal) {
+                Text.detailLine([message, toast.messageDetail], location: location)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    messageLine(message)
+                    Text.location(location)
+                }
+            }
+        } else {
+            messageLine(message)
+        }
+    }
+
+    private func messageLine(_ message: String) -> some View {
+        HStack(spacing: 0) {
+            Text(message)
+
+            if let detail = toast.messageDetail {
+                Text(verbatim: " · \(detail)")
+                    .fixedSize()
+            }
         }
     }
 

@@ -36,10 +36,14 @@ struct PhotoLog: Identifiable {
     }
 
     static func detail(for entry: LoggedEntry) -> String? {
-        let parts = [entry.category?.category, entry.location]
+        let parts = [entry.category?.category, entry.locationName]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    static func detailText(for entry: LoggedEntry) -> Text? {
+        Text.detailLine([entry.category?.category], location: entry.locationName)
     }
 }
 
@@ -211,7 +215,7 @@ private struct PhotoHistoryContent: View {
                         ForEach(month.logs) { log in
                             LogPhotoCard(
                                 log: log,
-                                detail: PhotoLog.detail(for: log.entry),
+                                detail: PhotoLog.detailText(for: log.entry),
                                 isCurrent: log.id == currentEntryID,
                                 framingWidth: framingWidth,
                                 namespace: photoNamespace,
@@ -297,7 +301,7 @@ private struct PhotoHistoryContent: View {
 
 private struct LogPhotoCard: View {
     let log: PhotoLog
-    let detail: String?
+    let detail: Text?
     let isCurrent: Bool
     let framingWidth: CGFloat
     let namespace: Namespace.ID
@@ -342,7 +346,7 @@ private struct LogPhotoCard: View {
                     .lineLimit(1)
 
                 if let detail {
-                    Text(detail)
+                    detail
                         .font(.subtitle)
                         .foregroundStyle(Color.tertiaryText)
                         .lineLimit(1)

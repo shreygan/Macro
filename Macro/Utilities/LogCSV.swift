@@ -21,6 +21,11 @@ enum LogCSV {
         case date = "Date"
         case time = "Time"
         case location = "Location"
+        case locationAddress = "Location Address"
+        case latitude = "Latitude"
+        case longitude = "Longitude"
+        case pinLatitude = "Pin Latitude"
+        case pinLongitude = "Pin Longitude"
         case quantity = "Quantity"
         case unit = "Unit"
         case calories = "Calories"
@@ -46,6 +51,9 @@ enum LogCSV {
             case .quantity: return ["amount", "portion"]
             case .unit: return ["portion unit", "serving unit"]
             case .note: return ["notes", "log note"]
+            case .locationAddress: return ["address"]
+            case .latitude: return ["lat"]
+            case .longitude: return ["lon", "lng", "long"]
             default: return []
             }
         }
@@ -127,7 +135,12 @@ enum LogCSV {
             .category: entry.category?.category ?? "",
             .foodGroup: entry.foodGroup?.foodGroup ?? "",
             .date: LibraryCSV.format(entry.timestamp),
-            .location: entry.location ?? "",
+            .location: entry.locationName ?? "",
+            .locationAddress: entry.location?.address ?? "",
+            .latitude: entry.location?.latitude.map { String($0) } ?? "",
+            .longitude: entry.location?.longitude.map { String($0) } ?? "",
+            .pinLatitude: entry.location?.mapPin.map { String($0.latitude) } ?? "",
+            .pinLongitude: entry.location?.mapPin.map { String($0.longitude) } ?? "",
             .quantity: LibraryCSV.format(entry.loggedQuantity),
             .unit: entry.loggedUnit,
             .calories: LibraryCSV.format(entry.calories),
@@ -145,7 +158,8 @@ enum LogCSV {
 
     static let optionalColumns: [Column] = [
         .time, .protein, .carbs, .fat, .fiber, .quantity, .unit, .source, .category,
-        .foodGroup, .location, .note,
+        .foodGroup, .location, .locationAddress, .latitude, .longitude,
+        .pinLatitude, .pinLongitude, .note,
     ]
 
     static func columns(
@@ -399,6 +413,41 @@ enum LogCSV {
         return nil
     }
 
+    private static func location(_ field: (Column) -> String) -> EntryLocation? {
+        let name = field(.location)
+        let address = field(.locationAddress)
+        var latitude = Double(field(.latitude))
+        var longitude = Double(field(.longitude))
+
+        let isValidCoordinate =
+            latitude.map { (-90...90).contains($0) } == true
+            && longitude.map { (-180...180).contains($0) } == true
+        if !isValidCoordinate {
+            latitude = nil
+            longitude = nil
+        }
+
+        guard !name.isEmpty || isValidCoordinate else { return nil }
+
+        var mapPin: MapPin?
+        if let pinLatitude = Double(field(.pinLatitude)),
+            let pinLongitude = Double(field(.pinLongitude)),
+            (-90...90).contains(pinLatitude),
+            (-180...180).contains(pinLongitude)
+        {
+            mapPin = MapPin(latitude: pinLatitude, longitude: pinLongitude)
+        }
+
+        return EntryLocation(
+            name: name.isEmpty ? PlaceNamer.droppedPinName : name,
+            address: address.isEmpty ? nil : address,
+            latitude: latitude,
+            longitude: longitude,
+            needsName: name.isEmpty,
+            mapPin: mapPin
+        )
+    }
+
     private static func timestamp(_ field: (Column) -> String) -> Date? {
         LibraryCSV.date(field(.date), time: field(.time))
     }
@@ -410,7 +459,6 @@ enum LogCSV {
         let type = LibraryCSV.normalized(field(.type))
         let unit = field(.unit)
         let note = field(.note)
-        let location = field(.location)
 
         return DraftLogEntry(
             importID: UUID(uuidString: field(.id)),
@@ -423,7 +471,7 @@ enum LogCSV {
             category: field(.category),
             foodGroup: field(.foodGroup),
             timestamp: timestamp(field) ?? Date(),
-            location: location.isEmpty ? nil : location,
+            location: location(field),
             quantity: Double(field(.quantity)) ?? 1,
             unit: unit.isEmpty ? "serving" : unit,
             calories: LibraryCSV.macro(field(.calories)) ?? 0,
