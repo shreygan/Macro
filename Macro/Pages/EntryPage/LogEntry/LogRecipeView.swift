@@ -5,6 +5,7 @@
 //  Created by Shrey Gangwar on 2026-05-20.
 //
 
+import PhotosUI
 import SwiftData
 import SwiftUI
 
@@ -25,7 +26,7 @@ struct LogRecipeView: View {
 
     let recipe: FoodItem
     @State private var name: String
-    var isPushedView: Bool = true
+    var isPushedView: Bool = false
 
     private let isCustomDefaultServing: Bool
     private let customServingSize: String
@@ -61,6 +62,7 @@ struct LogRecipeView: View {
 
     @State private var initialDraftState: LogRecipeDraftState?
     @State private var initialPhotoData: [Data] = []
+    @State private var initialLocation: LocationSelection?
 
     @State private var focusManager = SwipeFocusManager()
 
@@ -78,6 +80,8 @@ struct LogRecipeView: View {
 
     @State private var selectedPhotos: [LoggedPhoto]
     @State private var isLoadingPhotos = false
+    @State private var pickerItems: [PhotosPickerItem] = []
+    @State private var isPhotoCoverShown = false
 
     var isEdited: Bool {
         draftIngredients != initialIngredients
@@ -521,7 +525,7 @@ struct LogRecipeView: View {
             usesCurrentLocation: draftLocation.usesCurrentLocation,
             portionQuantity: portionQuantity,
             portionUnitSelection: portionUnitSelection,
-            ingredients: draftIngredients.map(DraftIngredientSnapshot.init),
+            ingredients: draftIngredients.map { DraftIngredientSnapshot($0) },
             notes: DraftNoteState(
                 stickyNote: stickyNote,
                 newNote: newNote
@@ -530,7 +534,8 @@ struct LogRecipeView: View {
         )
     }
 
-    private func saveDraft(reportingFailure: Bool = true) {
+    @discardableResult
+    private func saveDraft() -> Bool {
         do {
             try DraftStore.upsert(
                 id: draftID,
@@ -543,15 +548,73 @@ struct LogRecipeView: View {
                 photos: selectedPhotos,
                 in: modelContext
             )
+            return true
         } catch {
-            guard reportingFailure else { return }
             toastCenter?.show(.failure(String(localized: "Couldn't Save Draft")))
+            return false
         }
     }
 
+    private func finishLoadingDraftPhotos() {
+        guard isLoadingPhotos else { return }
+
+        let id = draftID
+        let items = pickerItems
+        let loadedPhotos = selectedPhotos
+        let context = modelContext
+        let toastCenter = toastCenter
+
+        Task {
+            guard
+                let photos = await PhotoPickerCard.loadPhotos(
+                    for: items,
+                    keeping: loadedPhotos
+                )
+            else { return }
+
+            do {
+                try DraftStore.replacePhotos(ofDraft: id, with: photos, in: context)
+            } catch {
+                toastCenter?.show(.failure(String(localized: "Couldn't Save Draft Photos")))
+            }
+        }
+    }
+
+    private func handleClose() {
+        guard !didFinishLogging, !isPhotoCoverShown else { return }
+        didFinishLogging = true
+
+        if isResumedDraft {
+            if saveDraft() { finishLoadingDraftPhotos() }
+        } else {
+            saveDraftOnClose()
+        }
+    }
+
+    private func saveDraftOnClose() {
+        guard hasDraftChanges || isLoadingPhotos, saveDraft() else {
+            DraftStore.delete(id: draftID, in: modelContext)
+            return
+        }
+        finishLoadingDraftPhotos()
+
+        toastCenter?.show(
+            .draftSaved(
+                id: draftID,
+                name: name.isEmpty ? recipe.name : name,
+                in: modelContext,
+                presenter: toastCenter
+            )
+        )
+    }
+
     private var hasDraftChanges: Bool {
-        guard let initialDraftState else { return false }
-        return draftState != initialDraftState
+        guard let initialDraftState, let initialLocation else { return false }
+        var state = draftState
+        state.location = initialDraftState.location
+        state.usesCurrentLocation = initialDraftState.usesCurrentLocation
+        return state != initialDraftState
+            || locationSelection.isChosenDifferently(from: initialLocation)
             || selectedPhotos.map(\.originalData) != initialPhotoData
     }
 
@@ -563,36 +626,11 @@ struct LogRecipeView: View {
         }
     }
 
-    private func saveDraftAndClose() {
-        saveDraft()
-        didFinishLogging = true
-        dismiss()
-    }
-
-    private func discardAndClose() {
-        if isResumedDraft {
-            saveDraft(reportingFailure: false)
-            do {
-                if let record = try EntryDeleter.deleteDraft(id: draftID, in: modelContext) {
-                    toastCenter?.show(
-                        .draftDeleted(record, in: modelContext, presenter: toastCenter)
-                    )
-                }
-            } catch {
-                toastCenter?.show(.failure(String(localized: "Couldn't Delete Draft")))
-            }
-        } else {
-            DraftStore.delete(id: draftID, in: modelContext)
-        }
-        didFinishLogging = true
-        dismiss()
-    }
-
     init(
         recipe: FoodItem,
         previousEntry: LoggedEntry? = nil,
         draft: EntryDraft? = nil,
-        isPushedView: Bool = true,
+        isPushedView: Bool = false,
     ) {
         self.recipe = recipe
         self.isPushedView = isPushedView
@@ -719,317 +757,316 @@ struct LogRecipeView: View {
         }
     }
 
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.background.ignoresSafeArea()
+    private var form: some View {
+        ZStack {
+            Color.background.ignoresSafeArea()
 
-                ScrollView {
-                    VStack {
-                        Card {
-                            RowGroup(.divider) {
-                                DropdownPillRow(
-                                    title: "Source",
-                                    options: mappedSourceOptions,
-                                    selection: $sourceSelection
-                                )
-                                DropdownPillRow(
-                                    title: "Category",
-                                    options: mappedCategoryOptions,
-                                    selection: $categorySelection
-                                )
-                                DateTimePillRow(
-                                    title: "Date & Time",
-                                    dateSelection: $date,
-                                    timeSelection: $time
-                                )
-                                LocationRow(
-                                    selection: $locationSelection,
-                                    food: recipe,
-                                    photos: selectedPhotos,
-                                    logDate: date,
-                                    nearbyName: DefaultLocationResolver.nearbyName(
-                                        for: recipe,
-                                        in: modelContext
-                                    )
-                                )
-                            }
-                        }
-                        .padding([.leading, .trailing])
-
-                        NotesCard(
-                            pinnedNote: $stickyNote,
-                            logNote: $newNote,
-                            pinnedUpdated: pinnedNoteUpdated,
-                            onViewAll: { showingAllNotes = true }
-                        )
-                        .padding([.top, .leading, .trailing])
-
-                        PhotoPickerCard(
-                            images: $selectedPhotos,
-                            isLoading: $isLoadingPhotos,
-                            onViewAll: hasPhotoHistory
-                                ? { showingAllPhotos = true } : nil,
-                            onUseTime: usePhotoTime,
-                            onUseLocation: usePhotoLocation,
-                            entryDate: date,
-                            entryTime: time,
-                            entryLocation: locationSelection.resolvedLocation
-                        )
-
-                        Card {
-                            BaseRowLayout(title: "Portion") {
-                                HStack(spacing: 8) {
-                                    InputPill(
-                                        text: $portionQuantity,
-                                        keyboardType: .decimalPad
-                                    )
-                                    DropdownPill(
-                                        options: availableUnits,
-                                        displayCustomOption: false,
-                                        selection: $portionUnitSelection
-                                    )
-                                }
-                            }
-                        }
-                        .padding([.leading, .trailing])
-
-                        Card("Ingredients") {
-                            RowGroup(.divider) {
-                                ForEach($draftIngredients) { $draft in
-                                    IngredientRowView(
-                                        draft: $draft,
-                                        portionUnitOptions: portionUnitOptions,
-                                        shouldShowIngredientIcons:
-                                            shouldShowIngredientIcons,
-                                        onDelete: {
-                                            if let index =
-                                                draftIngredients.firstIndex(
-                                                    where: { $0.id == draft.id }
-                                                )
-                                            {
-                                                withAnimation(.snappy) {
-                                                    _ = draftIngredients.remove(
-                                                        at: index
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    )
-                                }
-                            } bottomContent: {
-                                ButtonRow(
-                                    icon: .customSymbol("plus.circle.fill"),
-                                    title: "Add Ingredient"
-                                ) {
-                                    showIngredientSelectionSheet = true
-                                }
-                            }
-                        }
-                        .padding([.top, .leading, .trailing])
-
-                        Spacer()
-                    }
-                }
-                .withCustomKeyboardToolbar()
-                .navigationTitle("Log Recipe")
-                .navigationBarTitleDisplayMode(.inline)
-                .sheet(isPresented: $showIngredientSelectionSheet) {
-                    IngredientSelectionView(
-                        inRecipeIDs: Set(
-                            draftIngredients.compactMap(\.ingredientItem?.id)
-                        ),
-                        excludedRecipe: recipe
-                    ) { selectedItems in
-                        draftIngredients.append(
-                            contentsOf: selectedItems.map {
-                                LogRecipeIngredient(item: $0)
-                            }
-                        )
-                    }
-                }
-                .toolbar {
-                    ToolbarItemGroup(placement: .cancellationAction) {
-                        if !isPushedView {
-                            DraftCloseButton(
-                                isResumedDraft: isResumedDraft,
-                                canSaveDraft: !isLoadingPhotos,
-                                onClose: { dismiss() },
-                                onSaveDraft: saveDraftAndClose,
-                                onDiscard: discardAndClose
-                            )
-                        }
-                    }
-
-                    ToolbarItemGroup(placement: .automatic) {
-                        Menu {
-                            ForEach(LogSaveOption.allCases) { option in
-                                Button {
-                                    saveOption = option
-                                } label: {
-                                    if saveOption == option {
-                                        Label(
-                                            option.rawValue,
-                                            systemImage: "checkmark"
-                                        )
-                                    } else {
-                                        Text(option.rawValue)
-                                    }
-                                }
-                                .disabled(!isEdited && option != .logOnly)
-                            }
-
-                            Divider()
-
-                            Button(
-                                "Save as Draft",
-                                systemImage: "square.and.arrow.down",
-                                action: saveDraftAndClose
-                            )
-                            .disabled(isLoadingPhotos)
-
-                            if hasChangedFromOriginal {
-                                Divider()
-
-                                Button(role: .destructive) {
-                                    isResettingPortion = true
-                                    withAnimation {
-                                        name = recipe.name
-                                        draftIngredients = initialIngredients
-                                        sourceSelection = initialSourceSelection
-                                        categorySelection =
-                                            initialCategorySelection
-                                        portionQuantity = initialPortionQuantity
-                                        portionUnitSelection =
-                                            initialPortionUnitSelection
-                                        locationSelection = initialLocationSelection
-
-                                        stickyNote = originalNoteText
-                                        newNote = ""
-
-                                        selectedPhotos = []
-                                        isLoadingPhotos = false
-
-                                        saveOption = .logOnly
-                                    }
-                                    DispatchQueue.main.async {
-                                        isResettingPortion = false
-                                    }
-                                } label: {
-                                    Label(
-                                        "Reset to Original",
-                                        systemImage: "arrow.counterclockwise"
-                                    )
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                                .foregroundStyle(.primary)
-                        }
-                    }
-
-                    ToolbarItemGroup(placement: .topBarTrailing) {
-
-                        Button {
-                            saveEntry()
-                        } label: {
-                            Image(systemName: "plus")
-                                .foregroundStyle(.primary)
-                        }
-                        .tint(Color.accentColor)
-                        .buttonStyle(.glassProminent)
-                        .disabled(isLoadingPhotos)
-                    }
-                }
-                .safeAreaBar(edge: .top) {
+            ScrollView {
+                VStack {
                     Card {
-                        MealRow(
-                            name: name.isEmpty ? "New Recipe" : name,
-                            source: sourceSelection,
-                            isCustomDefaultServing: false,
-                            customServingSize: "",
-                            servingSize: displayServingSize,
-                            servingSizeUnit: recipe.servingUnit?.unit
-                                ?? "serving",
-                            servingWeight: displayServingWeight,
-                            servingWeightUnit: recipe.servingWeightUnit,
-                            servingUnits: portionUnitOptions.filter {
-                                availableUnits.contains($0.unit)
-                            },
-                            calorie: EntryHelper.format(displayCalories),
-                            protein: EntryHelper.format(displayProtein),
-                            carbs: EntryHelper.format(displayCarbs),
-                            fat: EntryHelper.format(displayFat),
-                            fiber: EntryHelper.format(displayFiber)
-                        )
-                        .nameLineLimit(3)
+                        RowGroup(.divider) {
+                            DropdownPillRow(
+                                title: "Source",
+                                options: mappedSourceOptions,
+                                selection: $sourceSelection
+                            )
+                            DropdownPillRow(
+                                title: "Category",
+                                options: mappedCategoryOptions,
+                                selection: $categorySelection
+                            )
+                            DateTimePillRow(
+                                title: "Date & Time",
+                                dateSelection: $date,
+                                timeSelection: $time
+                            )
+                            LocationRow(
+                                selection: $locationSelection,
+                                food: recipe,
+                                photos: selectedPhotos,
+                                logDate: date,
+                                nearbyName: DefaultLocationResolver.nearbyName(
+                                    for: recipe,
+                                    in: modelContext
+                                )
+                            )
+                        }
                     }
                     .padding([.leading, .trailing])
-                    .padding(.bottom, 24)
-                }
-            }
-            .environment(focusManager)
-            .onAppear {
-                if initialDraftState == nil {
-                    initialDraftState = draftState
-                    initialPhotoData = selectedPhotos.map(\.originalData)
-                }
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .background && !didFinishLogging {
-                    autoSaveDraft()
-                }
-            }
-            .onDisappear {
-                guard !didFinishLogging else { return }
 
-                if isResumedDraft {
-                    saveDraft()
-                } else {
-                    DraftStore.delete(id: draftID, in: modelContext)
+                    NotesCard(
+                        pinnedNote: $stickyNote,
+                        logNote: $newNote,
+                        pinnedUpdated: pinnedNoteUpdated,
+                        onViewAll: { showingAllNotes = true }
+                    )
+                    .padding([.top, .leading, .trailing])
+
+                    PhotoPickerCard(
+                        images: $selectedPhotos,
+                        isLoading: $isLoadingPhotos,
+                        onViewAll: hasPhotoHistory
+                            ? { showingAllPhotos = true } : nil,
+                        onUseTime: usePhotoTime,
+                        onUseLocation: usePhotoLocation,
+                        entryDate: date,
+                        entryTime: time,
+                        entryLocation: locationSelection.resolvedLocation,
+                        onPickerItemsChange: { pickerItems = $0 },
+                        onCoverChange: { isPhotoCoverShown = $0 }
+                    )
+
+                    Card {
+                        BaseRowLayout(title: "Portion") {
+                            HStack(spacing: 8) {
+                                InputPill(
+                                    text: $portionQuantity,
+                                    keyboardType: .decimalPad
+                                )
+                                DropdownPill(
+                                    options: availableUnits,
+                                    displayCustomOption: false,
+                                    selection: $portionUnitSelection
+                                )
+                            }
+                        }
+                    }
+                    .padding([.leading, .trailing])
+
+                    Card("Ingredients") {
+                        RowGroup(.divider) {
+                            ForEach($draftIngredients) { $draft in
+                                IngredientRowView(
+                                    draft: $draft,
+                                    portionUnitOptions: portionUnitOptions,
+                                    shouldShowIngredientIcons:
+                                        shouldShowIngredientIcons,
+                                    onDelete: {
+                                        if let index =
+                                            draftIngredients.firstIndex(
+                                                where: { $0.id == draft.id }
+                                            )
+                                        {
+                                            withAnimation(.snappy) {
+                                                _ = draftIngredients.remove(
+                                                    at: index
+                                                )
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        } bottomContent: {
+                            ButtonRow(
+                                icon: .customSymbol("plus.circle.fill"),
+                                title: "Add Ingredient"
+                            ) {
+                                showIngredientSelectionSheet = true
+                            }
+                        }
+                    }
+                    .padding([.top, .leading, .trailing])
+
+                    Spacer()
                 }
             }
-            .sheet(isPresented: $showingAllNotes) {
-                NotesHistoryView(food: recipe)
+            .withCustomKeyboardToolbar()
+            .navigationTitle("Log Recipe")
+            .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showIngredientSelectionSheet) {
+                IngredientSelectionView(
+                    inRecipeIDs: Set(
+                        draftIngredients.compactMap(\.ingredientItem?.id)
+                    ),
+                    excludedRecipe: recipe
+                ) { selectedItems in
+                    draftIngredients.append(
+                        contentsOf: selectedItems.map {
+                            LogRecipeIngredient(item: $0)
+                        }
+                    )
+                }
             }
-            .sheet(isPresented: $showingAllPhotos) {
-                PhotoHistoryView(food: recipe)
-            }            .task {
-                hasPhotoHistory = FoodItemStore.hasPhotoHistory(
-                    for: recipe,
-                    in: modelContext
+            .toolbar {
+                ToolbarItemGroup(placement: .cancellationAction) {
+                    if !isPushedView {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                }
+
+                ToolbarItemGroup(placement: .automatic) {
+                    Menu {
+                        ForEach(LogSaveOption.allCases) { option in
+                            Button {
+                                saveOption = option
+                            } label: {
+                                if saveOption == option {
+                                    Label(
+                                        option.rawValue,
+                                        systemImage: "checkmark"
+                                    )
+                                } else {
+                                    Text(option.rawValue)
+                                }
+                            }
+                            .disabled(!isEdited && option != .logOnly)
+                        }
+
+                        if hasChangedFromOriginal {
+                            Divider()
+
+                            Button(role: .destructive) {
+                                isResettingPortion = true
+                                withAnimation {
+                                    name = recipe.name
+                                    draftIngredients = initialIngredients
+                                    sourceSelection = initialSourceSelection
+                                    categorySelection =
+                                        initialCategorySelection
+                                    portionQuantity = initialPortionQuantity
+                                    portionUnitSelection =
+                                        initialPortionUnitSelection
+                                    locationSelection = initialLocationSelection
+
+                                    stickyNote = originalNoteText
+                                    newNote = ""
+
+                                    selectedPhotos = []
+                                    isLoadingPhotos = false
+
+                                    saveOption = .logOnly
+                                }
+                                DispatchQueue.main.async {
+                                    isResettingPortion = false
+                                }
+                            } label: {
+                                Label(
+                                    "Reset to Original",
+                                    systemImage: "arrow.counterclockwise"
+                                )
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .foregroundStyle(.primary)
+                    }
+                }
+
+                ToolbarItemGroup(placement: .topBarTrailing) {
+
+                    Button {
+                        saveEntry()
+                    } label: {
+                        Image(systemName: "plus")
+                            .foregroundStyle(.primary)
+                    }
+                    .tint(Color.accentColor)
+                    .buttonStyle(.glassProminent)
+                    .disabled(isLoadingPhotos)
+                }
+            }
+            .safeAreaBar(edge: .top) {
+                Card {
+                    MealRow(
+                        name: name.isEmpty ? "New Recipe" : name,
+                        source: sourceSelection,
+                        isCustomDefaultServing: false,
+                        customServingSize: "",
+                        servingSize: displayServingSize,
+                        servingSizeUnit: recipe.servingUnit?.unit
+                            ?? "serving",
+                        servingWeight: displayServingWeight,
+                        servingWeightUnit: recipe.servingWeightUnit,
+                        servingUnits: portionUnitOptions.filter {
+                            availableUnits.contains($0.unit)
+                        },
+                        calorie: EntryHelper.format(displayCalories),
+                        protein: EntryHelper.format(displayProtein),
+                        carbs: EntryHelper.format(displayCarbs),
+                        fat: EntryHelper.format(displayFat),
+                        fiber: EntryHelper.format(displayFiber)
+                    )
+                    .nameLineLimit(3)
+                }
+                .padding([.leading, .trailing])
+                .padding(.bottom, 24)
+            }
+        }
+        .environment(focusManager)
+        .onAppear {
+            if initialDraftState == nil {
+                initialDraftState = draftState
+                initialPhotoData = selectedPhotos.map(\.originalData)
+                initialLocation = locationSelection
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background && !didFinishLogging {
+                autoSaveDraft()
+            }
+        }
+        .onLeave { handleClose() }
+        .onDisappear { handleClose() }
+        .onDraftDeleted(id: draftID, isEnabled: isResumedDraft) {
+            guard !didFinishLogging else { return }
+            didFinishLogging = true
+            dismiss()
+        }
+        .sheet(isPresented: $showingAllNotes) {
+            NotesHistoryView(food: recipe)
+        }
+        .sheet(isPresented: $showingAllPhotos) {
+            PhotoHistoryView(food: recipe)
+        }            .task {
+            hasPhotoHistory = FoodItemStore.hasPhotoHistory(
+                for: recipe,
+                in: modelContext
+            )
+        }
+        .onChange(of: portionUnitSelection) { oldUnit, newUnit in
+            guard !isResettingPortion, oldUnit != newUnit,
+                totalRecipeWeight > 0
+            else { return }
+            let currentQuantity = Double(portionQuantity) ?? 0
+            let baseUnit = recipe.servingUnit?.unit ?? "serving"
+
+            if oldUnit == baseUnit && newUnit == recipe.servingWeightUnit {
+                let newQuantity =
+                    (currentQuantity / recipe.servingSize)
+                    * totalRecipeWeight
+                portionQuantity = newQuantity.formatted(
+                    .number.precision(.fractionLength(0...2))
+                )
+
+            } else if oldUnit == recipe.servingWeightUnit
+                && newUnit == baseUnit
+            {
+                let newQuantity =
+                    (currentQuantity / totalRecipeWeight)
+                    * recipe.servingSize
+                portionQuantity = newQuantity.formatted(
+                    .number.precision(.fractionLength(0...2))
                 )
             }
-            .onChange(of: portionUnitSelection) { oldUnit, newUnit in
-                guard !isResettingPortion, oldUnit != newUnit,
-                    totalRecipeWeight > 0
-                else { return }
-                let currentQuantity = Double(portionQuantity) ?? 0
-                let baseUnit = recipe.servingUnit?.unit ?? "serving"
-
-                if oldUnit == baseUnit && newUnit == recipe.servingWeightUnit {
-                    let newQuantity =
-                        (currentQuantity / recipe.servingSize)
-                        * totalRecipeWeight
-                    portionQuantity = newQuantity.formatted(
-                        .number.precision(.fractionLength(0...2))
-                    )
-
-                } else if oldUnit == recipe.servingWeightUnit
-                    && newUnit == baseUnit
-                {
-                    let newQuantity =
-                        (currentQuantity / totalRecipeWeight)
-                        * recipe.servingSize
-                    portionQuantity = newQuantity.formatted(
-                        .number.precision(.fractionLength(0...2))
-                    )
-                }
+        }
+        .onChange(of: isEdited) { oldVal, newVal in
+            if !newVal && saveOption != .logOnly {
+                saveOption = .logOnly
             }
-            .onChange(of: isEdited) { oldVal, newVal in
-                if !newVal && saveOption != .logOnly {
-                    saveOption = .logOnly
-                }
+        }
+    }
+
+    var body: some View {
+        if isPushedView {
+            form
+        } else {
+            NavigationStack {
+                form
             }
         }
     }
@@ -1127,7 +1164,7 @@ struct LogRecipeView: View {
         container.mainContext.insert(dummyRecipe)
         container.mainContext.insert(dummyRecipeIngredient)
 
-        return LogRecipeView(recipe: dummyRecipe, isPushedView: false)
+        return LogRecipeView(recipe: dummyRecipe)
             .modelContainer(container)
 
     } catch {
