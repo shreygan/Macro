@@ -378,6 +378,9 @@ struct EditRecipeView: View {
             recipe.fat = totalFat
             recipe.fiber = totalFiber
 
+            let previousDates = RecipeIngredient.datesByItem(
+                recipe.recipeIngredients ?? []
+            )
             if let oldIngredients = recipe.recipeIngredients {
                 for old in oldIngredients {
                     modelContext.delete(old)
@@ -391,6 +394,9 @@ struct EditRecipeView: View {
                     displayOrder: index,
                     parentRecipe: recipe
                 )
+                if let id = draft.item?.id, let date = previousDates[id] {
+                    newIngredient.dateAdded = date
+                }
 
                 modelContext.insert(newIngredient)
                 recipe.recipeIngredients?.append(newIngredient)

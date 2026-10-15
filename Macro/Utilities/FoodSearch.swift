@@ -27,12 +27,6 @@ struct FoodSearch {
         relevance(name: name, fields: fields) != nil
     }
 
-    func nameTier(of food: FoodItem) -> Int? {
-        guard let relevance = relevance(of: food) else { return nil }
-        if relevance.nameMatches == tokens.count { return 0 }
-        return relevance.nameMatches > 0 ? 1 : 2
-    }
-
     func ranked(
         _ foods: [FoodItem],
         stats: [UUID: FoodLogStats]
@@ -42,10 +36,11 @@ struct FoodSearch {
             .sorted { lhs, rhs in
                 if lhs.1 < rhs.1 { return true }
                 if rhs.1 < lhs.1 { return false }
-                let lhsDate = stats[lhs.0.id]?.lastLogged ?? .distantPast
-                let rhsDate = stats[rhs.0.id]?.lastLogged ?? .distantPast
+                let lhsDate = stats[lhs.0.id]?.lastLogged ?? lhs.0.dateAdded
+                let rhsDate = stats[rhs.0.id]?.lastLogged ?? rhs.0.dateAdded
                 if lhsDate != rhsDate { return lhsDate > rhsDate }
-                return lhs.0.dateAdded > rhs.0.dateAdded
+                return lhs.0.name.localizedStandardCompare(rhs.0.name)
+                    == .orderedAscending
             }
             .map(\.0)
     }
@@ -223,10 +218,9 @@ struct FoodSearch {
         return table[a.count][b.count]
     }
 
-    private struct Relevance: Comparable {
+    struct Relevance: Comparable {
         var nameStartsWithQuery: Bool
         var score: Int
-        var nameMatches: Int
 
         static func < (lhs: Relevance, rhs: Relevance) -> Bool {
             if lhs.nameStartsWithQuery != rhs.nameStartsWithQuery {
@@ -285,7 +279,7 @@ struct FoodSearch {
         ]
     }
 
-    private func relevance(of food: FoodItem) -> Relevance? {
+    func relevance(of food: FoodItem) -> Relevance? {
         relevance(name: food.name, fields: Self.fields(of: food))
     }
 
@@ -296,11 +290,9 @@ struct FoodSearch {
         let others = fields.compactMap { $0 }.map(Field.init)
 
         var score = 0
-        var nameMatches = 0
         for token in tokens {
             if let quality = name.quality(for: token) {
                 score += quality
-                nameMatches += 1
             } else if let quality = others.compactMap({
                 $0.quality(for: token, isSecondary: true)
             }).min() {
@@ -312,8 +304,7 @@ struct FoodSearch {
 
         return Relevance(
             nameStartsWithQuery: name.compact.hasPrefix(compactQuery),
-            score: score,
-            nameMatches: nameMatches
+            score: score
         )
     }
 

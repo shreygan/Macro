@@ -605,6 +605,7 @@ extension MacroBackup.FoodRecord {
             )
             ingredient.ingredientItem = record.ingredientItemID.flatMap(relationships.food)
             ingredient.parentRecipe = recipe
+            ingredient.dateAdded = recipe.dateAdded
             context.insert(ingredient)
         }
     }
