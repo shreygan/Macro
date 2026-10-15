@@ -244,12 +244,16 @@ struct BackupRestorer {
             existingFoods.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
+        let savedLocationsByID = restoreSavedLocations(backup, exact: exact)
+        restoreRecentLocations(backup, savedLocationsByID: savedLocationsByID)
+
         let relationships = RecordRelationships(
             food: { foodsByID[$0] },
             source: sourceFor,
             category: categoryFor,
             foodGroup: foodGroupFor,
-            unit: unitFor
+            unit: unitFor,
+            savedLocation: { $0.flatMap { savedLocationsByID[$0] } }
         )
         var restoredFoods: [(record: MacroBackup.FoodRecord, item: FoodItem)] = []
 
@@ -312,6 +316,61 @@ struct BackupRestorer {
         }
 
         return summary
+    }
+
+    private func restoreSavedLocations(
+        _ backup: MacroBackup,
+        exact: Bool
+    ) -> [UUID: SavedLocation] {
+        let existing = (try? context.fetch(FetchDescriptor<SavedLocation>())) ?? []
+        var byID = Dictionary(
+            existing.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var nextOrder = (existing.map(\.displayOrder).max() ?? -1) + 1
+
+        let records = backup.savedLocations.sorted { $0.displayOrder < $1.displayOrder }
+        for record in records where byID[record.id] == nil {
+            let recordLocation = EntryLocation(
+                name: record.name,
+                latitude: record.latitude,
+                longitude: record.longitude,
+                mapItemID: record.mapItemID
+            )
+            if let match = SavedLocation.matching(recordLocation, in: existing) {
+                byID[record.id] = match
+                continue
+            }
+            let location = SavedLocation(
+                id: record.id,
+                name: record.name,
+                address: record.address,
+                latitude: record.latitude,
+                longitude: record.longitude,
+                mapItemID: record.mapItemID,
+                isFavorite: record.isFavorite,
+                mapName: record.mapName,
+                displayOrder: exact ? record.displayOrder : nextOrder,
+                createdAt: record.createdAt
+            )
+            context.insert(location)
+            byID[record.id] = location
+            nextOrder += 1
+        }
+        return byID
+    }
+
+    private func restoreRecentLocations(
+        _ backup: MacroBackup,
+        savedLocationsByID: [UUID: SavedLocation]
+    ) {
+        let uses = backup.recentLocations.map { record in
+            var location = record.location
+            location.savedLocationID = location.savedLocationID
+                .flatMap { savedLocationsByID[$0]?.id }
+            return (location: Optional(location), date: record.lastUsed)
+        }
+        RecentLocationStore.record(uses, in: context)
     }
 
     private func restoreDayCircles(
@@ -418,6 +477,7 @@ struct RecordRelationships {
     var category: (String?) -> CategorySource?
     var foodGroup: (String?) -> FoodGroupSource?
     var unit: (String?) -> ServingSizeUnit?
+    var savedLocation: (UUID?) -> SavedLocation?
 
     static func resolving(in context: ModelContext) -> RecordRelationships {
         let resolver = ImportResolver(context: context)
@@ -433,7 +493,8 @@ struct RecordRelationships {
             unit: { name in
                 guard let name, !name.isEmpty else { return nil }
                 return resolver.unit(name, plural: nil)
-            }
+            },
+            savedLocation: { SavedLocation.find(id: $0, in: context) }
         )
     }
 }
@@ -461,11 +522,21 @@ extension MacroBackup.FoodRecord {
             fiber: fiber,
             isCustomDefaultServing: isCustomDefaultServing,
             customServingSize: customServingSize,
+            defaultLocation: linkedDefaultLocation(relationships),
             stickyNote: note.map { Note(text: $0.text, lastUpdated: $0.lastUpdated) },
             dateAdded: dateAdded
         )
         context.insert(food)
         return food
+    }
+
+    @MainActor
+    private func linkedDefaultLocation(_ relationships: RecordRelationships) -> EntryLocation? {
+        guard var location = defaultLocation, let id = location.savedLocationID else {
+            return defaultLocation
+        }
+        location.savedLocationID = relationships.savedLocation(id)?.id
+        return location
     }
 
     @MainActor
@@ -487,6 +558,7 @@ extension MacroBackup.FoodRecord {
         food.fiber = fiber
         food.isCustomDefaultServing = isCustomDefaultServing
         food.customServingSize = customServingSize
+        food.defaultLocation = linkedDefaultLocation(relationships)
         food.dateAdded = dateAdded
 
         if let note {
@@ -550,6 +622,10 @@ extension MacroBackup.LogRecord {
         relationships: RecordRelationships,
         in context: ModelContext
     ) -> LoggedEntry {
+        let savedLocation = relationships.savedLocation(self.location?.savedLocationID)
+        var location = self.location
+        location?.savedLocationID = savedLocation?.id
+
         let log = LoggedEntry(
             id: id,
             name: name,
@@ -561,6 +637,7 @@ extension MacroBackup.LogRecord {
             foodGroup: relationships.foodGroup(foodGroup),
             timestamp: timestamp,
             location: location,
+            savedLocation: savedLocation,
             loggedQuantity: loggedQuantity,
             loggedUnit: loggedUnit,
             calories: calories,

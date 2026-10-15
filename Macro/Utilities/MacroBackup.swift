@@ -28,6 +28,8 @@ nonisolated struct MacroBackup: Codable, Sendable {
     var favorites: [FavoriteRecord]
     var logs: [LogRecord]
     var drafts: [DraftRecord]
+    var savedLocations: [SavedLocationRecord]
+    var recentLocations: [RecentLocationRecord]
 
     struct UserRecord: Codable, Sendable {
         var name: String?
@@ -108,6 +110,7 @@ nonisolated struct MacroBackup: Codable, Sendable {
         var fiber: Double
         var isCustomDefaultServing: Bool
         var customServingSize: Double?
+        var defaultLocation: EntryLocation? = nil
         var dateAdded: Date
         var note: NoteRecord?
         var ingredients: [IngredientRecord]
@@ -135,7 +138,7 @@ nonisolated struct MacroBackup: Codable, Sendable {
         var category: String?
         var foodGroup: String?
         var timestamp: Date
-        var location: String?
+        var location: EntryLocation?
         var loggedQuantity: Double
         var loggedUnit: String
         var calories: Double
@@ -161,6 +164,25 @@ nonisolated struct MacroBackup: Codable, Sendable {
         var foodItemID: UUID?
         var payload: Data
         var photos: [PhotoRecord]
+    }
+
+    struct SavedLocationRecord: Codable, Sendable {
+        var id: UUID
+        var name: String
+        var address: String?
+        var latitude: Double
+        var longitude: Double
+        var mapItemID: String?
+        var isFavorite: Bool = true
+        var mapName: String?
+        var displayOrder: Int
+        var createdAt: Date
+    }
+
+    struct RecentLocationRecord: Codable, Sendable {
+        var id: UUID
+        var location: EntryLocation
+        var lastUsed: Date
     }
 
     var photoCount: Int {
@@ -238,7 +260,32 @@ extension MacroBackup {
                 .filter { $0.parentEntry == nil }
                 .sorted { $0.timestamp < $1.timestamp }
                 .map(logRecord),
-            drafts: drafts.map(draftRecord)
+            drafts: drafts.map(draftRecord),
+            savedLocations: try context.fetch(FetchDescriptor<SavedLocation>())
+                .sorted { $0.displayOrder < $1.displayOrder }
+                .map {
+                    SavedLocationRecord(
+                        id: $0.id,
+                        name: $0.name,
+                        address: $0.address,
+                        latitude: $0.latitude,
+                        longitude: $0.longitude,
+                        mapItemID: $0.mapItemID,
+                        isFavorite: $0.isFavorite,
+                        mapName: $0.mapName,
+                        displayOrder: $0.displayOrder,
+                        createdAt: $0.createdAt
+                    )
+                },
+            recentLocations: try context.fetch(FetchDescriptor<RecentLocation>())
+                .sorted { $0.lastUsed > $1.lastUsed }
+                .map {
+                    RecentLocationRecord(
+                        id: $0.id,
+                        location: $0.location,
+                        lastUsed: $0.lastUsed
+                    )
+                }
         )
     }
 
@@ -281,6 +328,7 @@ extension MacroBackup {
             fiber: food.fiber,
             isCustomDefaultServing: food.isCustomDefaultServing,
             customServingSize: food.customServingSize,
+            defaultLocation: food.defaultLocation,
             dateAdded: food.dateAdded,
             note: food.stickyNote.map {
                 NoteRecord(text: $0.text, lastUpdated: $0.lastUpdated)
