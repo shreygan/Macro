@@ -54,7 +54,41 @@ enum DraftStore {
         draft.timestamp = timestamp
         draft.foodItem = foodItem
         draft.encodeState(state)
+        setPhotos(photos, of: draft, in: context)
 
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+        return draft
+    }
+
+    static func replacePhotos(
+        ofDraft id: UUID,
+        with photos: [LoggedPhoto],
+        in context: ModelContext
+    ) throws {
+        guard let draft = fetch(id: id, in: context),
+            !photosMatch(draft.photos ?? [], photos)
+        else { return }
+
+        setPhotos(photos, of: draft, in: context)
+
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+
+    private static func setPhotos(
+        _ photos: [LoggedPhoto],
+        of draft: EntryDraft,
+        in context: ModelContext
+    ) {
         for photo in draft.photos ?? [] {
             context.delete(photo)
         }
@@ -67,14 +101,6 @@ enum DraftStore {
                 displayOrder: index
             )
         }
-
-        do {
-            try context.save()
-        } catch {
-            context.rollback()
-            throw error
-        }
-        return draft
     }
 
     private static func photosMatch(

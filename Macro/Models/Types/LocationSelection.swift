@@ -63,6 +63,11 @@ enum LocationSelection: Equatable {
         return (nil, true)
     }
 
+    func isChosenDifferently(from initial: LocationSelection) -> Bool {
+        guard !(isCurrent && initial.isCurrent) else { return false }
+        return self != initial
+    }
+
     var isCurrent: Bool {
         if case .current = self { return true }
         return false
