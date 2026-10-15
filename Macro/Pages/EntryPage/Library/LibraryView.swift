@@ -116,6 +116,7 @@ struct LibraryView<Header: View>: View {
 
     private var usesLogStats: Bool {
         sortOption == .lastLogged || sortOption == .mostLogged
+            || sortOption == .lastUsedInRecipe
     }
 
     private var usesRecipeStats: Bool {
@@ -172,73 +173,72 @@ struct LibraryView<Header: View>: View {
         // 4. Search text filter
         let pool = filterPool
         let search = FoodSearch(searchText)
-        var tiers: [UUID: Int] = [:]
+        var relevance: [UUID: FoodSearch.Relevance] = [:]
         if !searchText.isEmpty {
             for food in pool {
-                tiers[food.id] = search.nameTier(of: food)
+                relevance[food.id] = search.relevance(of: food)
             }
         }
         let result =
-            searchText.isEmpty ? pool : pool.filter { tiers[$0.id] != nil }
+            searchText.isEmpty ? pool : pool.filter { relevance[$0.id] != nil }
 
         // 5. Sort filtered results
         let stats = logStats
         let usage = recipeStats
 
+        func ordered<Value: Comparable>(
+            _ lhs: FoodItem,
+            _ rhs: FoodItem,
+            by value: (FoodItem) -> Value
+        ) -> Bool {
+            let lhsValue = value(lhs)
+            let rhsValue = value(rhs)
+            if lhsValue != rhsValue {
+                return sortDescending ? lhsValue > rhsValue : lhsValue < rhsValue
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
+
+        func lastLogged(_ food: FoodItem) -> Date {
+            stats[food.id]?.lastLogged ?? food.dateAdded
+        }
+
         return result.sorted { lhs, rhs in
-            if let lhsTier = tiers[lhs.id], let rhsTier = tiers[rhs.id],
-                lhsTier != rhsTier
+            if let lhsRelevance = relevance[lhs.id],
+                let rhsRelevance = relevance[rhs.id]
             {
-                return lhsTier < rhsTier
+                if lhsRelevance < rhsRelevance { return true }
+                if rhsRelevance < lhsRelevance { return false }
             }
             switch sortOption {
             case .name:
                 return lhs.name.localizedStandardCompare(rhs.name)
                     == .orderedAscending
             case .dateAdded:
-                return sortDescending
-                    ? lhs.dateAdded > rhs.dateAdded
-                    : lhs.dateAdded < rhs.dateAdded
+                return ordered(lhs, rhs) { $0.dateAdded }
             case .lastLogged:
-                let lhsDate = stats[lhs.id]?.lastLogged ?? lhs.dateAdded
-                let rhsDate = stats[rhs.id]?.lastLogged ?? rhs.dateAdded
-                return sortDescending ? lhsDate > rhsDate : lhsDate < rhsDate
+                return ordered(lhs, rhs, by: lastLogged)
             case .mostLogged:
-                let lhsCount = stats[lhs.id]?.count ?? 0
-                let rhsCount = stats[rhs.id]?.count ?? 0
-                if lhsCount == rhsCount {
-                    return lhs.name.localizedStandardCompare(rhs.name)
-                        == .orderedAscending
-                }
-                return sortDescending
-                    ? lhsCount > rhsCount : lhsCount < rhsCount
+                return ordered(lhs, rhs) { stats[$0.id]?.count ?? 0 }
             case .lastUsedInRecipe:
-                let lhsDate = usage[lhs.id]?.lastUsed ?? .distantPast
-                let rhsDate = usage[rhs.id]?.lastUsed ?? .distantPast
-                return sortDescending ? lhsDate > rhsDate : lhsDate < rhsDate
-            case .mostUsedInRecipes:
-                let lhsCount = usage[lhs.id]?.count ?? 0
-                let rhsCount = usage[rhs.id]?.count ?? 0
-                if lhsCount == rhsCount {
-                    return lhs.name.localizedStandardCompare(rhs.name)
-                        == .orderedAscending
+                let lhsUsed = usage[lhs.id]?.lastUsed ?? .distantPast
+                let rhsUsed = usage[rhs.id]?.lastUsed ?? .distantPast
+                if lhsUsed != rhsUsed {
+                    return sortDescending ? lhsUsed > rhsUsed : lhsUsed < rhsUsed
                 }
-                return sortDescending
-                    ? lhsCount > rhsCount : lhsCount < rhsCount
+                return ordered(lhs, rhs, by: lastLogged)
+            case .mostUsedInRecipes:
+                return ordered(lhs, rhs) { usage[$0.id]?.count ?? 0 }
             case .calories:
-                return sortDescending
-                    ? lhs.calories > rhs.calories : lhs.calories < rhs.calories
+                return ordered(lhs, rhs) { $0.calories }
             case .protein:
-                return sortDescending
-                    ? lhs.protein > rhs.protein : lhs.protein < rhs.protein
+                return ordered(lhs, rhs) { $0.protein }
             case .carbs:
-                return sortDescending
-                    ? lhs.carbs > rhs.carbs : lhs.carbs < rhs.carbs
+                return ordered(lhs, rhs) { $0.carbs }
             case .fat:
-                return sortDescending ? lhs.fat > rhs.fat : lhs.fat < rhs.fat
+                return ordered(lhs, rhs) { $0.fat }
             case .fiber:
-                return sortDescending
-                    ? lhs.fiber > rhs.fiber : lhs.fiber < rhs.fiber
+                return ordered(lhs, rhs) { $0.fiber }
             }
         }
     }
