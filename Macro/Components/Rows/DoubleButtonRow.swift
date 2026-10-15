@@ -18,12 +18,17 @@ struct DoubleButtonRow: View {
     var leftTint: Color = .controlFill
     var leftTextColor: Color = .primary
     var leftAction: () -> Void
+    var leftDisabled: Bool = false
 
     var rightIcon: RowIcon? = nil
     var rightTitle: String
     var rightTint: Color = .controlFill
     var rightTextColor: Color = .primary
     var rightAction: () -> Void
+
+    private var leftForeground: Color {
+        leftDisabled ? .secondary : leftTextColor
+    }
 
     var body: some View {
         HStack(spacing: spacing) {
@@ -35,7 +40,7 @@ struct DoubleButtonRow: View {
 
                     HStack {
                         if let icon = leftIcon {
-                            iconView(for: icon, textColor: leftTextColor)
+                            iconView(for: icon, textColor: leftForeground)
                         }
                         Spacer()
                     }
@@ -44,10 +49,11 @@ struct DoubleButtonRow: View {
                 .frame(height: 20)
                 .padding(.vertical, 8)
                 .background(leftTint)
-                .foregroundStyle(leftTextColor)
+                .foregroundStyle(leftForeground)
                 .clipShape(Capsule())
             }
             .buttonStyle(.plain)
+            .allowsHitTesting(!leftDisabled)
 
             Button(action: rightAction) {
                 ZStack {
