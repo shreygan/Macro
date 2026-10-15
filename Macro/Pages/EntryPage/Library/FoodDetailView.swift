@@ -42,11 +42,19 @@ private struct FoodDetailContent: View {
     @State private var entryToLogAgain: LoggedEntry? = nil
     @State private var foodToShow: FoodItem? = nil
     @State private var showingAllLogs = false
+    @State private var showingAllDrafts = false
+    @State private var placeToShow: EntryLocation? = nil
+    @State private var showingAllPlaces = false
+    @State private var showingAllRecipes = false
+    @State private var recipeLogStats: [UUID: FoodLogStats] = [:]
+    @State private var showingMap = false
     @State private var isDismissing = false
     @State private var headerHeight: CGFloat = 0
     @State private var pageHeight: CGFloat = 0
 
     private let recentLogLimit = 5
+    private let recentDraftLimit = 3
+    private let usedInLimit = 3
     private let maxPinnedHeaderFraction: CGFloat = 0.25
 
     private var isHeaderPinned: Bool {
@@ -101,26 +109,39 @@ private struct FoodDetailContent: View {
         }
     }
 
-    private var usedInRecipes: [FoodItem] {
-        var seen = Set<UUID>()
-        return recipeUses.compactMap(\.parentRecipe)
-            .filter { seen.insert($0.id).inserted }
-            .sorted {
-                $0.name.localizedStandardCompare($1.name) == .orderedAscending
+    private var usedInRecipes: [UsedInRecipe] {
+        let stats = recipeLogStats
+        return UsedInRecipe.recipes(from: recipeUses).sorted { lhs, rhs in
+            let lhsStats = stats[lhs.id]
+            let rhsStats = stats[rhs.id]
+            if lhsStats?.count != rhsStats?.count {
+                return (lhsStats?.count ?? 0) > (rhsStats?.count ?? 0)
             }
+            if lhsStats?.lastLogged != rhsStats?.lastLogged {
+                return (lhsStats?.lastLogged ?? .distantPast)
+                    > (rhsStats?.lastLogged ?? .distantPast)
+            }
+            return lhs.recipe.name.localizedStandardCompare(rhs.recipe.name)
+                == .orderedAscending
+        }
+    }
+
+    private var usedInRecipeIDs: [UUID] {
+        UsedInRecipe.recipes(from: recipeUses).map(\.id)
+    }
+
+    private func refreshRecipeLogStats() {
+        let recipes = UsedInRecipe.recipes(from: recipeUses).map(\.recipe)
+        guard recipes.count > usedInLimit else {
+            recipeLogStats = [:]
+            return
+        }
+        recipeLogStats = FoodItemStore.logStats(for: recipes, in: modelContext)
     }
 
     private var usualPortion: String? {
-        let keys = logs.map {
-            PortionKey(quantity: $0.loggedQuantity, unit: $0.loggedUnit)
-        }
-        guard let usual = mostCommon(keys) else { return nil }
+        guard let usual = PortionKey.usual(in: logs) else { return nil }
         return portionText(usual.quantity, usual.unit)
-    }
-
-    private struct PortionKey: Hashable {
-        let quantity: Double
-        let unit: String
     }
 
     private var servingUnitName: String {
@@ -177,6 +198,8 @@ private struct FoodDetailContent: View {
         } action: { height in
             pageHeight = height
         }
+        .onAppear { refreshRecipeLogStats() }
+        .onChange(of: usedInRecipeIDs) { refreshRecipeLogStats() }
         .withGlobalSwipeDismissal()
         .navigationTitle(isAvailable ? typeName : "")
         .navigationBarTitleDisplayMode(.inline)
@@ -213,6 +236,21 @@ private struct FoodDetailContent: View {
         }
         .navigationDestination(isPresented: $showingAllLogs) {
             FoodLogsView(food: food)
+        }
+        .navigationDestination(isPresented: $showingAllDrafts) {
+            FoodDraftsView(food: food)
+        }
+        .navigationDestination(item: $placeToShow) { place in
+            FoodLogsView(food: food, place: place)
+        }
+        .navigationDestination(isPresented: $showingAllPlaces) {
+            FoodPlacesView(food: food)
+        }
+        .navigationDestination(isPresented: $showingMap) {
+            FoodLocationsMapView(food: food)
+        }
+        .navigationDestination(isPresented: $showingAllRecipes) {
+            FoodRecipesView(food: food)
         }
         .navigationDestination(isPresented: $showingAllNotes) {
             NotesHistoryView(food: food, isPushedView: true)
@@ -272,6 +310,10 @@ private struct FoodDetailContent: View {
                             detailRow("Source", value: source)
                         }
 
+                        if let defaultLocation = food.defaultLocation {
+                            detailRow("Default Location", value: defaultLocation.name)
+                        }
+
                         if let category = food.category?.category {
                             detailRow("Category", value: category)
                         }
@@ -323,23 +365,25 @@ private struct FoodDetailContent: View {
                                 )
                             }
 
-                            Button {
-                                showingAllNotes = true
-                            } label: {
-                                BaseRowLayout(title: "All Notes") {
-                                    HStack(spacing: 8) {
-                                        Text(noteCount.formatted())
-                                            .font(.rowValue)
-                                            .foregroundStyle(.secondary)
+                            if noteCount > (pinnedNote == nil ? 0 : 1) {
+                                Button {
+                                    showingAllNotes = true
+                                } label: {
+                                    BaseRowLayout(title: "All Notes") {
+                                        HStack(spacing: 8) {
+                                            Text(noteCount.formatted())
+                                                .font(.rowValue)
+                                                .foregroundStyle(.secondary)
 
-                                        Image(systemName: "chevron.right")
-                                            .font(.chevron)
-                                            .foregroundStyle(Color.tertiaryText)
+                                            Image(systemName: "chevron.right")
+                                                .font(.chevron)
+                                                .foregroundStyle(Color.tertiaryText)
+                                        }
                                     }
+                                    .contentShape(Rectangle())
                                 }
-                                .contentShape(Rectangle())
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                     .padding([.top, .horizontal])
@@ -350,6 +394,23 @@ private struct FoodDetailContent: View {
                     framingWidth: photoFramingWidth,
                     onViewLog: { selectedEntry = LogSelection(entry: $0) },
                     onShowAll: { showingAllPhotos = true }
+                )
+
+                FoodPlacesCard(
+                    food: food,
+                    logs: logs,
+                    servingUnits: portionUnitOptions,
+                    onSelect: { placeToShow = $0 },
+                    onSetDefault: {
+                        setDefaultLocation(
+                            $0,
+                            for: food,
+                            in: modelContext,
+                            toastCenter: toastCenter
+                        )
+                    },
+                    onShowAll: { showingAllPlaces = true },
+                    onShowMap: { showingMap = true }
                 )
 
                 if food.type == .recipe && !ingredients.isEmpty {
@@ -364,23 +425,8 @@ private struct FoodDetailContent: View {
                 }
 
                 if !usedInRecipes.isEmpty {
-                    Card("Used In") {
-                        RowGroup(.divider) {
-                            ForEach(usedInRecipes) { recipe in
-                                Button {
-                                    foodToShow = recipe
-                                } label: {
-                                    NavigationRow(
-                                        icon: .appSymbol(.recipe),
-                                        title: recipe.name
-                                    )
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                    .padding([.top, .horizontal])
+                    usedInCard
+                        .padding([.top, .horizontal])
                 }
 
                 if !drafts.isEmpty {
@@ -444,41 +490,52 @@ private struct FoodDetailContent: View {
         }
     }
 
+    private var usedInCard: some View {
+        let recipes = usedInRecipes
+
+        return Card("Used In") {
+            RowGroup(.divider) {
+                ForEach(recipes.prefix(usedInLimit)) { usedIn in
+                    UsedInRecipeRow(usedIn: usedIn, servingUnits: portionUnitOptions) {
+                        foodToShow = usedIn.recipe
+                    }
+                }
+            } bottomContent: {
+                if recipes.count > usedInLimit {
+                    Divider()
+                        .padding(.horizontal, 16)
+
+                    ButtonRow(
+                        icon: .appSymbol(.recipe),
+                        title: String(localized: "See All Recipes (\(recipes.count))")
+                    ) {
+                        showingAllRecipes = true
+                    }
+                }
+            }
+        }
+    }
+
     private var draftsCard: some View {
         Card("Drafts", titleBottomPadding: -4) {
-            EntryList(
-                items: drafts,
-                allowSwipeActions: true,
-                showCard: false,
-                isLazy: false,
-                rowContent: { draft in
-                    DraftRow(
-                        draft: draft,
-                        servingUnits: portionUnitOptions,
-                        showsFoodName: false
-                    ) {
-                        draftToResume = draft
-                    }
-                    .contextMenu {
-                        Button {
-                            draftToResume = draft
-                        } label: {
-                            Label("Resume Draft", systemImage: "square.and.pencil")
-                        }
-
-                        Divider()
-
-                        Button(role: .destructive) {
-                            deleteDraft(draft)
-                        } label: {
-                            Label("Delete Draft", systemImage: "trash")
-                        }
-                    }
-                },
-                onDelete: { draft in
-                    deleteDraft(draft)
-                }
+            FoodDraftList(
+                drafts: Array(drafts.prefix(recentDraftLimit)),
+                servingUnits: portionUnitOptions,
+                onResume: { draftToResume = $0 },
+                onDelete: deleteDraft
             )
+
+            if drafts.count > recentDraftLimit {
+                Divider()
+                    .padding(.horizontal, 16)
+
+                ButtonRow(
+                    icon: .customSymbol("tray.full"),
+                    title: "See All Drafts (\(drafts.count))"
+                ) {
+                    showingAllDrafts = true
+                }
+            }
         }
     }
 
@@ -501,6 +558,9 @@ private struct FoodDetailContent: View {
             )
 
             if logs.count > recentLogLimit {
+                Divider()
+                    .padding(.horizontal, 16)
+
                 ButtonRow(
                     icon: .customSymbol("clock.arrow.circlepath"),
                     title: "See All Logs (\(logs.count))"
@@ -573,32 +633,9 @@ private struct FoodDetailContent: View {
         return (time, "Usual Time")
     }
 
-    private func mostCommon<Value: Hashable>(_ values: [Value]) -> Value? {
-        var counts: [Value: Int] = [:]
-        var best: Value?
-        var bestCount = 0
-        for value in values {
-            let count = counts[value, default: 0] + 1
-            counts[value] = count
-            if count > bestCount {
-                best = value
-                bestCount = count
-            }
-        }
-        return best
-    }
-
     @ViewBuilder
     private func ingredientRow(_ ingredient: RecipeIngredient) -> some View {
-        let multiplier = EntryHelper.ingredientMultiplier(
-            quantity: ingredient.quantity,
-            unit: ingredient.unit,
-            baseServingSize: ingredient.baseServingSize,
-            baseServingWeight: ingredient.baseServingWeight,
-            baseServingWeightUnit: ingredient.baseServingWeightUnit
-        )
-        let calories =
-            multiplier.isFinite ? ingredient.baseCalories * multiplier : 0
+        let calories = ingredient.calories
 
         let row = BaseRowLayout(
             icon: .appSymbol(
@@ -646,6 +683,108 @@ private struct FoodDetailContent: View {
 private struct LogSelection: Hashable {
     let entry: LoggedEntry
     var startsEditing = false
+}
+
+private func mostCommon<Value: Hashable>(_ values: [Value]) -> Value? {
+    var counts: [Value: Int] = [:]
+    var best: Value?
+    var bestCount = 0
+    for value in values {
+        let count = counts[value, default: 0] + 1
+        counts[value] = count
+        if count > bestCount {
+            best = value
+            bestCount = count
+        }
+    }
+    return best
+}
+
+struct PortionKey: Hashable {
+    let quantity: Double
+    let unit: String
+
+    static func usual(in logs: [LoggedEntry]) -> PortionKey? {
+        mostCommon(logs.map { PortionKey(quantity: $0.loggedQuantity, unit: $0.loggedUnit) })
+    }
+}
+
+struct FoodPlace {
+    var location: EntryLocation
+    var logs: [LoggedEntry]
+
+    static func places(in logs: [LoggedEntry]) -> [FoodPlace] {
+        var places: [FoodPlace] = []
+        for entry in logs {
+            guard let location = entry.location?.withoutMapPin else { continue }
+            if let index = places.firstIndex(where: {
+                RecentLocationStore.isSamePlace($0.location, location)
+            }) {
+                places[index].logs.append(entry)
+            } else {
+                places.append(FoodPlace(location: location, logs: [entry]))
+            }
+        }
+        return places.enumerated()
+            .sorted { lhs, rhs in
+                lhs.element.logs.count != rhs.element.logs.count
+                    ? lhs.element.logs.count > rhs.element.logs.count
+                    : lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+}
+
+private struct FoodPlacesCard: View {
+    let food: FoodItem
+    let logs: [LoggedEntry]
+    let servingUnits: [ServingSizeUnit]
+    var onSelect: (EntryLocation) -> Void
+    var onSetDefault: (EntryLocation?) -> Void
+    var onShowAll: () -> Void
+    var onShowMap: () -> Void
+
+    private let placeLimit = 3
+
+    var body: some View {
+        let places = FoodPlace.places(in: logs)
+        let usualPortion = PortionKey.usual(in: logs)
+        let isMappable = places.contains { $0.location.coordinate != nil }
+
+        if places.count >= 2 || isMappable {
+            Card("Locations") {
+                RowGroup(.divider) {
+                    ForEach(places.prefix(placeLimit), id: \.location) { place in
+                        FoodPlaceRow(
+                            food: food,
+                            place: place,
+                            servingUnits: servingUnits,
+                            usualPortion: usualPortion,
+                            onSelect: onSelect,
+                            onSetDefault: onSetDefault
+                        )
+                    }
+                } bottomContent: {
+                    if places.count > placeLimit {
+                        Divider()
+                            .padding(.horizontal, 16)
+
+                        ButtonRow(
+                            icon: .customSymbol("mappin.and.ellipse"),
+                            title: String(localized: "See All Locations (\(places.count))")
+                        ) {
+                            onShowAll()
+                        }
+                    }
+                }
+            } headerAccessory: {
+                if isMappable {
+                    ShowOnMapButton(action: onShowMap)
+                }
+            }
+            .padding([.top, .horizontal])
+        }
+    }
 }
 
 private struct FoodPhotosCard: View {
@@ -751,11 +890,340 @@ private struct FoodPhotosCard: View {
     }
 }
 
-private struct FoodLogsView: View {
+func setDefaultLocation(
+    _ location: EntryLocation?,
+    for food: FoodItem,
+    in context: ModelContext,
+    toastCenter: ToastCenter?
+) {
+    do {
+        try withAnimation(.snappy(duration: 0.3)) {
+            try DefaultLocationResolver.set(location, for: food, in: context)
+        }
+    } catch {
+        context.rollback()
+        toastCenter?.show(
+            .failure(
+                location == nil
+                    ? String(localized: "Couldn't Clear Default Location")
+                    : String(localized: "Couldn't Set Default Location"),
+                message: food.name
+            )
+        )
+    }
+}
+
+struct FoodPlaceRow: View {
+    let food: FoodItem
+    let place: FoodPlace
+    let servingUnits: [ServingSizeUnit]
+    let usualPortion: PortionKey?
+    var onSelect: (EntryLocation) -> Void
+    var onSetDefault: (EntryLocation?) -> Void
+
+    private var isDefault: Bool {
+        guard let current = food.defaultLocation else { return false }
+        return RecentLocationStore.isSamePlace(current, place.location)
+    }
+
+    private var subtitle: String {
+        var parts: [String] = []
+        if isDefault {
+            parts.append(String(localized: "Default"))
+        }
+        if let portion {
+            parts.append(String(localized: "Usually \(portion)"))
+        }
+        if let last = place.logs.first?.timestamp {
+            parts.append(String(localized: "Last Logged \(EntryHelper.logDayText(last))"))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var portion: String? {
+        guard place.logs.count >= 2,
+            let usual = PortionKey.usual(in: place.logs),
+            usual != usualPortion
+        else { return nil }
+        return EntryHelper.portionText(
+            quantity: usual.quantity,
+            unit: usual.unit,
+            servingUnits: servingUnits
+        )
+    }
+
+    var body: some View {
+        Button {
+            onSelect(place.location)
+        } label: {
+            BaseRowLayout(
+                icon: .customSymbol(isDefault ? "pin.fill" : "mappin"),
+                title: place.location.name,
+                subtitle: subtitle
+            ) {
+                HStack(spacing: 8) {
+                    Text(place.logs.count.formatted())
+                        .font(.rowValue)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .accessibilityLabel(
+                            place.logs.count == 1
+                                ? String(localized: "1 log")
+                                : String(localized: "\(place.logs.count) logs")
+                        )
+
+                    Image(systemName: "chevron.right")
+                        .font(.chevron)
+                        .foregroundStyle(Color.tertiaryText)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                onSelect(place.location)
+            } label: {
+                Label("View Logs", systemImage: "list.bullet.rectangle")
+            }
+
+            if !place.location.needsName {
+                Divider()
+
+                if isDefault {
+                    Button {
+                        onSetDefault(nil)
+                    } label: {
+                        Label("Stop Using Here by Default", systemImage: "pin.slash")
+                    }
+                } else {
+                    Button {
+                        onSetDefault(place.location)
+                    } label: {
+                        Label("Use Here by Default", systemImage: "pin")
+                        if let current = food.defaultLocation {
+                            Text("Replaces “\(current.name)”")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct FoodPlacesView: View {
     let food: FoodItem
 
     var body: some View {
-        FoodLogsContent(food: food)
+        FoodPlacesContent(food: food)
+    }
+}
+
+private struct FoodPlacesContent: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
+
+    let food: FoodItem
+
+    @Query private var logs: [LoggedEntry]
+    @Query(sort: \ServingSizeUnit.displayOrder) private var portionUnitOptions:
+        [ServingSizeUnit]
+
+    @State private var placeToShow: EntryLocation? = nil
+    @State private var showingMap = false
+
+    init(food: FoodItem) {
+        self.food = food
+        _logs = Query(FoodItemStore.topLevelLogsDescriptor(for: food))
+    }
+
+    var body: some View {
+        let usualPortion = PortionKey.usual(in: logs)
+
+        ZStack {
+            Color.background.ignoresSafeArea()
+
+            ScrollView {
+                Card {
+                    RowGroup(.divider, isLazy: true) {
+                        ForEach(FoodPlace.places(in: logs), id: \.location) { place in
+                            FoodPlaceRow(
+                                food: food,
+                                place: place,
+                                servingUnits: portionUnitOptions,
+                                usualPortion: usualPortion,
+                                onSelect: { placeToShow = $0 },
+                                onSetDefault: {
+                                    setDefaultLocation(
+                                        $0,
+                                        for: food,
+                                        in: modelContext,
+                                        toastCenter: toastCenter
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .tabBarScrollInsets()
+        }
+        .withGlobalSwipeDismissal()
+        .navigationTitle("All Locations")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if logs.contains(where: { $0.location?.coordinate != nil }) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Show on Map", systemImage: "map") {
+                        showingMap = true
+                    }
+                }
+            }
+        }
+        .navigationDestination(item: $placeToShow) { place in
+            FoodLogsView(food: food, place: place)
+        }
+        .navigationDestination(isPresented: $showingMap) {
+            FoodLocationsMapView(food: food)
+        }
+    }
+}
+
+private struct UsedInRecipe: Identifiable {
+    let recipe: FoodItem
+    var uses: [RecipeIngredient]
+
+    var id: UUID { recipe.id }
+
+    static func recipes(from uses: [RecipeIngredient]) -> [UsedInRecipe] {
+        var result: [UsedInRecipe] = []
+        for use in uses {
+            guard let recipe = use.parentRecipe else { continue }
+            if let index = result.firstIndex(where: { $0.id == recipe.id }) {
+                result[index].uses.append(use)
+            } else {
+                result.append(UsedInRecipe(recipe: recipe, uses: [use]))
+            }
+        }
+        return result
+    }
+}
+
+private struct UsedInRecipeRow: View {
+    let usedIn: UsedInRecipe
+    let servingUnits: [ServingSizeUnit]
+    var onSelect: () -> Void
+
+    private var portion: String {
+        usedIn.uses
+            .sorted { $0.displayOrder < $1.displayOrder }
+            .map {
+                EntryHelper.portionText(
+                    quantity: $0.quantity,
+                    unit: $0.unit,
+                    servingUnits: servingUnits
+                )
+            }
+            .joined(separator: " + ")
+    }
+
+    private var calories: Double {
+        usedIn.uses.reduce(0) { $0 + $1.calories }
+    }
+
+    var body: some View {
+        Button {
+            onSelect()
+        } label: {
+            BaseRowLayout(
+                icon: .appSymbol(.recipe),
+                title: usedIn.recipe.name,
+                subtitle: portion
+            ) {
+                HStack(spacing: 8) {
+                    Text("\(EntryHelper.formatMacro(calories)) kcal")
+                        .font(.compactValue)
+                        .foregroundStyle(.secondary)
+
+                    Image(systemName: "chevron.right")
+                        .font(.chevron)
+                        .foregroundStyle(Color.tertiaryText)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct FoodRecipesView: View {
+    let food: FoodItem
+
+    var body: some View {
+        FoodRecipesContent(food: food)
+    }
+}
+
+private struct FoodRecipesContent: View {
+    @Query private var recipeUses: [RecipeIngredient]
+    @Query(sort: \ServingSizeUnit.displayOrder) private var portionUnitOptions:
+        [ServingSizeUnit]
+
+    @State private var foodToShow: FoodItem? = nil
+
+    init(food: FoodItem) {
+        let foodID = food.id
+        _recipeUses = Query(
+            filter: #Predicate<RecipeIngredient> {
+                $0.ingredientItem?.id == foodID
+            }
+        )
+    }
+
+    private var recipes: [UsedInRecipe] {
+        UsedInRecipe.recipes(from: recipeUses).sorted {
+            $0.recipe.name.localizedStandardCompare($1.recipe.name) == .orderedAscending
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Color.background.ignoresSafeArea()
+
+            ScrollView {
+                Card {
+                    RowGroup(.divider, isLazy: true) {
+                        ForEach(recipes) { usedIn in
+                            UsedInRecipeRow(
+                                usedIn: usedIn,
+                                servingUnits: portionUnitOptions
+                            ) {
+                                foodToShow = usedIn.recipe
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .tabBarScrollInsets()
+        }
+        .withGlobalSwipeDismissal()
+        .navigationTitle("Used In")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $foodToShow) { food in
+            FoodDetailView(food: food)
+        }
+    }
+}
+
+struct FoodLogsView: View {
+    let food: FoodItem
+    var place: EntryLocation? = nil
+    var showsMapButton = true
+
+    var body: some View {
+        FoodLogsContent(food: food, place: place, showsMapButton: showsMapButton)
     }
 }
 
@@ -769,9 +1237,29 @@ private struct FoodLogsContent: View {
 
     @State private var selectedEntry: LogSelection? = nil
     @State private var entryToLogAgain: LoggedEntry? = nil
+    @State private var isVisible = false
+    @State private var isDismissing = false
+    @State private var showingMap = false
 
-    init(food: FoodItem) {
+    @Environment(\.dismiss) private var dismiss
+
+    private let food: FoodItem
+    private let place: EntryLocation?
+    private let showsMapButton: Bool
+
+    init(food: FoodItem, place: EntryLocation? = nil, showsMapButton: Bool = true) {
+        self.food = food
+        self.place = place
+        self.showsMapButton = showsMapButton
         _logs = Query(FoodItemStore.topLevelLogsDescriptor(for: food))
+    }
+
+    private var shownLogs: [LoggedEntry] {
+        guard let place else { return logs }
+        return logs.filter { entry in
+            guard let location = entry.location?.withoutMapPin else { return false }
+            return RecentLocationStore.isSamePlace(place, location)
+        }
     }
 
     private struct LogMonth: Identifiable {
@@ -782,7 +1270,7 @@ private struct FoodLogsContent: View {
     private var months: [LogMonth] {
         let calendar = Calendar.current
         var result: [LogMonth] = []
-        for entry in logs {
+        for entry in shownLogs {
             let month =
                 calendar.dateInterval(of: .month, for: entry.timestamp)?.start
                 ?? entry.timestamp
@@ -799,6 +1287,12 @@ private struct FoodLogsContent: View {
         DispatchQueue.main.async {
             EntryActions.delete(entry, in: modelContext, toastCenter: toastCenter)
         }
+    }
+
+    private func dismissIfEmpty() {
+        guard place != nil, isVisible, !isDismissing, shownLogs.isEmpty else { return }
+        isDismissing = true
+        dismiss()
     }
 
     var body: some View {
@@ -838,8 +1332,29 @@ private struct FoodLogsContent: View {
             .tabBarScrollInsets()
         }
         .withGlobalSwipeDismissal()
-        .navigationTitle("All Logs")
+        .navigationTitle(place?.name ?? String(localized: "All Logs"))
+        .navigationSubtitle(place == nil ? "" : food.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if showsMapButton, let place, place.coordinate != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Show on Map", systemImage: "map") {
+                        showingMap = true
+                    }
+                }
+            }
+        }
+        .navigationDestination(isPresented: $showingMap) {
+            FoodLocationsMapView(food: food, initialPlace: place)
+        }
+        .onAppear {
+            isVisible = true
+            dismissIfEmpty()
+        }
+        .onDisappear { isVisible = false }
+        .onChange(of: months.isEmpty) {
+            dismissIfEmpty()
+        }
         .navigationDestination(item: $selectedEntry) { selection in
             LoggedEntryDetailView(
                 entry: selection.entry,
@@ -850,6 +1365,135 @@ private struct FoodLogsContent: View {
         .sheet(item: $entryToLogAgain) { entry in
             LogAgainSheet(entry: entry)
         }
+    }
+}
+
+private struct FoodDraftsView: View {
+    let food: FoodItem
+
+    var body: some View {
+        FoodDraftsContent(food: food)
+    }
+}
+
+private struct FoodDraftsContent: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
+    @Environment(\.dismiss) private var dismiss
+
+    let food: FoodItem
+
+    @Query private var drafts: [EntryDraft]
+    @Query(sort: \ServingSizeUnit.displayOrder) private var portionUnitOptions:
+        [ServingSizeUnit]
+
+    @State private var draftToResume: EntryDraft? = nil
+    @State private var isVisible = false
+    @State private var isDismissing = false
+
+    init(food: FoodItem) {
+        self.food = food
+
+        let foodID = food.id
+        let logFood = DraftKind.logFood.rawValue
+        let logRecipe = DraftKind.logRecipe.rawValue
+        _drafts = Query(
+            filter: #Predicate<EntryDraft> {
+                $0.foodItem?.id == foodID
+                    && ($0.kindRawValue == logFood
+                        || $0.kindRawValue == logRecipe)
+            },
+            sort: \EntryDraft.updatedAt,
+            order: .reverse
+        )
+    }
+
+    private func deleteDraft(_ draft: EntryDraft) {
+        DispatchQueue.main.async {
+            EntryActions.delete(draft, in: modelContext, toastCenter: toastCenter)
+        }
+    }
+
+    private func dismissIfEmpty() {
+        guard isVisible, !isDismissing, drafts.isEmpty else { return }
+        isDismissing = true
+        dismiss()
+    }
+
+    var body: some View {
+        ZStack {
+            Color.background.ignoresSafeArea()
+
+            ScrollView {
+                Card {
+                    FoodDraftList(
+                        drafts: drafts,
+                        servingUnits: portionUnitOptions,
+                        onResume: { draftToResume = $0 },
+                        onDelete: deleteDraft
+                    )
+                }
+                .padding(.horizontal)
+            }
+            .tabBarScrollInsets()
+        }
+        .withGlobalSwipeDismissal()
+        .navigationTitle("All Drafts")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            isVisible = true
+            dismissIfEmpty()
+        }
+        .onDisappear { isVisible = false }
+        .onChange(of: drafts.isEmpty) {
+            dismissIfEmpty()
+        }
+        .sheet(item: $draftToResume) { draft in
+            if draft.isAvailable {
+                LogFoodSheet(food: food, draft: draft)
+            }
+        }
+    }
+}
+
+private struct FoodDraftList: View {
+    let drafts: [EntryDraft]
+    let servingUnits: [ServingSizeUnit]
+    var onResume: (EntryDraft) -> Void
+    var onDelete: (EntryDraft) -> Void
+
+    var body: some View {
+        EntryList(
+            items: drafts,
+            allowSwipeActions: true,
+            showCard: false,
+            isLazy: false,
+            rowContent: { draft in
+                DraftRow(
+                    draft: draft,
+                    servingUnits: servingUnits,
+                    showsFoodName: false
+                ) {
+                    onResume(draft)
+                }
+                .contextMenu {
+                    Button {
+                        onResume(draft)
+                    } label: {
+                        Label("Resume Draft", systemImage: "square.and.pencil")
+                    }
+
+                    Divider()
+
+                    Button(role: .destructive) {
+                        onDelete(draft)
+                    } label: {
+                        Label("Delete Draft", systemImage: "trash")
+                    }
+                }
+            },
+            onDelete: onDelete
+        )
     }
 }
 

@@ -304,6 +304,10 @@ struct NewEntryView: View {
                                         )
 
                                         if drafts.count > draftPreviewLimit {
+                                            Divider()
+                                                .padding(.horizontal, 16)
+                                                .transition(.opacity)
+
                                             ButtonRow(
                                                 icon: .customSymbol(
                                                     "tray.full"
@@ -332,6 +336,12 @@ struct NewEntryView: View {
                                         }
 
                                         if let onBrowseLibrary {
+                                            if !recentFoods.isEmpty {
+                                                Divider()
+                                                    .padding(.horizontal, 16)
+                                                    .transition(.opacity)
+                                            }
+
                                             ButtonRow(
                                                 icon: .customSymbol(
                                                     "book.pages"

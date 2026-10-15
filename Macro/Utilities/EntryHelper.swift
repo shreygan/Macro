@@ -110,22 +110,23 @@ enum EntryHelper {
     }
 
     static func logDateText(_ date: Date) -> String {
-        let calendar = Calendar.current
         let time = date.formatted(date: .omitted, time: .shortened)
             .lowercased()
+        return "\(logDayText(date)), \(time)"
+    }
 
-        let day: String
+    static func logDayText(_ date: Date) -> String {
+        let calendar = Calendar.current
         if calendar.isDateInToday(date) {
-            day = "Today"
-        } else if calendar.isDateInYesterday(date) {
-            day = "Yesterday"
-        } else if calendar.isDate(date, equalTo: .now, toGranularity: .year) {
-            day = date.formatted(.dateTime.weekday(.abbreviated).month().day())
-        } else {
-            day = date.formatted(.dateTime.month().day().year())
+            return String(localized: "Today")
         }
-
-        return "\(day), \(time)"
+        if calendar.isDateInYesterday(date) {
+            return String(localized: "Yesterday")
+        }
+        if calendar.isDate(date, equalTo: .now, toGranularity: .year) {
+            return date.formatted(.dateTime.weekday(.abbreviated).month().day())
+        }
+        return date.formatted(.dateTime.month().day().year())
     }
 
     static func formatMacro(_ value: Double) -> String {
