@@ -5,6 +5,7 @@
 //  Created by Shrey Gangwar on 5/15/26.
 //
 
+import CoreLocation
 import PhotosUI
 import SwiftUI
 
@@ -13,9 +14,28 @@ struct LoggedPhoto: Identifiable {
     let image: UIImage
     let originalData: Data
     let pickerItem: PhotosPickerItem?
+    let coordinate: CLLocationCoordinate2D?
+    let capturedAt: Date?
 
     var scale: CGFloat = 1.0
     var offset: CGSize = .zero
+
+    init(
+        image: UIImage,
+        originalData: Data,
+        pickerItem: PhotosPickerItem?,
+        scale: CGFloat = 1.0,
+        offset: CGSize = .zero
+    ) {
+        self.image = image
+        self.originalData = originalData
+        self.pickerItem = pickerItem
+        let metadata = PhotoMetadata(data: originalData)
+        self.coordinate = metadata.coordinate
+        self.capturedAt = metadata.capturedAt
+        self.scale = scale
+        self.offset = offset
+    }
 }
 
 struct PhotoPickerCard: View {
@@ -24,6 +44,11 @@ struct PhotoPickerCard: View {
 
     var isEditing: Bool = true
     var onViewAll: (() -> Void)? = nil
+    var onUseTime: ((Date) -> Void)? = nil
+    var onUseLocation: ((EntryLocation) -> Void)? = nil
+    var entryDate: Date? = nil
+    var entryTime: Date? = nil
+    var entryLocation: EntryLocation? = nil
 
     @State private var showCamera = false
     @State private var showPhotoLibrary = false
@@ -112,6 +137,18 @@ struct PhotoPickerCard: View {
                                                 .scaleEffect(isEditing ? 1 : 0.5)
                                                 .disabled(!isEditing)
                                             }
+                                            .overlay(alignment: .bottomLeading) {
+                                                PhotoDetailsChip(
+                                                    photo: images[index],
+                                                    onUseTime: onUseTime,
+                                                    onUseLocation: onUseLocation,
+                                                    entryDate: entryDate,
+                                                    entryTime: entryTime,
+                                                    entryLocation: entryLocation,
+                                                    isInteractive: isEditing
+                                                )
+                                                .padding(5)
+                                            }
                                             .padding(.horizontal, 5)
                                             .containerRelativeFrame([.horizontal, .vertical])
                                             .id(index)
@@ -131,12 +168,13 @@ struct PhotoPickerCard: View {
                             .scrollPosition(id: pageSelection)
                             .padding(.horizontal, -5)
                         )
-                        .overlay(alignment: .bottom) {
+                        .overlay(alignment: .top) {
                             PageControl(
                                 numberOfPages: pageCount,
                                 currentPage: pageSelection
                             )
-                            .padding(.bottom, 12)
+                            .frame(height: 30)
+                            .padding(.top, 12)
                         }
                         .overlay(alignment: .topLeading) {
                             if let onViewAll {
@@ -294,11 +332,30 @@ struct PhotoPickerCard: View {
             .ignoresSafeArea()
         }
         .fullScreenCover(isPresented: $showViewer) {
-            LoggedPhotoViewer(photos: images, selection: viewerSelection)
+            LoggedPhotoViewer(
+                photos: images,
+                selection: viewerSelection,
+                logDate: entryTimestamp,
+                logLocation: entryLocation,
+                onUseTime: isEditing ? onUseTime : nil,
+                onUseLocation: isEditing ? onUseLocation : nil
+            )
                 .navigationTransition(
                     .zoom(sourceID: currentPhotoID, in: photoNamespace)
                 )
         }
+    }
+
+    private var entryTimestamp: Date? {
+        guard let entryDate, let entryTime else { return nil }
+        let calendar = Calendar.current
+        let time = calendar.dateComponents([.hour, .minute, .second], from: entryTime)
+        return calendar.date(
+            bySettingHour: time.hour ?? 0,
+            minute: time.minute ?? 0,
+            second: time.second ?? 0,
+            of: entryDate
+        )
     }
 
     @ViewBuilder

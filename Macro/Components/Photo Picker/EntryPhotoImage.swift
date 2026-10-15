@@ -80,6 +80,18 @@ final class EntryPhotoCache {
     }()
 
     private var dimensions: [PersistentIdentifier: CGSize] = [:]
+    private var metadata: [PersistentIdentifier: PhotoMetadata] = [:]
+
+    func metadata(for photo: EntryPhoto) async -> PhotoMetadata? {
+        let id = photo.persistentModelID
+        if let cached = metadata[id] {
+            return cached
+        }
+        guard let data = await imageData(for: photo) else { return nil }
+        let parsed = await Self.readMetadata(data)
+        metadata[id] = parsed
+        return parsed
+    }
 
     func pixelDimensions(for photo: EntryPhoto) async -> CGSize? {
         let id = photo.persistentModelID
@@ -120,6 +132,11 @@ final class EntryPhotoCache {
         )
         descriptor.fetchLimit = 1
         return try? context.fetch(descriptor).first?.imageData
+    }
+
+    @concurrent
+    private nonisolated static func readMetadata(_ data: Data) async -> PhotoMetadata {
+        PhotoMetadata(data: data)
     }
 
     @concurrent
