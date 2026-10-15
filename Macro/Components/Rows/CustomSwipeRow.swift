@@ -16,6 +16,8 @@ struct CustomSwipeRow<Content: View>: View {
 
     var onFavorite: (() -> Void)? = nil
     var isFavorited: Bool = false
+    var favoriteTitle: LocalizedStringKey = "Favorite"
+    var unfavoriteTitle: LocalizedStringKey = "Unfavorite"
 
     var onPin: (() -> Void)? = nil
     var isPinned: Bool = false
@@ -86,7 +88,7 @@ struct CustomSwipeRow<Content: View>: View {
                             .background(Color.yellow)
                             .clipShape(Circle())
 
-                            Text(isFavorited ? "Unfavorite" : "Favorite")
+                            Text(isFavorited ? unfavoriteTitle : favoriteTitle)
                                 .font(.swipeLabel)
                                 .foregroundColor(.secondary)
                         }

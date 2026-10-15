@@ -74,12 +74,12 @@ struct RowGroupLayout: _VariadicView_UnaryViewRoot {
 
     @ViewBuilder
     private func rows(_ children: _VariadicView.Children) -> some View {
-        let lastID = children.last?.id
+        let lastIndex = children.count - 1
 
-        ForEach(children) { child in
+        ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
             child
 
-            if child.id != lastID {
+            if index != lastIndex {
                 switch separator {
                 case .divider:
                     Divider()
