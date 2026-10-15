@@ -13,8 +13,11 @@ struct BaseRowLayout<RightContent: View>: View {
     var titleExtension: String? = nil
     var subtitle: String? = nil
     var info: String? = nil
+    var thumbnail: RowThumbnail? = nil
+    var fitsRightContent: Bool = false
 
     private let titleFontSize = FontSize.row
+    private let rowSpacing: CGFloat = 16
 
     @ViewBuilder var rightContent: RightContent
 
@@ -22,24 +25,16 @@ struct BaseRowLayout<RightContent: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                if info != nil {
-                    leadingContent
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            withAnimation(.snappy(duration: 0.3)) {
-                                isShowingInfo.toggle()
-                            }
-                        }
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityHint("Shows more information")
-                } else {
-                    leadingContent
+            if fitsRightContent {
+                FittedRowLayout(spacing: rowSpacing) {
+                    titleContent
+                    rightContent
                 }
-
-                Spacer()
-
-                rightContent
+            } else {
+                HStack(spacing: rowSpacing) {
+                    titleContent
+                    rightContent
+                }
             }
 
             if let info, isShowingInfo {
@@ -48,7 +43,7 @@ struct BaseRowLayout<RightContent: View>: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, icon != nil ? 23 : 0)
+                    .padding(.leading, iconInset)
                     .padding(.top, 6)
                     .transition(.opacity)
             }
@@ -57,9 +52,49 @@ struct BaseRowLayout<RightContent: View>: View {
         .padding(.vertical, 14)
     }
 
+    private var titleContent: some View {
+        HStack(spacing: 0) {
+            if info != nil {
+                leadingContent
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.snappy(duration: 0.3)) {
+                            isShowingInfo.toggle()
+                        }
+                    }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Shows more information")
+            } else {
+                leadingContent
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var iconInset: CGFloat {
+        if thumbnail != nil { return 48 }
+        return icon != nil ? 23 : 0
+    }
+
     private var leadingContent: some View {
         HStack(spacing: 8) {
-            if let icon = icon {
+            if let thumbnail {
+                ZStack {
+                    Color.controlFill
+
+                    if case .image(let image) = thumbnail {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .transition(.opacity)
+                    }
+                }
+                .frame(width: 40, height: 40)
+                .clipShape(.rect(cornerRadius: 8))
+                .unredacted()
+                .accessibilityHidden(true)
+            } else if let icon = icon {
                 switch icon {
                 case .appSymbol(let symbol, let tint):
                     Image(systemName: symbol.rawValue)
@@ -109,6 +144,59 @@ struct BaseRowLayout<RightContent: View>: View {
                 }
             }
         }
+    }
+}
+
+/// A plain `HStack` splits the row evenly between the title and the right content, so a long
+/// value truncates at half the row while a short title leaves the rest empty. This gives the
+/// title only the width it asks for and hands everything else to the right content.
+private struct FittedRowLayout: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let widths = widths(for: proposal, subviews: subviews)
+        let height = zip(subviews, widths).reduce(CGFloat.zero) { height, pair in
+            let size = pair.0.sizeThatFits(
+                ProposedViewSize(width: pair.1, height: proposal.height)
+            )
+            return max(height, size.height)
+        }
+        return CGSize(width: proposal.replacingUnspecifiedDimensions().width, height: height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        var x = bounds.minX
+        for (subview, width) in zip(subviews, widths(for: proposal, subviews: subviews)) {
+            subview.place(
+                at: CGPoint(x: x, y: bounds.midY),
+                anchor: .leading,
+                proposal: ProposedViewSize(width: width, height: bounds.height)
+            )
+            x += width + spacing
+        }
+    }
+
+    private func widths(for proposal: ProposedViewSize, subviews: Subviews) -> [CGFloat] {
+        let available = proposal.replacingUnspecifiedDimensions().width
+        guard subviews.count == 2 else {
+            return subviews.map { _ in available }
+        }
+
+        let titleWidth = subviews[0].sizeThatFits(.unspecified).width
+        let rightWidth = min(
+            subviews[1].sizeThatFits(.unspecified).width,
+            max(0, available - titleWidth - spacing)
+        )
+        return [max(0, available - rightWidth - spacing), rightWidth]
     }
 }
 
