@@ -42,7 +42,8 @@ struct DateTimePill: View {
 
             picker
                 .labelsHidden()
-            .opacity(0.011)
+                .frame(height: RowMetrics.controlHeight)
+                .opacity(0.011)
             .clipped()
         }
         .fixedSize()

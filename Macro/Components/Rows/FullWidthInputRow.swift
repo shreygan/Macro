@@ -26,10 +26,10 @@ struct FullWidthInputRow: View {
                 draft: $draft,
                 selection: $selection
             )
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: RowMetrics.controlHeight, alignment: .leading)
             .numericKeyboardFilter(text: $draft, type: keyboardType)
             .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.vertical, RowMetrics.verticalPadding)
     }
 }
 

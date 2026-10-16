@@ -15,7 +15,7 @@ struct PillBackground: ViewModifier {
             .font(.rowValue)
             .frame(height: FontSize.rowLineHeight)
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.vertical, RowMetrics.pillVerticalPadding)
             .background(
                 Capsule().fill(
                     isEnabled ? Color.controlFill : Color.clear

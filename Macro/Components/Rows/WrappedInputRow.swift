@@ -18,8 +18,8 @@ struct WrappedInputRow: View {
     var isEditable: Bool = true
 
     var characterLimit: Int? = nil
-    var topPadding: CGFloat = 14
-    var bottomPadding: CGFloat = 14
+    var topPadding: CGFloat = RowMetrics.verticalPadding
+    var bottomPadding: CGFloat = RowMetrics.verticalPadding
     var focusOnAppear: Bool = false
     var onFocusChange: ((Bool) -> Void)? = nil
 
@@ -43,6 +43,7 @@ struct WrappedInputRow: View {
                     selection: $selection
                 )
                 .lineLimit(isEditable ? 10 : nil)
+                .frame(minHeight: RowMetrics.controlHeight)
                 .numericKeyboardFilter(text: $draft, type: keyboardType)
                 .textInputAutocapitalization(.never)
                 .foregroundStyle(
@@ -81,7 +82,7 @@ struct WrappedInputRow: View {
                         .foregroundColor(
                             text.count >= limit ? .red : .secondary
                         )
-                        .offset(y: 11)
+                        .offset(y: bottomPadding - 3)
                 }
             }
         }
