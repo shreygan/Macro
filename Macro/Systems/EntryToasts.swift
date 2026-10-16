@@ -141,6 +141,32 @@ extension Toast {
         )
     }
 
+    static func foodsMerged(
+        _ record: FoodMergeRecord,
+        in context: ModelContext,
+        presenter: ToastCenter?
+    ) -> Toast {
+        Toast(
+            group: entryGroup,
+            kind: .success,
+            symbol: "arrow.triangle.merge",
+            tint: .accentColor,
+            title: String(localized: "Foods Merged"),
+            message: record.mergedName,
+            action: Toast.Action(title: String(localized: "Undo")) { [weak presenter] in
+                do {
+                    try withAnimation {
+                        try FoodMerger.restore(record, in: context)
+                    }
+                } catch {
+                    presenter?.show(
+                        .failure(String(localized: "Couldn't Undo Merge"), message: record.mergedName)
+                    )
+                }
+            }
+        )
+    }
+
     static func listItemDeleted(
         _ record: DeletedListItemRecord,
         in context: ModelContext,
@@ -338,6 +364,27 @@ enum EntryActions {
             toastCenter?.show(
                 .failure(String(localized: "Couldn't Delete Entry"), message: entry.name)
             )
+        }
+    }
+
+    @discardableResult
+    static func merge(
+        _ plan: FoodMergePlan,
+        in context: ModelContext,
+        toastCenter: ToastCenter?
+    ) -> Bool {
+        do {
+            let record = try withAnimation {
+                try FoodMerger.merge(plan, in: context)
+            }
+            guard let record else { return false }
+            toastCenter?.show(.foodsMerged(record, in: context, presenter: toastCenter))
+            return true
+        } catch {
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Merge Foods"), message: plan.trimmedName)
+            )
+            return false
         }
     }
 

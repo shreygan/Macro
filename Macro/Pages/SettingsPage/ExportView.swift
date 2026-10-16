@@ -320,7 +320,6 @@ struct ExportView: View {
                     ) {
                         DateTimePill(selection: $customStart, components: .date)
                             .padding(.trailing, -5)
-                            .padding(.vertical, -2)
                     }
                     BaseRowLayout(
                         icon: .customSymbol("calendar.badge.checkmark"),
@@ -328,7 +327,6 @@ struct ExportView: View {
                     ) {
                         DateTimePill(selection: $customEnd, components: .date)
                             .padding(.trailing, -5)
-                            .padding(.vertical, -2)
                     }
                 }
             }

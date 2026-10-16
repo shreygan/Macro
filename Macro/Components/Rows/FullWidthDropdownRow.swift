@@ -48,8 +48,9 @@ struct FullWidthDropdownRow: View {
                     .contentShape(Rectangle())
             }
         }
+        .frame(minHeight: RowMetrics.controlHeight)
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, RowMetrics.verticalPadding)
     }
 }
 

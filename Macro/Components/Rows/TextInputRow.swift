@@ -20,6 +20,7 @@ struct TextInputRow: View {
 
     var isEnabled: Bool = true
     var maxWidth: CGFloat? = 120
+    var fitsRightContent: Bool = false
 
     @FocusState private var isFocused: Bool
     @State private var draft = ""
@@ -30,7 +31,8 @@ struct TextInputRow: View {
             icon: icon,
             title: title,
             titleExtension: titleExtension,
-            subtitle: subtitle
+            subtitle: subtitle,
+            fitsRightContent: fitsRightContent
         ) {
             TextField(placeholder, text: $draft, selection: $selection)
                 .focused($isFocused)

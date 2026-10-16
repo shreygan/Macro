@@ -7,6 +7,14 @@
 
 import SwiftUI
 
+enum RowMetrics {
+    static let verticalPadding: CGFloat = 11
+
+    static let pillVerticalPadding: CGFloat = 6
+
+    static let controlHeight = FontSize.rowLineHeight + pillVerticalPadding * 2
+}
+
 struct BaseRowLayout<RightContent: View>: View {
     var icon: RowIcon? = nil
     var title: String
@@ -25,17 +33,20 @@ struct BaseRowLayout<RightContent: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if fitsRightContent {
-                FittedRowLayout(spacing: rowSpacing) {
-                    titleContent
-                    rightContent
-                }
-            } else {
-                HStack(spacing: rowSpacing) {
-                    titleContent
-                    rightContent
+            Group {
+                if fitsRightContent {
+                    FittedRowLayout(spacing: rowSpacing) {
+                        titleContent
+                        rightContent
+                    }
+                } else {
+                    HStack(spacing: rowSpacing) {
+                        titleContent
+                        rightContent
+                    }
                 }
             }
+            .frame(minHeight: RowMetrics.controlHeight)
 
             if let info, isShowingInfo {
                 Text(info)
@@ -49,7 +60,7 @@ struct BaseRowLayout<RightContent: View>: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, RowMetrics.verticalPadding)
     }
 
     private var titleContent: some View {

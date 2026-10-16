@@ -12,6 +12,8 @@ import SwiftUI
 struct PortionPillRow: View {
     var title: String = "Portion"
     var isEnabled: Bool = true
+    var allowsCustomUnit: Bool = false
+    var pendingCustomUnit: Binding<String?>? = nil
 
     @Binding var quantity: String
     @Binding var unit: String
@@ -43,8 +45,10 @@ struct PortionPillRow: View {
 
                         DropdownPill(
                             options: availableUnits,
-                            displayCustomOption: false,
+                            displayCustomOption: allowsCustomUnit,
                             isEnabled: isEnabled,
+                            commitsCustomOnEnd: allowsCustomUnit,
+                            pendingCustom: pendingCustomUnit,
                             selection: $unit
                         )
                     }

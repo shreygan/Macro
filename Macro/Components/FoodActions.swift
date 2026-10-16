@@ -15,6 +15,7 @@ struct FoodActionMenuItems: View {
     let food: FoodItem
     var onLog: (() -> Void)? = nil
     var onEdit: () -> Void
+    var onMerge: (() -> Void)? = nil
     var onDelete: () -> Void
 
     var body: some View {
@@ -38,6 +39,12 @@ struct FoodActionMenuItems: View {
                 isFavorited ? "Unfavorite" : "Favorite",
                 systemImage: isFavorited ? "star.slash" : "star"
             )
+        }
+
+        if let onMerge, food.type != .recipe {
+            Button(action: onMerge) {
+                Label("Merge…", systemImage: "arrow.triangle.merge")
+            }
         }
 
         Divider()

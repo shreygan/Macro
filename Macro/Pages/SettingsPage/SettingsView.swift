@@ -123,7 +123,6 @@ struct SettingsView: View {
                                             range: dayStartRange
                                         )
                                         .padding(.trailing, -5)
-                                        .frame(height: FontSize.rowLineHeight)
                                     }
 
                                     NavigationLink {

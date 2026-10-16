@@ -34,7 +34,8 @@ struct DateTimePillRow: View {
             icon: icon,
             title: title,
             titleExtension: titleExtension,
-            subtitle: subtitle
+            subtitle: subtitle,
+            fitsRightContent: true
         ) {
             HStack(spacing: 0) {
                 Spacer()
@@ -63,7 +64,6 @@ struct DateTimePillRow: View {
                         .accessibilityHidden(isEnabled)
                 }
             }
-            .padding(.vertical, -2)
             .animation(.snappy(duration: 0.3), value: isEnabled)
         }
     }

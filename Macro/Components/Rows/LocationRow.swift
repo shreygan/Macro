@@ -67,7 +67,7 @@ struct LocationRow: View {
         .sheet(isPresented: $isPickerPresented) {
             LocationPickerSheet(
                 selection: $selection,
-                foodID: food?.id,
+                foodIDs: food.map { [$0.id] } ?? [],
                 photos: photos,
                 logDate: logDate,
                 nearby: nearbyName.map(NearbyPlaceSearch.chain),
