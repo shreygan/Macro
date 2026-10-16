@@ -9,11 +9,20 @@ import SwiftData
 import SwiftUI
 
 struct FoodDetailView: View {
-    let food: FoodItem
     var isPushedView: Bool = true
 
+    @State private var food: FoodItem
+
+    init(food: FoodItem, isPushedView: Bool = true) {
+        _food = State(initialValue: food)
+        self.isPushedView = isPushedView
+    }
+
     var body: some View {
-        FoodDetailContent(food: food, isPushedView: isPushedView)
+        FoodDetailContent(food: food, isPushedView: isPushedView) { kept in
+            food = kept
+        }
+        .id(food.id)
     }
 }
 
@@ -24,6 +33,7 @@ private struct FoodDetailContent: View {
 
     let food: FoodItem
     var isPushedView: Bool = true
+    var onMerged: (FoodItem) -> Void = { _ in }
 
     @Query private var logs: [LoggedEntry]
     @Query private var drafts: [EntryDraft]
@@ -35,6 +45,8 @@ private struct FoodDetailContent: View {
     @State private var draftToResume: EntryDraft? = nil
     @State private var foodToEdit: FoodItem? = nil
     @State private var foodToDelete: FoodItem? = nil
+    @State private var foodToMerge: FoodItem? = nil
+    @State private var pendingMerge: FoodMergePlan? = nil
     @State private var showingAllNotes = false
     @State private var showingAllPhotos = false
     @State private var photoFramingWidth: CGFloat = 0
@@ -61,9 +73,14 @@ private struct FoodDetailContent: View {
         pageHeight == 0 || headerHeight <= pageHeight * maxPinnedHeaderFraction
     }
 
-    init(food: FoodItem, isPushedView: Bool = true) {
+    init(
+        food: FoodItem,
+        isPushedView: Bool = true,
+        onMerged: @escaping (FoodItem) -> Void = { _ in }
+    ) {
         self.food = food
         self.isPushedView = isPushedView
+        self.onMerged = onMerged
 
         let foodID = food.id
         _logs = Query(FoodItemStore.topLevelLogsDescriptor(for: food))
@@ -128,6 +145,14 @@ private struct FoodDetailContent: View {
 
     private var usedInRecipeIDs: [UUID] {
         UsedInRecipe.recipes(from: recipeUses).map(\.id)
+    }
+
+    private func performPendingMerge() {
+        guard let plan = pendingMerge else { return }
+        pendingMerge = nil
+        if EntryActions.merge(plan, in: modelContext, toastCenter: toastCenter) {
+            onMerged(plan.kept)
+        }
     }
 
     private func refreshRecipeLogStats() {
@@ -210,6 +235,7 @@ private struct FoodDetailContent: View {
                         FoodActionMenuItems(
                             food: food,
                             onEdit: { foodToEdit = food },
+                            onMerge: { foodToMerge = food },
                             onDelete: {
                                 foodToDelete = food
                             }
@@ -271,6 +297,11 @@ private struct FoodDetailContent: View {
         .sheet(item: $draftToResume) { draft in
             if draft.isAvailable {
                 LogFoodSheet(food: food, draft: draft)
+            }
+        }
+        .sheet(item: $foodToMerge, onDismiss: performPendingMerge) { food in
+            MergeFoodPickerView(food: food) { plan in
+                pendingMerge = plan
             }
         }
         .sheet(item: $foodToEdit) { food in
