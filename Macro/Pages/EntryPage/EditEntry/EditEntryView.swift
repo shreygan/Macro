@@ -444,7 +444,7 @@ struct EditEntryView: View {
                                 DefaultLocationRow(
                                     location: $defaultLocation,
                                     sourceName: source,
-                                    foodID: foodItem.id
+                                    foodIDs: [foodItem.id]
                                 )
                             }
 

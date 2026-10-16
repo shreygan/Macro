@@ -11,7 +11,8 @@ import SwiftUI
 struct DefaultLocationRow: View {
     @Binding var location: EntryLocation?
     var sourceName: String = ""
-    var foodID: UUID? = nil
+    var foodIDs: [UUID] = []
+    var title: String? = nil
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.toastCenter) private var toastCenter
@@ -25,25 +26,11 @@ struct DefaultLocationRow: View {
     }
 
     var body: some View {
-        Button(action: openPicker) {
-            HStack(spacing: 8) {
-                label
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Image(systemName: "chevron.right")
-                    .font(.chevron)
-                    .foregroundStyle(Color.tertiaryText)
-                    .frame(width: 44, alignment: .trailing)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .sheet(isPresented: $isPickerPresented) {
+        row
+            .sheet(isPresented: $isPickerPresented) {
             LocationPickerSheet(
                 selection: $pickerSelection,
-                foodID: foodID,
+                foodIDs: foodIDs,
                 nearby: nearby
             )
         }
@@ -51,6 +38,35 @@ struct DefaultLocationRow: View {
             Task { await apply(newValue) }
         }
         .animation(.snappy(duration: 0.3), value: location)
+    }
+
+    @ViewBuilder
+    private var row: some View {
+        if let title {
+            BaseRowLayout(title: title, fitsRightContent: true) {
+                LocationPill(
+                    selection: location.map { .place($0) } ?? .none,
+                    action: openPicker
+                )
+            }
+        } else {
+            Button(action: openPicker) {
+                HStack(spacing: 8) {
+                    label
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Image(systemName: "chevron.right")
+                        .font(.chevron)
+                        .foregroundStyle(Color.tertiaryText)
+                        .frame(width: 44, alignment: .trailing)
+                }
+                .frame(minHeight: RowMetrics.controlHeight)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.vertical, RowMetrics.verticalPadding)
+        }
     }
 
     @ViewBuilder

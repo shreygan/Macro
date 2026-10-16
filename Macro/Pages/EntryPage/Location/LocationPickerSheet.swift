@@ -15,7 +15,7 @@ struct LocationPickerSheet: View {
     @Environment(\.toastCenter) private var toastCenter
 
     @Binding var selection: LocationSelection
-    var foodID: UUID? = nil
+    var foodIDs: [UUID] = []
     var photos: [LoggedPhoto] = []
     var logDate: Date? = nil
     var isAddingSaved = false
@@ -1248,17 +1248,21 @@ struct LocationPickerSheet: View {
     }
 
     private func loadPreviousPlaces() {
-        guard let foodID else { return }
-        var descriptor = FetchDescriptor<LoggedEntry>(
-            predicate: #Predicate {
-                $0.originalFoodItem?.id == foodID && $0.parentEntry == nil
-            },
-            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
-        )
-        descriptor.fetchLimit = 100
+        guard !foodIDs.isEmpty else { return }
+        let entries = foodIDs.flatMap { foodID -> [LoggedEntry] in
+            var descriptor = FetchDescriptor<LoggedEntry>(
+                predicate: #Predicate {
+                    $0.originalFoodItem?.id == foodID && $0.parentEntry == nil
+                },
+                sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+            )
+            descriptor.fetchLimit = 100
+            return (try? modelContext.fetch(descriptor)) ?? []
+        }
+        .sorted { $0.timestamp > $1.timestamp }
 
         var places: [PreviousPlace] = []
-        for entry in (try? modelContext.fetch(descriptor)) ?? [] {
+        for entry in entries {
             guard let location = entry.location?.withoutMapPin,
                 !places.contains(where: { RecentLocationStore.isSamePlace($0.location, location) })
             else { continue }

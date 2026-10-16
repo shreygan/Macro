@@ -512,7 +512,7 @@ struct EditRecipeView: View {
                                 DefaultLocationRow(
                                     location: $defaultLocation,
                                     sourceName: source,
-                                    foodID: recipe.id
+                                    foodIDs: [recipe.id]
                                 )
                             }
                             FullWidthDropdownRow(

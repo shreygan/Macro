@@ -11,16 +11,19 @@ struct DropdownPill: View {
     var options: [String]
     var displayCustomOption: Bool = true
     var isEnabled: Bool = true
+    var commitsCustomOnEnd: Bool = false
+    var pendingCustom: Binding<String?>? = nil
 
     @Binding var selection: String
 
     @State private var isCustomMode: Bool = false
+    @State private var customDraft = ""
     @FocusState private var isFocused: Bool
 
     var body: some View {
         Group {
             if isCustomMode && displayCustomOption && isEnabled {
-                TextField("", text: $selection)
+                TextField("", text: commitsCustomOnEnd ? $customDraft : $selection)
                     .textFieldStyle(.plain)
                     .textInputAutocapitalization(.never)
                     .multilineTextAlignment(.center)
@@ -31,7 +34,14 @@ struct DropdownPill: View {
                     .pillBackground()
                     .onSubmit { validateAndRevert() }
                     .onChange(of: isFocused) { _, isNowFocused in
-                        if !isNowFocused { validateAndRevert() }
+                        if isNowFocused {
+                            pendingCustom?.wrappedValue = customDraft
+                        } else {
+                            validateAndRevert()
+                        }
+                    }
+                    .onChange(of: customDraft) { _, draft in
+                        if isFocused { pendingCustom?.wrappedValue = draft }
                     }
 
             } else {
@@ -93,6 +103,7 @@ struct DropdownPill: View {
     }
 
     private func switchToCustomMode() {
+        customDraft = selection
         isCustomMode = true
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -110,6 +121,18 @@ struct DropdownPill: View {
     }
 
     private func validateAndRevert() {
+        if commitsCustomOnEnd {
+            pendingCustom?.wrappedValue = nil
+            let trimmed = customDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                selection = trimmed
+            }
+            if trimmed.isEmpty || options.contains(trimmed) {
+                isCustomMode = false
+            }
+            return
+        }
+
         if selection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             if options.contains("") {
                 selection = ""

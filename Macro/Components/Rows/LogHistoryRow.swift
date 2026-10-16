@@ -8,8 +8,21 @@
 import SwiftUI
 
 struct LogHistoryRow: View {
+    struct Override {
+        var origin: String
+        var quantity: Double
+        var unit: String
+        var calories: Double
+        var protein: Double
+        var carbs: Double
+        var fat: Double
+        var fiber: Double
+        var isRecalculated = false
+    }
+
     let entry: LoggedEntry
     let servingUnits: [ServingSizeUnit]
+    var override: Override? = nil
     var action: (() -> Void)?
 
     private var category: String? {
@@ -18,11 +31,11 @@ struct LogHistoryRow: View {
         return category
     }
 
-    private var subtitle: Text {
+    private var detailText: Text {
         var parts = [
             EntryHelper.portionText(
-                quantity: entry.loggedQuantity,
-                unit: entry.loggedUnit,
+                quantity: override?.quantity ?? entry.loggedQuantity,
+                unit: override?.unit ?? entry.loggedUnit,
                 servingUnits: servingUnits
             )
         ]
@@ -34,6 +47,26 @@ struct LogHistoryRow: View {
         }
 
         return Text.detailLine(parts, location: entry.locationName) ?? Text("")
+    }
+
+    @ViewBuilder
+    private var subtitle: some View {
+        if let origin = override?.origin {
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Text(origin)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Text(" · \(detailText)")
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
+            }
+        } else {
+            detailText
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
     }
 
     private var hasNote: Bool {
@@ -64,10 +97,9 @@ struct LogHistoryRow: View {
                 subtitle
                     .font(.subtitle)
                     .foregroundStyle(Color.tertiaryText)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
 
                 macrosText
+                    .contentTransition(override == nil ? .identity : .numericText())
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -83,7 +115,7 @@ struct LogHistoryRow: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, RowMetrics.verticalPadding)
         .contentShape(Rectangle())
     }
 
@@ -103,13 +135,13 @@ struct LogHistoryRow: View {
 
     private var macrosText: Text {
         let strut = Text("\u{200B}").font(.rowValue)
-        var result = macroText(.calorie, value: entry.calories, isFirst: true)
+        var result = macroText(.calorie, value: override?.calories ?? entry.calories, isFirst: true)
 
         let macros: [(RowIcon, Double)] = [
-            (.protein, entry.protein),
-            (.carbs, entry.carbs),
-            (.fat, entry.fat),
-            (.fiber, entry.fiber),
+            (.protein, override?.protein ?? entry.protein),
+            (.carbs, override?.carbs ?? entry.carbs),
+            (.fat, override?.fat ?? entry.fat),
+            (.fiber, override?.fiber ?? entry.fiber),
         ]
         for (icon, value) in macros where value > 0 {
             result = Text("\(result)\(macroText(icon, value: value, isFirst: false))")
@@ -123,7 +155,7 @@ struct LogHistoryRow: View {
             EntryHelper.formatMacro(value),
             iconSize: 12,
             valueSize: 12,
-            valueColor: .primary,
+            valueColor: override?.isRecalculated == true ? Color.accentColor : .primary,
             isFirst: isFirst
         )
     }
