@@ -256,5 +256,13 @@ extension EntryLocation {
 
     LoggedPhotoViewer(photos: [photo], selection: $selection)
         .onAppear { selection = photo.id }
-        .modelContainer(for: SavedLocation.self, inMemory: true)
+        .modelContainer(
+            try! ModelContainer(
+                for: SavedLocation.self,
+                configurations: ModelConfiguration(
+                    isStoredInMemoryOnly: true,
+                    cloudKitDatabase: .none
+                )
+            )
+        )
 }

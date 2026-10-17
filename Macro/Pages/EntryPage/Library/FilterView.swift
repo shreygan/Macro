@@ -166,7 +166,7 @@ struct FilterRowView: View {
 
     .modelContainer(
         {
-            let config = ModelConfiguration(isStoredInMemoryOnly: true)
+            let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
             let container = try! ModelContainer(
                 for: EntrySource.self,
                 CategorySource.self,

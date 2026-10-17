@@ -31,7 +31,8 @@ enum ImportRecipeScratch {
         let configuration = ModelConfiguration(
             "ImportRecipeScratch",
             schema: schema,
-            isStoredInMemoryOnly: true
+            isStoredInMemoryOnly: true,
+            cloudKitDatabase: .none
         )
         return try? ModelContainer(for: schema, configurations: [configuration])
     }()

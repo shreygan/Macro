@@ -1602,7 +1602,7 @@ private struct LogAgainSheet: View {
         LoggedEntry.self,
         FavoriteEntry.self,
         ServingSizeUnit.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
     )
     let context = container.mainContext
 

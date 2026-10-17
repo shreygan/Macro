@@ -741,7 +741,7 @@ struct LibraryView<Header: View>: View {
 
 #Preview {
     do {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
 
         let container = try ModelContainer(
             for: FoodItem.self,
