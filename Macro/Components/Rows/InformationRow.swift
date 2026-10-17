@@ -10,10 +10,12 @@ import SwiftUI
 struct InformationRow: View {
     var title: String? = nil
     var blocks: [InformationRowBlock]
+    var animatesBullets = false
 
-    init(title: String? = nil, blocks: [InformationRowBlock]) {
+    init(title: String? = nil, blocks: [InformationRowBlock], animatesBullets: Bool = false) {
         self.title = title
         self.blocks = blocks
+        self.animatesBullets = animatesBullets
     }
 
     init(title: String? = nil, description: String, codeSnippet: String? = nil)
@@ -68,25 +70,37 @@ struct InformationRow: View {
 
         case .bullets(let items):
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(items, id: \.self) { item in
-                    HStack(alignment: .top, spacing: 6) {
-                        Text("•")
-                            .font(.bullet)
-                            .foregroundStyle(Color.tertiaryText)
-
-                        Text(item)
-                            .font(.subtitle)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                if animatesBullets {
+                    ForEach(items.indices, id: \.self) { index in
+                        bullet(items[index])
+                            .contentTransition(.numericText())
+                    }
+                } else {
+                    ForEach(items, id: \.self) { item in
+                        bullet(item)
                     }
                 }
             }
             .padding(.leading, 4)
+            .animation(animatesBullets ? .snappy : nil, value: items)
 
         case .title(let title):
             Text(title)
                 .font(.sectionTitle)
                 .foregroundStyle(.primary)
+        }
+    }
+
+    private func bullet(_ item: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text("•")
+                .font(.bullet)
+                .foregroundStyle(Color.tertiaryText)
+
+            Text(item)
+                .font(.subtitle)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
