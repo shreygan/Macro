@@ -13,6 +13,7 @@ struct HomeView: View {
     @Environment(\.toastCenter) private var toastCenter
     @Environment(\.tabBarHeight) private var tabBarHeight
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(CloudSyncMonitor.self) private var syncMonitor
 
     @Query private var users: [User]
     @Query(filter: EntryDraft.logDraftsPredicate) private var logDrafts:
@@ -318,6 +319,13 @@ struct HomeView: View {
 
                         ScrollView {
                             VStack {
+                                if syncMonitor.isInitialRestoreInProgress {
+                                    ICloudRestoreCard()
+                                        .padding([.horizontal, .bottom])
+                                        .padding(.top, 5)
+                                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                                }
+
                                 if let currentGoals,
                                     let dayGoals = goalTimeline?.goals(for: effectiveDate)
                                 {
@@ -328,7 +336,7 @@ struct HomeView: View {
                                         isPastGoals: !dayGoals.hasSameTargets(as: currentGoals)
                                     )
                                     .padding([.horizontal, .bottom])
-                                    .padding(.top, 5)
+                                    .padding(.top, syncMonitor.isInitialRestoreInProgress ? 0 : 5)
                                 }
 
                                 TimelineCard(
@@ -403,9 +411,10 @@ struct HomeView: View {
                                 .padding(.horizontal)
                                 .padding(
                                     .top,
-                                    currentGoals == nil ? nil : 0
+                                    currentGoals == nil && !syncMonitor.isInitialRestoreInProgress ? nil : 0
                                 )
                             }
+                            .animation(.snappy, value: syncMonitor.isInitialRestoreInProgress)
                             .background(
                                 GeometryReader { geo in
                                     Color.clear
@@ -842,4 +851,5 @@ private struct ScrolledTopEdgeEffect: ViewModifier {
 
 #Preview {
     HomeView()
+        .environment(CloudSyncMonitor())
 }

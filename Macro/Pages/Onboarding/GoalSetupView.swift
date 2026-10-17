@@ -362,6 +362,7 @@ struct GoalSetupView: View {
                 toastCenter?.show(.failure(String(localized: "Couldn't Save Goals")))
                 return
             }
+            SyncDeduplicator.noteLocallyCreated(newUser)
             dismiss()
             return
         }
