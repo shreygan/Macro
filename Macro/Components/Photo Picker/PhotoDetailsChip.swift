@@ -49,12 +49,26 @@ struct PhotoDetailsChip: View {
         return RecentLocationStore.isSamePlace(location.withoutMapPin, entryLocation.withoutMapPin)
     }
 
+    private var hidesPlace: Bool {
+        !isInteractive && (location == nil || isLocationApplied)
+    }
+
     private var labelText: String {
-        [timeText, location?.name].compactMap { $0 }.joined(separator: " · ")
+        [timeText, hidesPlace ? nil : location?.name].compactMap { $0 }.joined(separator: " · ")
     }
 
     var body: some View {
-        if capturedAt != nil || hasLocation {
+        ZStack {
+            chip
+        }
+        .task(id: photo.id) {
+            await resolveLocation()
+        }
+    }
+
+    @ViewBuilder
+    private var chip: some View {
+        if capturedAt != nil || (hasLocation && !hidesPlace) {
             Menu {
                 menuContent
             } label: {
@@ -83,9 +97,6 @@ struct PhotoDetailsChip: View {
             .accessibilityLabel("Photo Details")
             .accessibilityValue(labelText)
             .sensoryFeedback(.success, trigger: appliedCount)
-            .task(id: photo.id) {
-                await resolveLocation()
-            }
         }
     }
 

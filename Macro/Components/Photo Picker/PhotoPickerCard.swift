@@ -19,23 +19,31 @@ struct LoggedPhoto: Identifiable {
 
     var scale: CGFloat = 1.0
     var offset: CGSize = .zero
+    var sourcePhoto: EntryPhoto?
 
     init(
         image: UIImage,
         originalData: Data,
         pickerItem: PhotosPickerItem?,
         scale: CGFloat = 1.0,
-        offset: CGSize = .zero
+        offset: CGSize = .zero,
+        sourcePhoto: EntryPhoto? = nil
     ) {
         self.image = image
         self.originalData = originalData
         self.pickerItem = pickerItem
+        self.sourcePhoto = sourcePhoto
         let metadata = PhotoMetadata(data: originalData)
         self.coordinate = metadata.coordinate
         self.capturedAt = metadata.capturedAt
         self.scale = scale
         self.offset = offset
     }
+}
+
+struct CameraCapture {
+    let image: UIImage
+    let metadata: [String: Any]?
 }
 
 struct PhotoPickerCard: View {
@@ -50,6 +58,7 @@ struct PhotoPickerCard: View {
     var entryTime: Date? = nil
     var entryLocation: EntryLocation? = nil
     var onPickerItemsChange: (([PhotosPickerItem]) -> Void)? = nil
+    var onCameraCaptureChange: ((CameraCapture?) -> Void)? = nil
     var onCoverChange: ((Bool) -> Void)? = nil
 
     @State private var showCamera = false
@@ -60,6 +69,7 @@ struct PhotoPickerCard: View {
     @State private var showAddSlide: Bool = false
     @State private var isEmptyStateLoading: Bool = false
     @State private var loadTask: Task<Void, Never>?
+    @State private var cameraTask: Task<Void, Never>?
     @State private var showViewer = false
 
     @Namespace private var photoNamespace
@@ -210,7 +220,8 @@ struct PhotoPickerCard: View {
             selection: $selectedPhotosPickerItems,
             maxSelectionCount: availableSelectionCount,
             selectionBehavior: .ordered,
-            matching: .images
+            matching: .images,
+            preferredItemEncoding: .current
         )
         .onAppear {
             showAddSlide = isEditing
@@ -227,7 +238,12 @@ struct PhotoPickerCard: View {
             }
         }
         .onChange(of: images.isEmpty) { _, isEmpty in
-            if isEmpty { isEmptyStateLoading = false }
+            guard isEmpty, isEmptyStateLoading else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isEmptyStateLoading = false
+            }
         }
         .onChange(of: images.map(\.id)) {
             guard loadTask == nil else { return }
@@ -237,7 +253,14 @@ struct PhotoPickerCard: View {
             onCoverChange?(isCovered)
         }
         .onChange(of: isLoading) { _, newValue in
-            guard !newValue, let loadTask else { return }
+            guard !newValue else { return }
+            if let cameraTask {
+                cameraTask.cancel()
+                self.cameraTask = nil
+                onCameraCaptureChange?(nil)
+                if images.isEmpty { isEmptyStateLoading = false }
+            }
+            guard let loadTask else { return }
             loadTask.cancel()
             self.loadTask = nil
             isEmptyStateLoading = false
@@ -280,8 +303,6 @@ struct PhotoPickerCard: View {
                     }
 
                     let addedItems = newItems.filter { !oldItems.contains($0) }
-                    let isStrictDeletion =
-                        newItems.count < oldItems.count && addedItems.isEmpty
 
                     if !addedItems.isEmpty {
                         if previouslyEmpty {
@@ -295,27 +316,13 @@ struct PhotoPickerCard: View {
                                 currentTabIndex = targetIndex
                             }
                         }
-                    } else if !isStrictDeletion && newItems != oldItems {
-                        currentTabIndex = 0
                     }
                 }
             }
         }
         .fullScreenCover(isPresented: $showCamera) {
-            CameraImagePicker { image in
-                if let data = image.jpegData(compressionQuality: 1.0) {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8))
-                    {
-                        images.append(
-                            LoggedPhoto(
-                                image: image,
-                                originalData: data,
-                                pickerItem: nil
-                            )
-                        )
-                        currentTabIndex = images.count - 1
-                    }
-                }
+            CameraImagePicker { image, metadata in
+                addCameraPhoto(CameraCapture(image: image, metadata: metadata))
             }
             .ignoresSafeArea()
         }
@@ -336,25 +343,41 @@ struct PhotoPickerCard: View {
 
     static func loadPhotos(
         for items: [PhotosPickerItem],
-        keeping images: [LoggedPhoto]
+        keeping images: [LoggedPhoto],
+        adding capture: CameraCapture? = nil
     ) async -> [LoggedPhoto]? {
-        let cameraPhotos = images.filter { $0.pickerItem == nil }
-        var libraryPhotos: [LoggedPhoto] = []
+        var photos = images.filter { photo in
+            photo.pickerItem.map(items.contains) ?? true
+        }
 
-        for item in items {
-            if let existingPhoto = images.first(where: { $0.pickerItem == item }) {
-                libraryPhotos.append(existingPhoto)
-            } else if let data = try? await item.loadTransferable(type: Data.self),
-                let uiImage = UIImage(data: data)
-            {
-                libraryPhotos.append(
-                    LoggedPhoto(image: uiImage, originalData: data, pickerItem: item)
-                )
+        for item in items where !images.contains(where: { $0.pickerItem == item }) {
+            if let data = try? await item.loadTransferable(type: Data.self) {
+                if Task.isCancelled { return nil }
+                if let encoded = await PhotoEncoder.encode(data),
+                    let uiImage = UIImage(data: encoded)
+                {
+                    photos.append(
+                        LoggedPhoto(image: uiImage, originalData: encoded, pickerItem: item)
+                    )
+                }
             }
             if Task.isCancelled { return nil }
         }
 
-        return cameraPhotos + libraryPhotos
+        if let capture {
+            if let photo = await encodeCameraPhoto(capture) {
+                photos.append(photo)
+            }
+            if Task.isCancelled { return nil }
+        }
+        return photos
+    }
+
+    private static func encodeCameraPhoto(_ capture: CameraCapture) async -> LoggedPhoto? {
+        guard let data = await PhotoEncoder.encode(capture.image, metadata: capture.metadata),
+            let image = UIImage(data: data)
+        else { return nil }
+        return LoggedPhoto(image: image, originalData: data, pickerItem: nil)
     }
 
     private var entryTimestamp: Date? {
@@ -449,6 +472,28 @@ struct PhotoPickerCard: View {
             showPhotoLibrary = true
         } label: {
             Label("Choose from Library", systemImage: "photo.on.rectangle")
+        }
+    }
+
+    private func addCameraPhoto(_ capture: CameraCapture) {
+        isLoading = true
+        if images.isEmpty { isEmptyStateLoading = true }
+        onCameraCaptureChange?(capture)
+
+        cameraTask = Task {
+            let photo = await Self.encodeCameraPhoto(capture)
+            guard !Task.isCancelled, isLoading else { return }
+            cameraTask = nil
+            onCameraCaptureChange?(nil)
+
+            if let photo {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    images.append(photo)
+                    currentTabIndex = images.count - 1
+                }
+            }
+            isLoading = false
+            if images.isEmpty { isEmptyStateLoading = false }
         }
     }
 
