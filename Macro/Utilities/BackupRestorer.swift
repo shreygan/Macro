@@ -24,6 +24,7 @@ struct BackupRestoreSummary: Identifiable {
     var favorites = 0
     var drafts = 0
     var skippedExisting = 0
+    var photosIncomplete = false
 
     var message: String? {
         let parts = [
@@ -70,62 +71,75 @@ enum BackupRestoreError: LocalizedError {
 struct BackupRestorer {
     let context: ModelContext
 
-    func restore(_ backup: MacroBackup, mode: BackupRestoreMode) async throws
+    func restore(_ file: MacroBackupFile, mode: BackupRestoreMode) async throws
         -> BackupRestoreSummary
     {
         switch mode {
         case .merge:
-            let summary = apply(backup, exact: false)
+            let photos = PendingBackupPhotos()
+            var summary = apply(file.backup, exact: false, photos: photos)
             try saveOrRollback()
+            do {
+                try await attach(photos, from: file)
+            } catch {
+                summary.photosIncomplete = true
+            }
             return summary
         case .replace:
-            let snapshotURL = try await writeSnapshot()
+            let snapshot = try await writeSnapshot()
 
             do {
+                try MacroBackupFile.ensureFreeSpace(for: file.backup.photoByteCount)
                 try eraseAll()
             } catch {
-                try? FileManager.default.removeItem(at: snapshotURL)
+                snapshot.remove()
                 throw BackupRestoreError.nothingChanged(error)
             }
 
             do {
-                let summary = apply(backup, exact: true)
-                try context.save()
+                let summary = try await applyExactly(file)
                 try? AppSeeder.seedDefaults(into: context)
-                try? FileManager.default.removeItem(at: snapshotURL)
+                snapshot.remove()
                 return summary
             } catch {
                 context.rollback()
 
                 do {
-                    let data = try Data(contentsOf: snapshotURL)
-                    let snapshot = try await Task.detached(priority: .userInitiated) {
-                        try MacroBackup.decode(data)
-                    }.value
-                    _ = apply(snapshot, exact: true)
-                    try context.save()
-                    try? FileManager.default.removeItem(at: snapshotURL)
+                    try eraseAll()
+                    _ = try await applyExactly(snapshot)
+                    snapshot.remove()
                     throw BackupRestoreError.recovered(error)
                 } catch let restoreError as BackupRestoreError {
                     throw restoreError
                 } catch {
                     context.rollback()
-                    throw BackupRestoreError.unrecovered(error, snapshotURL: snapshotURL)
+                    throw BackupRestoreError.unrecovered(error, snapshotURL: snapshot.url)
                 }
             }
         }
     }
 
-    private func writeSnapshot() async throws -> URL {
-        let snapshot = try MacroBackup.make(from: context)
-        let data = try await Task.detached(priority: .userInitiated) {
-            try MacroBackup.encode(snapshot)
-        }.value
+    private func applyExactly(_ file: MacroBackupFile) async throws -> BackupRestoreSummary {
+        let photos = PendingBackupPhotos()
+        let summary = apply(file.backup, exact: true, photos: photos)
+        try context.save()
+        try await attach(photos, from: file)
+        return summary
+    }
 
+    private func attach(_ photos: PendingBackupPhotos, from file: MacroBackupFile) async throws {
+        let jobs = photos.jobs
+        guard !jobs.isEmpty else { return }
+        let container = context.container
+        try await Task.detached(priority: .userInitiated) {
+            try file.attachPhotos(jobs, container: container)
+        }.value
+    }
+
+    private func writeSnapshot() async throws -> MacroBackupFile {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Macro Pre-Restore \(UUID().uuidString).json")
-        try data.write(to: url, options: .atomic)
-        return url
+            .appendingPathComponent("Macro Pre-Restore \(UUID().uuidString).macrobackup")
+        return try await MacroBackupFile.create(from: context, at: url)
     }
 
     private func saveOrRollback() throws {
@@ -147,7 +161,11 @@ struct BackupRestorer {
         }
     }
 
-    private func apply(_ backup: MacroBackup, exact: Bool) -> BackupRestoreSummary {
+    private func apply(
+        _ backup: MacroBackup,
+        exact: Bool,
+        photos: PendingBackupPhotos
+    ) -> BackupRestoreSummary {
         var summary = BackupRestoreSummary()
 
         let sources = restoreList(
@@ -300,7 +318,7 @@ struct BackupRestorer {
                 summary.skippedExisting += 1
                 continue
             }
-            record.insert(relationships: relationships, in: context)
+            record.insert(relationships: relationships, photos: photos, in: context)
             summary.logs += 1
             summary.photos += record.photoCount
         }
@@ -310,7 +328,7 @@ struct BackupRestorer {
         )
         for record in backup.drafts where !existingDraftIDs.contains(record.id) {
             let food = record.foodItemID.flatMap { foodsByID[$0] }
-            guard record.insert(foodItem: food, in: context) != nil else { continue }
+            guard record.insert(foodItem: food, photos: photos, in: context) != nil else { continue }
             summary.photos += record.photos.count
             summary.drafts += 1
         }
@@ -605,7 +623,7 @@ extension MacroBackup.FoodRecord {
             )
             ingredient.ingredientItem = record.ingredientItemID.flatMap(relationships.food)
             ingredient.parentRecipe = recipe
-            ingredient.dateAdded = recipe.dateAdded
+            ingredient.dateAdded = record.dateAdded ?? recipe.dateAdded
             context.insert(ingredient)
         }
     }
@@ -621,6 +639,7 @@ extension MacroBackup.LogRecord {
     func insert(
         parent: LoggedEntry? = nil,
         relationships: RecordRelationships,
+        photos pending: PendingBackupPhotos? = nil,
         in context: ModelContext
     ) -> LoggedEntry {
         let savedLocation = relationships.savedLocation(self.location?.savedLocationID)
@@ -650,11 +669,12 @@ extension MacroBackup.LogRecord {
             logNote: logNote,
             displayOrder: displayOrder
         )
-        log.photos = photos.map { $0.makePhoto() }
+        log.photos = photos.compactMap { $0.makePhoto() }
         context.insert(log)
+        pending?.add(log, isDraft: false, photos: photos)
 
         for child in children {
-            child.insert(parent: log, relationships: relationships, in: context)
+            child.insert(parent: log, relationships: relationships, photos: pending, in: context)
         }
         return log
     }
@@ -663,7 +683,11 @@ extension MacroBackup.LogRecord {
 extension MacroBackup.DraftRecord {
     @MainActor
     @discardableResult
-    func insert(foodItem: FoodItem?, in context: ModelContext) -> EntryDraft? {
+    func insert(
+        foodItem: FoodItem?,
+        photos pending: PendingBackupPhotos? = nil,
+        in context: ModelContext
+    ) -> EntryDraft? {
         guard let kind = DraftKind(rawValue: kindRawValue),
             let type = EntryType(rawValue: typeRawValue)
         else { return nil }
@@ -679,15 +703,17 @@ extension MacroBackup.DraftRecord {
             createdAt: createdAt
         )
         draft.updatedAt = updatedAt
-        draft.photos = photos.map { $0.makePhoto() }
+        draft.photos = photos.compactMap { $0.makePhoto() }
         context.insert(draft)
+        pending?.add(draft, isDraft: true, photos: photos)
         return draft
     }
 }
 
 extension MacroBackup.PhotoRecord {
-    func makePhoto() -> EntryPhoto {
-        EntryPhoto(
+    func makePhoto() -> EntryPhoto? {
+        guard let imageData else { return nil }
+        return EntryPhoto(
             imageData: imageData,
             scale: scale,
             offsetX: offsetX,

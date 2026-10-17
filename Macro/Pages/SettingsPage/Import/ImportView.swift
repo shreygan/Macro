@@ -18,6 +18,7 @@ enum DataTransferKind {
 struct ImportView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(CloudSyncMonitor.self) private var syncMonitor
 
     @State private var isShowingFilePicker = false
     @State private var pickerKind: DataTransferKind = .library
@@ -31,7 +32,7 @@ struct ImportView: View {
     @State private var logIssues: [ImportIssue] = []
     @State private var showLogReview = false
 
-    @State private var loadedBackup: MacroBackup?
+    @State private var loadedBackup: MacroBackupFile?
     @State private var showBackupRestore = false
 
     @State private var importAlert: DataTransferAlert?
@@ -144,7 +145,7 @@ struct ImportView: View {
         .fileImporter(
             isPresented: $isShowingFilePicker,
             allowedContentTypes: pickerKind == .backup
-                ? [.json] : [.commaSeparatedText],
+                ? [.macroBackup] : [.commaSeparatedText],
             allowsMultipleSelection: false
         ) { result in
             switch result {
@@ -184,7 +185,7 @@ struct ImportView: View {
         }
         .navigationDestination(isPresented: $showBackupRestore) {
             if let loadedBackup {
-                BackupRestoreView(backup: loadedBackup)
+                BackupRestoreView(file: loadedBackup)
             }
         }
     }
@@ -207,6 +208,9 @@ struct ImportView: View {
                 .padding(.bottom, 9)
                 .frame(height: 60)
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            } else if syncMonitor.isInitialRestoreInProgress {
+                ButtonRow.restoreInProgress()
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
             } else {
                 ButtonRow(
                     icon: .customSymbol(
@@ -226,6 +230,7 @@ struct ImportView: View {
             }
         }
         .animation(.snappy, value: loadingKind)
+        .animation(.snappy, value: syncMonitor.isInitialRestoreInProgress)
     }
 
     private func processFile(at url: URL, kind: DataTransferKind) {
@@ -237,6 +242,11 @@ struct ImportView: View {
                 if didAccess { url.stopAccessingSecurityScopedResource() }
             }
             try? await Task.sleep(for: .seconds(1))
+
+            if kind == .backup {
+                await processBackup(at: url, didAccess: didAccess)
+                return
+            }
 
             let data: Data
             do {
@@ -251,36 +261,35 @@ struct ImportView: View {
                 return
             }
 
-            if kind == .backup {
-                await processBackup(data)
-            } else {
-                processCSV(data, pickedFrom: kind)
-            }
+            processCSV(data, pickedFrom: kind)
         }
     }
 
-    private func processBackup(_ data: Data) async {
-        let backup: MacroBackup
+    private func processBackup(at url: URL, didAccess: Bool) async {
+        let file: MacroBackupFile
         do {
-            backup = try await Task.detached(priority: .userInitiated) {
-                try MacroBackup.decode(data)
+            file = try await Task.detached(priority: .userInitiated) {
+                try MacroBackupFile.openCopy(of: url)
             }.value
-        } catch {
+        } catch MacroBackupFileError.empty {
+            finish(with: .emptyFile)
+            return
+        } catch MacroBackupFileError.invalid {
             finish(with: .invalidBackup)
+            return
+        } catch {
+            finish(with: didAccess ? .unreadable(error) : .accessDenied)
             return
         }
 
-        guard backup.format == MacroBackup.formatIdentifier else {
-            finish(with: .invalidBackup)
-            return
-        }
-        guard backup.version <= MacroBackup.currentVersion else {
+        guard file.backup.version <= MacroBackup.currentVersion else {
+            file.remove()
             finish(with: .newerBackup)
             return
         }
 
         withAnimation(.snappy) { loadingKind = nil }
-        loadedBackup = backup
+        loadedBackup = file
         showLibraryReview = false
         showLogReview = false
         showBackupRestore = true
@@ -413,4 +422,6 @@ struct ImportView: View {
     NavigationStack {
         ImportView()
     }
+    .environment(CloudSyncMonitor())
+    .environment(CloudBackupStore())
 }
