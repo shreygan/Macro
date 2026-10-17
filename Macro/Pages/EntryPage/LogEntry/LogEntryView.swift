@@ -82,6 +82,7 @@ struct LogEntryView: View {
     @State private var selectedPhotos: [LoggedPhoto]
     @State private var isLoadingPhotos = false
     @State private var pickerItems: [PhotosPickerItem] = []
+    @State private var pendingCameraCapture: CameraCapture?
     @State private var isPhotoCoverShown = false
 
     @State private var dateAdded: Date
@@ -322,16 +323,14 @@ struct LogEntryView: View {
             logNote: resolvedNote
         )
 
-        let photoEntities = selectedPhotos.enumerated().map { index, photo in
-            EntryPhoto(
-                imageData: photo.originalData,
-                scale: Double(photo.scale),
-                offsetX: Double(photo.offset.width),
-                offsetY: Double(photo.offset.height),
-                displayOrder: index,
-            )
-        }
-        newLog.photos = photoEntities
+        let draft = DraftStore.fetch(id: draftID, in: modelContext)
+        let draftRecord = draft.map(MacroBackup.draftRecord)
+        newLog.photos = EntryHelper.applyPhotos(
+            selectedPhotos,
+            replacing: draft?.photos,
+            in: modelContext
+        )
+        draft?.photos = []
 
         modelContext.insert(newLog)
         RecentLocationStore.record(location, in: modelContext)
@@ -399,8 +398,6 @@ struct LogEntryView: View {
             EntryHelper.applyPinnedNote(pinnedNote, to: food, in: modelContext)
         }
 
-        let draftRecord = DraftStore.fetch(id: draftID, in: modelContext)
-            .map(MacroBackup.draftRecord)
         DraftStore.delete(id: draftID, in: modelContext, save: false)
 
         do {
@@ -481,7 +478,7 @@ struct LogEntryView: View {
     @discardableResult
     private func saveDraft() -> Bool {
         do {
-            try DraftStore.upsert(
+            let draft = try DraftStore.upsert(
                 id: draftID,
                 kind: .logFood,
                 type: food.type,
@@ -492,6 +489,7 @@ struct LogEntryView: View {
                 photos: selectedPhotos,
                 in: modelContext
             )
+            EntryHelper.linkPhotos(&selectedPhotos, to: draft.photos)
             return true
         } catch {
             toastCenter?.show(.failure(String(localized: "Couldn't Save Draft")))
@@ -505,6 +503,7 @@ struct LogEntryView: View {
         let id = draftID
         let items = pickerItems
         let loadedPhotos = selectedPhotos
+        let cameraCapture = pendingCameraCapture
         let context = modelContext
         let toastCenter = toastCenter
 
@@ -512,7 +511,8 @@ struct LogEntryView: View {
             guard
                 let photos = await PhotoPickerCard.loadPhotos(
                     for: items,
-                    keeping: loadedPhotos
+                    keeping: loadedPhotos,
+                    adding: cameraCapture
                 )
             else { return }
 
@@ -852,6 +852,7 @@ struct LogEntryView: View {
                         entryTime: time,
                         entryLocation: locationSelection.resolvedLocation,
                         onPickerItemsChange: { pickerItems = $0 },
+                        onCameraCaptureChange: { pendingCameraCapture = $0 },
                         onCoverChange: { isPhotoCoverShown = $0 }
                     )
 

@@ -177,9 +177,60 @@ enum EntryHelper {
                     offset: CGSize(
                         width: photoEntity.offsetX,
                         height: photoEntity.offsetY
-                    )
+                    ),
+                    sourcePhoto: photoEntity
                 )
             }
+    }
+
+    static func applyPhotos(
+        _ photos: [LoggedPhoto],
+        replacing existing: [EntryPhoto]?,
+        in context: ModelContext
+    ) -> [EntryPhoto] {
+        let existing = existing ?? []
+        var kept: [EntryPhoto] = []
+
+        let rows = photos.enumerated().map { index, photo -> EntryPhoto in
+            let scale = Double(photo.scale)
+            let offsetX = Double(photo.offset.width)
+            let offsetY = Double(photo.offset.height)
+
+            if let source = photo.sourcePhoto,
+                existing.contains(where: { $0 === source }),
+                !kept.contains(where: { $0 === source })
+            {
+                if source.scale != scale { source.scale = scale }
+                if source.offsetX != offsetX { source.offsetX = offsetX }
+                if source.offsetY != offsetY { source.offsetY = offsetY }
+                if source.displayOrder != index { source.displayOrder = index }
+                kept.append(source)
+                return source
+            }
+
+            let row = EntryPhoto(
+                imageData: photo.originalData,
+                scale: scale,
+                offsetX: offsetX,
+                offsetY: offsetY,
+                displayOrder: index
+            )
+            context.insert(row)
+            return row
+        }
+
+        for photo in existing where !kept.contains(where: { $0 === photo }) {
+            context.delete(photo)
+        }
+        return rows
+    }
+
+    static func linkPhotos(_ photos: inout [LoggedPhoto], to rows: [EntryPhoto]?) {
+        let sorted = (rows ?? []).sorted { $0.displayOrder < $1.displayOrder }
+        guard sorted.count == photos.count else { return }
+        for index in photos.indices where photos[index].sourcePhoto !== sorted[index] {
+            photos[index].sourcePhoto = sorted[index]
+        }
     }
 
     /// The portion multiplier a recipe was logged with

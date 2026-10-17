@@ -901,22 +901,12 @@ struct LoggedEntryDetailView: View {
         entry.fiber =
             Double(fiber.replacingOccurrences(of: ",", with: ".")) ?? 0.0
 
-        if let oldPhotos = entry.photos {
-            for photo in oldPhotos {
-                modelContext.delete(photo)
-            }
-        }
-
-        let photoEntities = selectedPhotos.enumerated().map { index, photo in
-            EntryPhoto(
-                imageData: photo.originalData,
-                scale: Double(photo.scale),
-                offsetX: Double(photo.offset.width),
-                offsetY: Double(photo.offset.height),
-                displayOrder: index
-            )
-        }
-        entry.photos = photoEntities
+        entry.photos = EntryHelper.applyPhotos(
+            selectedPhotos,
+            replacing: entry.photos,
+            in: modelContext
+        )
+        EntryHelper.linkPhotos(&selectedPhotos, to: entry.photos)
 
         if isRecipe {
             if let oldChildren = entry.childEntries {

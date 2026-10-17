@@ -89,18 +89,7 @@ enum DraftStore {
         of draft: EntryDraft,
         in context: ModelContext
     ) {
-        for photo in draft.photos ?? [] {
-            context.delete(photo)
-        }
-        draft.photos = photos.enumerated().map { index, photo in
-            EntryPhoto(
-                imageData: photo.originalData,
-                scale: Double(photo.scale),
-                offsetX: Double(photo.offset.width),
-                offsetY: Double(photo.offset.height),
-                displayOrder: index
-            )
-        }
+        draft.photos = EntryHelper.applyPhotos(photos, replacing: draft.photos, in: context)
     }
 
     private static func photosMatch(
@@ -110,7 +99,13 @@ enum DraftStore {
         let sorted = stored.sorted { $0.displayOrder < $1.displayOrder }
         guard sorted.count == photos.count else { return false }
         return zip(sorted, photos).allSatisfy { stored, photo in
-            stored.imageData == photo.originalData
+            let isSamePhoto =
+                if let source = photo.sourcePhoto {
+                    source === stored
+                } else {
+                    stored.imageData == photo.originalData
+                }
+            return isSamePhoto
                 && stored.scale == Double(photo.scale)
                 && stored.offsetX == Double(photo.offset.width)
                 && stored.offsetY == Double(photo.offset.height)
