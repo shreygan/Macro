@@ -10,24 +10,24 @@ import SwiftData
 
 @Model
 class UserGoals {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
 
-    var date: Date
+    var date: Date = Date.now
 
-    var calories: Double
-    var calorieMode: GoalLimitMode
+    var calories: Double = 0
+    var calorieMode: GoalLimitMode = GoalLimitMode.off
 
-    var protein: Double
-    var proteinMode: GoalLimitMode
+    var protein: Double = 0
+    var proteinMode: GoalLimitMode = GoalLimitMode.off
 
-    var carbs: Double
-    var carbsMode: GoalLimitMode
+    var carbs: Double = 0
+    var carbsMode: GoalLimitMode = GoalLimitMode.off
 
-    var fat: Double
-    var fatMode: GoalLimitMode
+    var fat: Double = 0
+    var fatMode: GoalLimitMode = GoalLimitMode.off
 
-    var fiber: Double
-    var fiberMode: GoalLimitMode
+    var fiber: Double = 0
+    var fiberMode: GoalLimitMode = GoalLimitMode.off
 
     var owner: User?
 

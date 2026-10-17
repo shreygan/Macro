@@ -10,10 +10,17 @@ import SwiftData
 
 @Model
 class EntrySource {
-    @Attribute(.unique) var source: String
-    var isDefault: Bool
-    var displayOrder: Int
+    var id: UUID = UUID()
+    var source: String = ""
+    var isDefault: Bool = false
+    var displayOrder: Int = 0
     var isHidden: Bool = false
+
+    @Relationship(deleteRule: .nullify, inverse: \FoodItem.source)
+    var foods: [FoodItem]? = []
+
+    @Relationship(deleteRule: .nullify, inverse: \LoggedEntry.source)
+    var logs: [LoggedEntry]? = []
 
     init(
         source: String,

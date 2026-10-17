@@ -10,11 +10,15 @@ import SwiftData
 
 @Model
 class ServingSizeUnit {
-    @Attribute(.unique) var unit: String
+    var id: UUID = UUID()
+    var unit: String = ""
 
     var pluralVariant: String?
-    var isDefault: Bool
-    var displayOrder: Int
+    var isDefault: Bool = false
+    var displayOrder: Int = 0
+
+    @Relationship(deleteRule: .nullify, inverse: \FoodItem.servingUnit)
+    var foods: [FoodItem]? = []
 
     init(
         unit: String,

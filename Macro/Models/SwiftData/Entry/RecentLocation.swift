@@ -10,9 +10,9 @@ import SwiftData
 
 @Model
 class RecentLocation {
-    @Attribute(.unique) var id: UUID
-    var location: EntryLocation
-    var lastUsed: Date
+    var id: UUID = UUID()
+    var location: EntryLocation = EntryLocation(name: "")
+    var lastUsed: Date = Date()
 
     init(
         id: UUID = UUID(),

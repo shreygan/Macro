@@ -10,10 +10,17 @@ import SwiftData
 
 @Model
 class FoodGroupSource {
-    @Attribute(.unique) var foodGroup: String
-    var isDefault: Bool
-    var displayOrder: Int
+    var id: UUID = UUID()
+    var foodGroup: String = ""
+    var isDefault: Bool = false
+    var displayOrder: Int = 0
     var isHidden: Bool = false
+
+    @Relationship(deleteRule: .nullify, inverse: \FoodItem.foodGroup)
+    var foods: [FoodItem]? = []
+
+    @Relationship(deleteRule: .nullify, inverse: \LoggedEntry.foodGroup)
+    var logs: [LoggedEntry]? = []
 
     init(
         foodGroup: String,

@@ -25,16 +25,16 @@ struct DeletedSavedLocationRecord {
 
 @Model
 class SavedLocation {
-    @Attribute(.unique) var id: UUID
-    var name: String
+    var id: UUID = UUID()
+    var name: String = ""
     var address: String?
-    var latitude: Double
-    var longitude: Double
+    var latitude: Double = 0
+    var longitude: Double = 0
     var mapItemID: String?
     var isFavorite: Bool = true
     var mapName: String?
-    var displayOrder: Int
-    var createdAt: Date
+    var displayOrder: Int = 0
+    var createdAt: Date = Date()
 
     @Relationship(deleteRule: .nullify, inverse: \LoggedEntry.savedLocation)
     var entries: [LoggedEntry]? = []

@@ -10,10 +10,17 @@ import SwiftData
 
 @Model
 class CategorySource {
-    @Attribute(.unique) var category: String
-    var isDefault: Bool
-    var displayOrder: Int
+    var id: UUID = UUID()
+    var category: String = ""
+    var isDefault: Bool = false
+    var displayOrder: Int = 0
     var isHidden: Bool = false
+
+    @Relationship(deleteRule: .nullify, inverse: \FoodItem.category)
+    var foods: [FoodItem]? = []
+
+    @Relationship(deleteRule: .nullify, inverse: \LoggedEntry.category)
+    var logs: [LoggedEntry]? = []
 
     init(
         category: String,

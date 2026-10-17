@@ -10,13 +10,13 @@ import SwiftData
 
 @Model
 nonisolated class EntryPhoto {
-    @Attribute(.externalStorage) var imageData: Data
+    @Attribute(.externalStorage) var imageData: Data = Data()
 
-    var scale: Double
-    var offsetX: Double
-    var offsetY: Double
+    var scale: Double = 1.0
+    var offsetX: Double = 0.0
+    var offsetY: Double = 0.0
 
-    var displayOrder: Int
+    var displayOrder: Int = 0
 
     var parentEntry: LoggedEntry?
     var parentDraft: EntryDraft?
