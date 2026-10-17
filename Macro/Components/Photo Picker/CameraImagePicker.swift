@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct CameraImagePicker: UIViewControllerRepresentable {
-    var onImagePicked: (UIImage) -> Void
+    var onImagePicked: (UIImage, [String: Any]?) -> Void
     @Environment(\.presentationMode) private var presentationMode
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
@@ -42,7 +42,10 @@ struct CameraImagePicker: UIViewControllerRepresentable {
                 .InfoKey: Any]
         ) {
             if let image = info[.originalImage] as? UIImage {
-                parent.onImagePicked(image)
+                parent.onImagePicked(
+                    image,
+                    info[.mediaMetadata] as? [String: Any]
+                )
             }
             parent.presentationMode.wrappedValue.dismiss()
         }
