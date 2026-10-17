@@ -7,6 +7,7 @@
 
 import CoreTransferable
 import Foundation
+import SwiftData
 import UniformTypeIdentifiers
 
 enum LibraryCSV {
@@ -35,6 +36,11 @@ enum LibraryCSV {
         case isAIEstimated = "AI Estimated"
         case isCustomDefaultServing = "Custom Default Serving"
         case customServingSize = "Custom Serving Size"
+        case defaultLocation = "Default Location"
+        case defaultLocationAddress = "Default Location Address"
+        case defaultLocationLatitude = "Default Location Latitude"
+        case defaultLocationLongitude = "Default Location Longitude"
+        case defaultLocationMapID = "Default Location Map ID"
         case favoriteOrder = "Favorite Order"
         case note = "Note"
         case noteUpdated = "Note Updated"
@@ -51,6 +57,7 @@ enum LibraryCSV {
             case .protein: return ["proteins"]
             case .servingUnit: return ["unit"]
             case .note: return ["notes", "sticky note"]
+            case .defaultLocation: return ["location"]
             default: return []
             }
         }
@@ -153,7 +160,11 @@ enum LibraryCSV {
     }
 
     private static func entryFields(for item: FoodItem) -> [Column: String] {
-        [
+        let location = item.defaultLocation.map { location in
+            item.modelContext.map { DefaultLocationResolver.resolved(location, in: $0) } ?? location
+        }
+
+        return [
             .record: Record.entry.rawValue,
             .id: item.id.uuidString,
             .type: item.type.rawValue,
@@ -174,6 +185,11 @@ enum LibraryCSV {
             .isAIEstimated: format(item.isAIEstimated),
             .isCustomDefaultServing: format(item.isCustomDefaultServing),
             .customServingSize: format(item.customServingSize),
+            .defaultLocation: location?.name ?? "",
+            .defaultLocationAddress: location?.address ?? "",
+            .defaultLocationLatitude: location?.latitude.map { String($0) } ?? "",
+            .defaultLocationLongitude: location?.longitude.map { String($0) } ?? "",
+            .defaultLocationMapID: location?.mapItemID ?? "",
             .favoriteOrder: item.favoriteEntry.map { String($0.orderIndex) }
                 ?? "",
             .note: item.stickyNote?.text ?? "",
@@ -229,6 +245,8 @@ enum LibraryCSV {
     static let optionalColumns: [Column] = [
         .protein, .carbs, .fat, .fiber, .source, .category, .foodGroup,
         .servingSize, .servingUnit, .servingWeight, .note,
+        .defaultLocation, .defaultLocationAddress, .defaultLocationLatitude,
+        .defaultLocationLongitude,
     ]
 
     static func columns(
@@ -587,7 +605,33 @@ enum LibraryCSV {
             servingUnitPlural: hasPluralColumn
                 ? field(.servingUnitPlural) : nil,
             noteUpdated: date(field(.noteUpdated)),
-            dateAdded: date(field(.dateAdded))
+            dateAdded: date(field(.dateAdded)),
+            defaultLocation: defaultLocation(field)
+        )
+    }
+
+    private static func defaultLocation(_ field: (Column) -> String) -> EntryLocation? {
+        let name = field(.defaultLocation)
+        guard !name.isEmpty else { return nil }
+
+        let address = field(.defaultLocationAddress)
+        let mapItemID = field(.defaultLocationMapID)
+        var latitude = Double(field(.defaultLocationLatitude))
+        var longitude = Double(field(.defaultLocationLongitude))
+        let isValidCoordinate =
+            latitude.map { (-90...90).contains($0) } == true
+            && longitude.map { (-180...180).contains($0) } == true
+        if !isValidCoordinate {
+            latitude = nil
+            longitude = nil
+        }
+
+        return EntryLocation(
+            name: name,
+            address: address.isEmpty ? nil : address,
+            latitude: latitude,
+            longitude: longitude,
+            mapItemID: mapItemID.isEmpty ? nil : mapItemID
         )
     }
 
@@ -720,15 +764,41 @@ enum LibraryCSV {
     }
 }
 
+extension Date {
+    var fileNameStamp: String {
+        formatted(Date.ISO8601FormatStyle(timeZone: .current).year().month().day())
+    }
+}
+
 struct ExportDocument: Transferable {
-    let data: Data
+    var data = Data()
+    var fileURL: URL?
+    var fileName = ""
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(fileURL: URL, fileName: String) {
+        self.fileURL = fileURL
+        self.fileName = fileName
+    }
+
+    func removeFile() {
+        if let fileURL { try? FileManager.default.removeItem(at: fileURL) }
+    }
 
     static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(exportedContentType: .commaSeparatedText) { document in
             document.data
         }
-        DataRepresentation(exportedContentType: .json) { document in
-            document.data
+        FileRepresentation(exportedContentType: .macroBackup) { document in
+            guard let fileURL = document.fileURL else { throw CocoaError(.fileNoSuchFile) }
+            return SentTransferredFile(fileURL, allowAccessingOriginalFile: true)
+        }
+        .suggestedFileName { document in
+            let name = document.fileName.isEmpty ? "Macro Backup" : document.fileName
+            return "\(name).macrobackup"
         }
     }
 }

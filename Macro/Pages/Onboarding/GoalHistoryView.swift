@@ -525,7 +525,7 @@ private struct GoalDateSheet: View {
 #Preview {
     let container: ModelContainer
     do {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         container = try ModelContainer(
             for: User.self,
             UserGoals.self,

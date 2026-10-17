@@ -10,37 +10,43 @@ import SwiftData
 
 @Model
 class FoodItem {
-    @Attribute(.unique) var id: UUID
-    var name: String
+    var id: UUID = UUID()
+    var name: String = ""
 
-    var type: EntryType
+    var type: EntryType = EntryType.food
 
     var source: EntrySource?
     var category: CategorySource?
     var foodGroup: FoodGroupSource?
 
     var servingUnit: ServingSizeUnit?
-    var servingSize: Double
+    var servingSize: Double = 1
     var servingWeight: Double?
-    var servingWeightUnit: String
+    var servingWeightUnit: String = ""
 
-    var isAIEstimated: Bool
+    var isAIEstimated: Bool = false
 
-    var calories: Double
-    var protein: Double
-    var carbs: Double
-    var fat: Double
-    var fiber: Double
+    var calories: Double = 0
+    var protein: Double = 0
+    var carbs: Double = 0
+    var fat: Double = 0
+    var fiber: Double = 0
 
-    var isCustomDefaultServing: Bool
+    var isCustomDefaultServing: Bool = false
     var customServingSize: Double?
 
     var defaultLocation: EntryLocation?
 
-    var dateAdded: Date
+    var dateAdded: Date = Date()
 
-    @Relationship(deleteRule: .cascade)
+    @Relationship(deleteRule: .cascade, inverse: \Note.foodItem)
     var stickyNote: Note?
+
+    @Relationship(deleteRule: .nullify, inverse: \LoggedEntry.originalFoodItem)
+    var loggedEntries: [LoggedEntry]? = []
+
+    @Relationship(deleteRule: .nullify, inverse: \RecipeIngredient.ingredientItem)
+    var usedInRecipes: [RecipeIngredient]? = []
 
     @Relationship(deleteRule: .cascade, inverse: \RecipeIngredient.parentRecipe)
     var recipeIngredients: [RecipeIngredient]? = []

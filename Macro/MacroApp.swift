@@ -27,32 +27,41 @@ struct MacroApp: App {
 
         let modelConfiguration = ModelConfiguration(
             schema: schema,
-            isStoredInMemoryOnly: false
+            isStoredInMemoryOnly: false,
+            cloudKitDatabase: .private("iCloud.Shreyanka.Macro")
         )
 
         do {
-            let container = try ModelContainer(
+            return try ModelContainer(
                 for: schema,
                 configurations: [modelConfiguration]
             )
-
-            let context = ModelContext(container)
-
-            Task { @MainActor in
-                try AppSeeder.seedDefaults(into: context)
-            }
-
-            return container
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
     }()
+
+    @State private var syncMonitor: CloudSyncMonitor
+    @State private var backupStore: CloudBackupStore
+
+    init() {
+        MacroBackupFile.removeTemporaryFiles()
+        let syncMonitor = CloudSyncMonitor()
+        let backupStore = CloudBackupStore()
+        _syncMonitor = State(initialValue: syncMonitor)
+        _backupStore = State(initialValue: backupStore)
+        AutomaticBackup.register(store: backupStore, container: sharedModelContainer, syncMonitor: syncMonitor)
+        let context = sharedModelContainer.mainContext
+        Task { await AppSeeder.seedDefaults(into: context, after: syncMonitor) }
+    }
 
     var body: some Scene {
         WindowGroup {
             MainView()
                 .textInputAutocapitalization(.never)
                 .toastHost()
+                .environment(syncMonitor)
+                .environment(backupStore)
         }
         .modelContainer(sharedModelContainer)
     }

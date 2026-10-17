@@ -132,7 +132,7 @@ struct DefaultLocationRow: View {
 #Preview {
     let container = try! ModelContainer(
         for: FoodItem.self, EntrySource.self, SavedLocation.self, LoggedEntry.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
     )
 
     struct DefaultLocationRowPreview: View {

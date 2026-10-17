@@ -10,29 +10,29 @@ import SwiftUI
 
 @Model
 class RecipeIngredient {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
 
     var parentRecipe: FoodItem?
     var ingredientItem: FoodItem?
 
-    var quantity: Double
-    var unit: String
-    var displayOrder: Int
+    var quantity: Double = 0
+    var unit: String = ""
+    var displayOrder: Int = 0
     var dateAdded: Date = Date.now
 
     // Cached data incase Ingredient deleted
-    var name: String
+    var name: String = ""
 
-    var baseServingSize: Double
+    var baseServingSize: Double = 0
     var baseServingUnitName: String?
     var baseServingWeight: Double?
-    var baseServingWeightUnit: String
+    var baseServingWeightUnit: String = ""
 
-    var baseCalories: Double
-    var baseProtein: Double
-    var baseCarbs: Double
-    var baseFat: Double
-    var baseFiber: Double
+    var baseCalories: Double = 0
+    var baseProtein: Double = 0
+    var baseCarbs: Double = 0
+    var baseFat: Double = 0
+    var baseFiber: Double = 0
 
     init(
         id: UUID = UUID(),

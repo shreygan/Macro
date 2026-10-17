@@ -19,7 +19,10 @@ struct BaseRowLayout<RightContent: View>: View {
     var icon: RowIcon? = nil
     var title: String
     var titleExtension: String? = nil
+    var titleTag: String? = nil
+    var titleTagVariant: TagVariant = .accent
     var subtitle: String? = nil
+    var animatesSubtitle: Bool = false
     var info: String? = nil
     var thumbnail: RowThumbnail? = nil
     var fitsRightContent: Bool = false
@@ -135,16 +138,24 @@ struct BaseRowLayout<RightContent: View>: View {
 
             VStack(alignment: .leading, spacing: 2) {
 
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(title)
-                        .font(.rowTitle)
-                        .foregroundStyle(.primary)
+                HStack(spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(title)
+                            .font(.rowTitle)
+                            .foregroundStyle(.primary)
 
-                    if let titleExtension = titleExtension {
-                        Text(titleExtension)
-                            .font(.rowValue)
-                            .foregroundStyle(Color.tertiaryText)
+                        if let titleExtension = titleExtension {
+                            Text(titleExtension)
+                                .font(.rowValue)
+                                .foregroundStyle(Color.tertiaryText)
 
+                        }
+                    }
+
+                    if let titleTag {
+                        Text(titleTag)
+                            .tagStyle(titleTagVariant)
+                            .fixedSize()
                     }
                 }
 
@@ -152,6 +163,8 @@ struct BaseRowLayout<RightContent: View>: View {
                     Text(subtitle)
                         .font(.subtitle)
                         .foregroundStyle(Color.tertiaryText)
+                        .contentTransition(animatesSubtitle ? .numericText() : .identity)
+                        .animation(animatesSubtitle ? .snappy : nil, value: subtitle)
                 }
             }
         }

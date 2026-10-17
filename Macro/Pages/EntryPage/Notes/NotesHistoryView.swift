@@ -239,7 +239,7 @@ private struct NoteHistoryRow: View {
         for: FoodItem.self,
         LoggedEntry.self,
         CategorySource.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
     )
     let context = container.mainContext
 

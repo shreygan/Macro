@@ -81,7 +81,12 @@ struct DataTransferAlert: Identifiable {
     static let invalidBackup = DataTransferAlert(
         title: "Not a Macro Backup",
         message:
-            "This file isn't a Macro backup or it's damaged. Choose a .json file created with Export › Full Backup."
+            "This file isn't a Macro backup or it's damaged. Choose a .macrobackup file created with Export › Full Backup."
+    )
+
+    static let backupInProgress = DataTransferAlert(
+        title: "Backup in Progress",
+        message: "Nothing was changed. Wait for the backup to finish, then try again."
     )
 
     static let newerBackup = DataTransferAlert(
@@ -109,6 +114,24 @@ struct DataTransferAlert: Identifiable {
 
 extension Toast {
     static let dataTransferGroup = "dataTransfer"
+
+    static let backupComplete = Toast(
+        group: dataTransferGroup,
+        kind: .success,
+        symbol: "checkmark",
+        title: String(localized: "Backup Complete"),
+        message: String(localized: "Saved to iCloud")
+    )
+
+    static func backupContinues(_ message: String) -> Toast {
+        Toast(
+            group: dataTransferGroup,
+            kind: .info,
+            symbol: "icloud.and.arrow.up",
+            title: String(localized: "Backup Continues"),
+            message: message
+        )
+    }
 
     static func importComplete(
         title: String,

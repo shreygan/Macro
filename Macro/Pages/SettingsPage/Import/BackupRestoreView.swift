@@ -7,22 +7,29 @@
 
 import SwiftData
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct BackupRestoreView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.toastCenter) private var toastCenter
     @Environment(\.dismissSettings) private var dismissSettings
+    @Environment(\.replaceAllData) private var replaceAllData
+    @Environment(CloudSyncMonitor.self) private var syncMonitor
+    @Environment(CloudBackupStore.self) private var backupStore
 
-    let backup: MacroBackup
+    let file: MacroBackupFile
 
-    @State private var mode: BackupRestoreMode = .merge
+    @State private var mode: BackupRestoreMode
+
+    private var backup: MacroBackup { file.backup }
+
+    init(file: MacroBackupFile, defaultMode: BackupRestoreMode = .merge) {
+        self.file = file
+        _mode = State(initialValue: defaultMode)
+    }
     @State private var isRestoring = false
     @State private var showReplaceConfirmation = false
     @State private var restoreAlert: DataTransferAlert?
-    @State private var unrecoveredError: BackupRestoreError?
-    @State private var snapshotDocument: ExportDocument?
-    @State private var isShowingSnapshotExporter = false
+    @State private var pendingRestore: PendingBackupFollowUp?
 
     private var modeSelection: Binding<String> {
         Binding(
@@ -32,10 +39,14 @@ struct BackupRestoreView: View {
     }
 
     private var modeInfo: String {
-        switch mode {
-        case .merge:
-            return "Adds everything from the backup that isn't already on this device. Your existing entries, logs, goals and settings are kept as they are."
-        case .replace:
+        switch (mode, syncMonitor.hasAccess) {
+        case (.merge, true):
+            return "Adds everything from the backup that isn't already in Macro. Your existing entries, logs, goals and settings are kept as they are, and the changes sync to your other devices."
+        case (.merge, false):
+            return "Adds everything from the backup that isn't already in Macro. Your existing entries, logs, goals and settings are kept as they are."
+        case (.replace, true):
+            return "Erases all data on all your devices and iCloud, then restores the backup exactly, including settings and list order."
+        case (.replace, false):
             return "Erases all data on this device, then restores the backup exactly, including settings and list order."
         }
     }
@@ -60,7 +71,7 @@ struct BackupRestoreView: View {
                         RowGroup(.divider) {
                             contentRow("calendar", "Created", backup.createdAt.formatted(date: .abbreviated, time: .shortened))
                             contentRow("books.vertical", "Library Entries", "\(backup.foods.count)")
-                            contentRow("fork.knife", "Recipes", "\(backup.recipeCount)")
+                            contentRow(AppSymbols.recipe.rawValue, "Recipes", "\(backup.recipeCount)")
                             contentRow("list.bullet.rectangle", "Logs", "\(logCount)")
                             contentRow("photo.on.rectangle", "Photos", "\(backup.photoCount)")
                             contentRow("target", "Goals", "\(backup.goals.count)")
@@ -91,17 +102,19 @@ struct BackupRestoreView: View {
                         InformationRow(description: modeInfo)
 
                         ZStack {
-                            if isRestoring {
-                                HStack(spacing: 12) {
-                                    ProgressView()
-                                        .tint(.accentColor)
-                                    Text("Restoring Backup...")
-                                        .font(.statusLabel)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.bottom, 9)
-                                .frame(height: 60)
+                            if isRestoring || backupStore.isBackingUp {
+                                TransferStatus(
+                                    title: backupStore.isBackingUp
+                                        ? backupStore.progressTitle
+                                        : String(localized: "Restoring Backup..."),
+                                    onCancel: backupStore.canCancelBackup ? { backupStore.cancelBackup() } : nil
+                                )
+                                .frame(height: 36)
+                                .padding(.bottom, 16)
                                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                            } else if syncMonitor.isInitialRestoreInProgress {
+                                ButtonRow.restoreInProgress(topPadding: 0)
+                                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
                             } else {
                                 ButtonRow(
                                     icon: .customSymbol(
@@ -123,6 +136,9 @@ struct BackupRestoreView: View {
                             }
                         }
                         .animation(.snappy, value: isRestoring)
+                        .animation(.snappy, value: backupStore.isBackingUp)
+                        .animation(.snappy, value: syncMonitor.isInitialRestoreInProgress)
+                        .animation(.snappy, value: backupStore.progressTitle)
                     }
                     .padding([.top, .horizontal])
                 }
@@ -133,114 +149,129 @@ struct BackupRestoreView: View {
         .navigationTitle("Restore Backup")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Erase All Data?", isPresented: $showReplaceConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Erase and Restore", role: .destructive) {
-                restore()
+            if syncMonitor.canReachICloud && !backupStore.knownFull {
+                Button("Back Up & Restore") {
+                    backUpAndReplace()
+                }
             }
+            Button("Erase and Restore", role: .destructive) {
+                guard !backupStore.isBackingUp else {
+                    restoreAlert = .backupInProgress
+                    return
+                }
+                dismissSettings()
+                replaceAllData(file)
+            }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "Everything currently on this device will be replaced with the contents of this backup. This can't be undone."
+                syncMonitor.hasAccess
+                    ? "Everything currently in Macro, on all your devices and in iCloud, will be replaced with the contents of this backup. This can't be undone."
+                    : "Everything currently in Macro on this device will be replaced with the contents of this backup. This can't be undone."
             )
         }
         .dataTransferAlert($restoreAlert)
-        .alert(
-            "Restore Failed",
-            isPresented: Binding(
-                get: { unrecoveredError != nil },
-                set: { if !$0 { unrecoveredError = nil } }
-            ),
-            presenting: unrecoveredError
-        ) { error in
-            Button("Save Previous Data") {
-                saveSnapshot(from: error)
-            }
-        } message: { error in
-            Text(error.localizedDescription)
-        }
-        .fileExporter(
-            isPresented: $isShowingSnapshotExporter,
-            item: snapshotDocument,
-            contentTypes: [.json],
-            defaultFilename: "Macro Previous Data \(Date().formatted(.iso8601.year().month().day()))"
-        ) { result in
-            snapshotDocument = nil
-            if case .failure(let error) = result {
-                restoreAlert = .exportFailed(error)
-            }
-        } onCancellation: {
-            snapshotDocument = nil
-        }
+        .onLeave { cancelPendingRestore() }
     }
 
     private func contentRow(_ symbol: String, _ title: String, _ value: String)
         -> some View
     {
-        BaseRowLayout(icon: .customSymbol(symbol), title: title) {
+        BaseRowLayout(icon: .customSymbol(symbol), title: title, fitsRightContent: true) {
             Text(value)
                 .foregroundStyle(.secondary)
         }
     }
 
-    private func saveSnapshot(from error: BackupRestoreError) {
-        guard let url = error.snapshotURL,
-            let data = try? Data(contentsOf: url)
-        else {
-            restoreAlert = DataTransferAlert(
-                title: "Couldn't Save Copy",
-                message: "The copy of your previous data is no longer available."
-            )
-            return
+    private func backUpAndReplace() {
+        guard !isRestoring, !backupStore.isBackingUp else { return }
+        let followUp = PendingBackupFollowUp()
+        pendingRestore = followUp
+
+        Task {
+            defer { if pendingRestore === followUp { pendingRestore = nil } }
+            do {
+                try await backupStore.backUpIfRoom(from: modelContext)
+                guard !followUp.isCancelled else {
+                    toastCenter?.show(.backupComplete)
+                    return
+                }
+                dismissSettings()
+                replaceAllData(file)
+            } catch is CancellationError {
+                return
+            } catch {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                guard !followUp.isCancelled else {
+                    toastCenter?.show(.failure(String(localized: "Backup Failed"), message: syncMonitor.message(for: error)))
+                    return
+                }
+                restoreAlert = DataTransferAlert(
+                    title: "Backup Failed",
+                    message: "Nothing was erased. \(syncMonitor.message(for: error))"
+                )
+            }
         }
-        snapshotDocument = ExportDocument(data: data)
-        isShowingSnapshotExporter = true
+    }
+
+    private func cancelPendingRestore() {
+        guard let pendingRestore, !pendingRestore.isCancelled else { return }
+        pendingRestore.isCancelled = true
+        self.pendingRestore = nil
+        toastCenter?.show(.backupContinues(String(localized: "Nothing will be erased or restored")))
     }
 
     private func restore() {
-        guard !isRestoring else { return }
+        guard !isRestoring, !backupStore.isBackingUp else { return }
         isRestoring = true
-        let mode = mode
+        AutomaticBackup.isDataChangeInProgress = true
 
         Task(priority: .userInitiated) {
+            defer { AutomaticBackup.isDataChangeInProgress = false }
             try? await Task.sleep(for: .seconds(1))
 
             do {
                 let result = try await BackupRestorer(context: modelContext)
-                    .restore(backup, mode: mode)
+                    .restore(file, mode: .merge)
+                file.remove()
                 Task { await PendingLocationNamer.run(in: modelContext) }
                 isRestoring = false
-                toastCenter?.show(
-                    Toast(
-                        group: Toast.dataTransferGroup,
-                        kind: .success,
-                        symbol: "checkmark",
-                        title: result.message == nil
-                            ? String(localized: "Already Up to Date")
-                            : String(localized: "Backup Restored"),
-                        message: result.message
-                            ?? String(localized: "Nothing new in this backup")
-                    )
-                )
+                toastCenter?.show(.backupRestored(result))
                 dismissSettings()
-            } catch let error as BackupRestoreError {
-                withAnimation(.snappy) { isRestoring = false }
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
-                if error.snapshotURL != nil {
-                    unrecoveredError = error
-                } else {
-                    restoreAlert = DataTransferAlert(
-                        title: "Restore Failed",
-                        message: error.localizedDescription
-                    )
-                }
             } catch {
                 withAnimation(.snappy) { isRestoring = false }
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
                 restoreAlert = DataTransferAlert(
                     title: "Restore Failed",
-                    message:
-                        "The backup couldn't be restored and your existing data was left in place. \(error.localizedDescription)"
+                    message: error is BackupRestoreError
+                        ? error.localizedDescription
+                        : "The backup couldn't be restored and your existing data was left in place. \(error.localizedDescription)"
                 )
             }
         }
+    }
+}
+
+extension Toast {
+    static func backupRestored(_ summary: BackupRestoreSummary) -> Toast {
+        if summary.photosIncomplete {
+            return Toast(
+                group: Toast.dataTransferGroup,
+                kind: .warning,
+                symbol: "exclamationmark.triangle",
+                title: String(localized: "Restored Without Some Photos"),
+                message: String(localized: "Some photos couldn't be added")
+            )
+        }
+        return Toast(
+            group: Toast.dataTransferGroup,
+            kind: .success,
+            symbol: "checkmark",
+            title: summary.message == nil
+                ? String(localized: "Already Up to Date")
+                : String(localized: "Backup Restored"),
+            message: summary.message
+                ?? String(localized: "Nothing new in this backup")
+        )
     }
 }

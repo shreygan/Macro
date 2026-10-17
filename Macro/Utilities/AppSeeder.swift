@@ -26,8 +26,26 @@ struct AppSeeder {
 
     private static let seededListsKey = "AppSeeder.hasSeededLists"
 
+    private static let initialSyncWait: Duration = .seconds(120)
+
     static func resetListSeeding() {
         UserDefaults.standard.removeObject(forKey: seededListsKey)
+    }
+
+    @MainActor
+    static func seedDefaults(into context: ModelContext, after syncMonitor: CloudSyncMonitor) async {
+        if !UserDefaults.standard.bool(forKey: seededListsKey),
+            await syncMonitor.hasSyncedData(timeout: .seconds(10)) == true
+        {
+            let deadline = ContinuousClock.now + initialSyncWait
+            while !syncMonitor.hasFinishedDownloadThisLaunch,
+                ContinuousClock.now < deadline || syncMonitor.isInitialRestoreInProgress,
+                !Task.isCancelled
+            {
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+        try? seedDefaults(into: context)
     }
 
     @MainActor

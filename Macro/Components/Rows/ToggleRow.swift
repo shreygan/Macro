@@ -12,6 +12,8 @@ struct ToggleRow: View {
     var title: String
     var titleExtension: String? = nil
     var subtitle: String? = nil
+    var animatesSubtitle: Bool = false
+    var info: String? = nil
 
     @Binding var isOn: Bool
 
@@ -20,7 +22,9 @@ struct ToggleRow: View {
             icon: icon,
             title: title,
             titleExtension: titleExtension,
-            subtitle: subtitle
+            subtitle: subtitle,
+            animatesSubtitle: animatesSubtitle,
+            info: info
         ) {
             Toggle("", isOn: $isOn)
                 .labelsHidden()

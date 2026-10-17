@@ -11,8 +11,11 @@ import Foundation
 
 @Model
 class Note {
-    var text: String
-    var lastUpdated: Date
+    var id: UUID = UUID()
+    var text: String = ""
+    var lastUpdated: Date = Date()
+
+    var foodItem: FoodItem?
     
     init(text: String, lastUpdated: Date = Date()) {
         self.text = text

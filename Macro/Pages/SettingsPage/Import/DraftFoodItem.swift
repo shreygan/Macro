@@ -34,6 +34,7 @@ struct DraftFoodItem: Identifiable, Equatable {
     var servingUnitPlural: String? = nil
     var noteUpdated: Date? = nil
     var dateAdded: Date? = nil
+    var defaultLocation: EntryLocation? = nil
     var ingredients: [DraftImportIngredient] = []
     var duplicateOf: UUID? = nil
 }

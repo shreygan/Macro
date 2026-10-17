@@ -354,7 +354,7 @@ extension TimelineCard where MenuContent == EmptyView {
 
     let container: ModelContainer
     do {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         container = try ModelContainer(
             for: LoggedEntry.self,
             FoodItem.self,

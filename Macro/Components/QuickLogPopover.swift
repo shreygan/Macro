@@ -148,7 +148,7 @@ struct QuickLogPopover: View {
 #Preview {
     let container = try! ModelContainer(
         for: FoodItem.self, FavoriteEntry.self, LoggedEntry.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
     )
     let context = container.mainContext
 

@@ -19,17 +19,17 @@ enum DraftKind: String, Codable, CaseIterable {
 
 @Model
 class EntryDraft {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
 
-    var kindRawValue: String
-    var typeRawValue: String
-    var name: String
+    var kindRawValue: String = ""
+    var typeRawValue: String = ""
+    var name: String = ""
 
     // Log drafts only: when the food was eaten
     var timestamp: Date?
 
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
 
     @Relationship(deleteRule: .nullify)
     var foodItem: FoodItem?
@@ -37,7 +37,7 @@ class EntryDraft {
     @Relationship(deleteRule: .cascade, inverse: \EntryPhoto.parentDraft)
     var photos: [EntryPhoto]? = []
 
-    var payload: Data
+    var payload: Data = Data()
 
     init(
         id: UUID = UUID(),

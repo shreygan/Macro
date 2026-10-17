@@ -621,7 +621,7 @@ private struct ReorderListView: View {
         EntrySource.self,
         CategorySource.self,
         FoodGroupSource.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
     )
     container.mainContext.insert(
         EntrySource(source: "Home", isDefault: true, displayOrder: 0)

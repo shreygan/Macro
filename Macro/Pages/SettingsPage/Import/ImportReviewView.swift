@@ -396,6 +396,7 @@ struct ImportReviewView: View {
         result.noteUpdated =
             edited.stickyNote == originalNote ? original.noteUpdated : nil
         result.dateAdded = original.dateAdded
+        result.defaultLocation = original.defaultLocation
         if edited.ingredients.isEmpty {
             result.ingredients = original.ingredients
         }
@@ -406,6 +407,8 @@ struct ImportReviewView: View {
 
     private func saveAllToDatabase() {
         let resolver = ImportResolver(context: modelContext)
+        let savedLocations =
+            (try? modelContext.fetch(FetchDescriptor<SavedLocation>())) ?? []
         let existingItems =
             (try? modelContext.fetch(FetchDescriptor<FoodItem>())) ?? []
         var library = existingItems
@@ -422,7 +425,7 @@ struct ImportReviewView: View {
                 let existing = itemsByID[existingID],
                 replacedIDs.insert(existingID).inserted
             {
-                apply(draft, to: existing, resolver: resolver)
+                apply(draft, to: existing, resolver: resolver, savedLocations: savedLocations)
                 if !draft.ingredients.isEmpty {
                     for ingredient in existing.recipeIngredients ?? [] {
                         modelContext.delete(ingredient)
@@ -439,7 +442,8 @@ struct ImportReviewView: View {
                 let newFood = makeFoodItem(
                     from: draft,
                     id: resolvedID,
-                    resolver: resolver
+                    resolver: resolver,
+                    savedLocations: savedLocations
                 )
 
                 modelContext.insert(newFood)
@@ -520,10 +524,20 @@ struct ImportReviewView: View {
         onSaveComplete()
     }
 
+    private func linkedLocation(
+        _ location: EntryLocation?,
+        in savedLocations: [SavedLocation]
+    ) -> EntryLocation? {
+        guard var location else { return nil }
+        location.savedLocationID = SavedLocation.matching(location, in: savedLocations)?.id
+        return location
+    }
+
     private func apply(
         _ draft: DraftFoodItem,
         to food: FoodItem,
-        resolver: ImportResolver
+        resolver: ImportResolver,
+        savedLocations: [SavedLocation]
     ) {
         let noteText = (draft.stickyNote ?? "").trimmingCharacters(
             in: .whitespacesAndNewlines
@@ -551,6 +565,9 @@ struct ImportReviewView: View {
         food.fiber = draft.fiber
         food.isCustomDefaultServing = draft.isCustomDefaultServing
         food.customServingSize = draft.customServingSize
+        if let location = linkedLocation(draft.defaultLocation, in: savedLocations) {
+            food.defaultLocation = location
+        }
 
         if noteText.isEmpty {
             food.stickyNote = nil
@@ -568,7 +585,8 @@ struct ImportReviewView: View {
     private func makeFoodItem(
         from draft: DraftFoodItem,
         id: UUID,
-        resolver: ImportResolver
+        resolver: ImportResolver,
+        savedLocations: [SavedLocation]
     ) -> FoodItem {
         let draftNoteText = (draft.stickyNote ?? "").trimmingCharacters(
             in: .whitespacesAndNewlines
@@ -600,6 +618,7 @@ struct ImportReviewView: View {
             fiber: draft.fiber,
             isCustomDefaultServing: draft.isCustomDefaultServing,
             customServingSize: draft.customServingSize,
+            defaultLocation: linkedLocation(draft.defaultLocation, in: savedLocations),
             stickyNote: resolvedStickyNote,
             dateAdded: draft.dateAdded ?? Date()
         )
@@ -731,10 +750,13 @@ struct ImportReviewView: View {
                 )
             }
             .modelContainer(
-                for: [
-                    FoodItem.self, EntrySource.self, ServingSizeUnit.self,
-                ],
-                inMemory: true
+                try! ModelContainer(
+                    for: FoodItem.self, EntrySource.self, ServingSizeUnit.self,
+                    configurations: ModelConfiguration(
+                        isStoredInMemoryOnly: true,
+                        cloudKitDatabase: .none
+                    )
+                )
             )
         }
     }

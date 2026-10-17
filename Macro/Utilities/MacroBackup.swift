@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 
 nonisolated struct MacroBackup: Codable, Sendable {
     static let formatIdentifier = "com.macro.backup"
-    static let currentVersion = 1
+    static let currentVersion = 2
 
     var format: String = formatIdentifier
     var version: Int = currentVersion
@@ -30,6 +30,7 @@ nonisolated struct MacroBackup: Codable, Sendable {
     var drafts: [DraftRecord]
     var savedLocations: [SavedLocationRecord]
     var recentLocations: [RecentLocationRecord]
+    var photoSlices: [PhotoSlice] = []
 
     struct UserRecord: Codable, Sendable {
         var name: String?
@@ -89,6 +90,7 @@ nonisolated struct MacroBackup: Codable, Sendable {
         var baseCarbs: Double
         var baseFat: Double
         var baseFiber: Double
+        var dateAdded: Date? = nil
     }
 
     struct FoodRecord: Codable, Sendable {
@@ -121,12 +123,22 @@ nonisolated struct MacroBackup: Codable, Sendable {
         var orderIndex: Int
     }
 
+    struct PhotoSlice: Codable, Sendable {
+        var offset: UInt64
+        var length: UInt64
+    }
+
     struct PhotoRecord: Codable, Sendable {
-        var imageData: Data
+        var index: Int? = nil
+        var imageData: Data? = nil
         var scale: Double
         var offsetX: Double
         var offsetY: Double
         var displayOrder: Int
+
+        private enum CodingKeys: String, CodingKey {
+            case index, scale, offsetX, offsetY, displayOrder
+        }
     }
 
     struct LogRecord: Codable, Sendable {
@@ -192,6 +204,10 @@ nonisolated struct MacroBackup: Codable, Sendable {
         return count(logs) + drafts.reduce(0) { $0 + $1.photos.count }
     }
 
+    var photoByteCount: Int64 {
+        photoSlices.reduce(0) { $0 + Int64($1.length) }
+    }
+
     var recipeCount: Int {
         foods.filter { $0.type == EntryType.recipe.rawValue }.count
     }
@@ -212,7 +228,7 @@ nonisolated struct MacroBackup: Codable, Sendable {
 
 extension MacroBackup {
     @MainActor
-    static func make(from context: ModelContext) throws -> MacroBackup {
+    static func make(from context: ModelContext, photos: BackupPhotoCollector) throws -> MacroBackup {
         let user = try context.fetch(FetchDescriptor<User>()).first
         let foods = try context.fetch(FetchDescriptor<FoodItem>())
         let logs = try context.fetch(FetchDescriptor<LoggedEntry>())
@@ -259,8 +275,8 @@ extension MacroBackup {
             logs: logs
                 .filter { $0.parentEntry == nil }
                 .sorted { $0.timestamp < $1.timestamp }
-                .map(logRecord),
-            drafts: drafts.map(draftRecord),
+                .map { logRecord($0, photos: photos) },
+            drafts: drafts.map { draftRecord($0, photos: photos) },
             savedLocations: try context.fetch(FetchDescriptor<SavedLocation>())
                 .sorted { $0.displayOrder < $1.displayOrder }
                 .map {
@@ -351,7 +367,8 @@ extension MacroBackup {
                         baseProtein: $0.baseProtein,
                         baseCarbs: $0.baseCarbs,
                         baseFat: $0.baseFat,
-                        baseFiber: $0.baseFiber
+                        baseFiber: $0.baseFiber,
+                        dateAdded: $0.dateAdded
                     )
                 }
         )
@@ -374,6 +391,11 @@ extension MacroBackup {
 
     @MainActor
     static func logRecord(_ log: LoggedEntry) -> LogRecord {
+        logRecord(log, photos: nil)
+    }
+
+    @MainActor
+    static func logRecord(_ log: LoggedEntry, photos collector: BackupPhotoCollector?) -> LogRecord {
         LogRecord(
             id: log.id,
             name: log.name,
@@ -394,15 +416,20 @@ extension MacroBackup {
             isManualOverride: log.isManualOverride,
             logNote: log.logNote,
             displayOrder: log.displayOrder,
-            photos: photoRecords(log.photos),
+            photos: collector?.records(log.photos) ?? photoRecords(log.photos),
             children: (log.childEntries ?? [])
                 .sorted { $0.displayOrder < $1.displayOrder }
-                .map(logRecord)
+                .map { logRecord($0, photos: collector) }
         )
     }
 
     @MainActor
     static func draftRecord(_ draft: EntryDraft) -> DraftRecord {
+        draftRecord(draft, photos: nil)
+    }
+
+    @MainActor
+    static func draftRecord(_ draft: EntryDraft, photos collector: BackupPhotoCollector?) -> DraftRecord {
         DraftRecord(
             id: draft.id,
             kindRawValue: draft.kindRawValue,
@@ -413,7 +440,7 @@ extension MacroBackup {
             updatedAt: draft.updatedAt,
             foodItemID: draft.foodItem?.id,
             payload: draft.payload,
-            photos: photoRecords(draft.photos)
+            photos: collector?.records(draft.photos) ?? photoRecords(draft.photos)
         )
     }
 }

@@ -81,3 +81,16 @@ struct ButtonRow: View {
         print("Scanner opened!")
     }
 }
+
+extension ButtonRow {
+    static func restoreInProgress(topPadding: CGFloat = 8) -> some View {
+        ButtonRow(
+            icon: .customSymbol("icloud.and.arrow.down", tint: .secondary),
+            title: String(localized: "Restore in Progress"),
+            tint: .controlFill,
+            textColor: .secondary,
+            topPadding: topPadding
+        ) {}
+        .allowsHitTesting(false)
+    }
+}

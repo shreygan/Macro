@@ -17,12 +17,51 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.eraseAllData) private var eraseAllData
     @Environment(\.toastCenter) private var toastCenter
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(CloudSyncMonitor.self) private var syncMonitor
+    @Environment(CloudBackupStore.self) private var backupStore
 
     @Query private var users: [User]
 
     @State private var showDeleteConfirmation = false
+    @State private var backupAlert: DataTransferAlert?
+    @State private var pendingErase: PendingBackupFollowUp?
+    @AppStorage(AutomaticBackup.enabledKey) private var isAutomaticBackupOn = false
 
     private let maxDayStartMinutes = 12 * 60
+
+    private static let weeklyBackupWarningAge: TimeInterval = 14 * 24 * 60 * 60
+
+    private var iCloudRowStatus: (symbol: String, subtitle: String?) {
+        if syncMonitor.isInitialRestoreInProgress {
+            return ("icloud.and.arrow.down", String(localized: "Restoring from iCloud..."))
+        }
+        switch syncMonitor.account {
+        case .noAccount: return ("icloud.slash", String(localized: "No iCloud Access"))
+        case .restricted: return ("icloud.slash", String(localized: "iCloud Restricted"))
+        default: break
+        }
+        switch syncMonitor.issue {
+        case .storageFull: return ("exclamationmark.icloud", String(localized: "iCloud Storage Full"))
+        case .noAccess, .notSignedIn: return ("icloud.slash", String(localized: "No iCloud Access"))
+        case .other: return ("exclamationmark.icloud", String(localized: "Couldn't Sync"))
+        case .offline, nil: break
+        }
+        if isAutomaticBackupOn,
+            let reference = AutomaticBackup.lastBackupOrEnabledDate,
+            Date().timeIntervalSince(reference) > Self.weeklyBackupWarningAge
+        {
+            let subtitle = AutomaticBackup.lastBackup.map {
+                String(localized: "Last weekly backup \($0.formatted(.relative(presentation: .named)))")
+            } ?? String(localized: "No weekly backup yet")
+            return ("exclamationmark.icloud", subtitle)
+        }
+        return ("icloud", nil)
+    }
+
+    private var isWaitingForProfile: Bool {
+        syncMonitor.isInitialRestoreInProgress && users.isEmpty
+    }
 
     private var dayStartRange: ClosedRange<Date> {
         let midnight = Calendar.current.startOfDay(for: Date())
@@ -84,11 +123,14 @@ struct SettingsView: View {
                                 } label: {
                                     NavigationRow(
                                         icon: .customSymbol("target"),
-                                        title: "Macro Goals"
+                                        title: "Macro Goals",
+                                        subtitle: isWaitingForProfile
+                                            ? String(localized: "Restore in Progress") : nil
                                     )
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+                                .disabled(isWaitingForProfile)
 
                                 if let user = users.first {
                                     NavigationLink {
@@ -145,6 +187,18 @@ struct SettingsView: View {
                         Card("Data") {
                             RowGroup(.divider) {
                                 NavigationLink {
+                                    ICloudView()
+                                } label: {
+                                    NavigationRow(
+                                        icon: .customSymbol(iCloudRowStatus.symbol),
+                                        title: "iCloud",
+                                        subtitle: iCloudRowStatus.subtitle
+                                    )
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+
+                                NavigationLink {
                                     ImportView()
                                 } label: {
                                     NavigationRow(
@@ -169,25 +223,56 @@ struct SettingsView: View {
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+
+                                NavigationLink {
+                                    StorageView()
+                                } label: {
+                                    NavigationRow(
+                                        icon: .customSymbol("internaldrive"),
+                                        title: "Storage"
+                                    )
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding([.top, .leading, .trailing])
 
                         Card("Reset") {
                             InformationRow(
-                                description:
-                                    "Permanently removes all logged entries, saved foods, goals, and personal data from this device. This action cannot be undone."
+                                description: syncMonitor.hasAccess
+                                    ? "Permanently removes all logged entries, saved foods, goals, locations and personal data from all your devices and iCloud. Any iCloud backups are kept. This action cannot be undone."
+                                    : "Permanently removes all logged entries, saved foods, goals, locations and personal data from this device. Any iCloud backups are kept. This action cannot be undone."
                             )
 
-                            ButtonRow(
-                                icon: .customSymbol("trash", tint: .red),
-                                title: "Delete All Data",
-                                tint: .destructiveFill,
-                                textColor: .red,
-                                topPadding: 0
-                            ) {
-                                showDeleteConfirmation = true
+                            ZStack {
+                                if backupStore.isBackingUp {
+                                    TransferStatus(
+                                        title: backupStore.progressTitle,
+                                        onCancel: backupStore.canCancelBackup ? { backupStore.cancelBackup() } : nil
+                                    )
+                                    .frame(height: 36)
+                                    .padding(.bottom, 16)
+                                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                                } else if syncMonitor.isInitialRestoreInProgress {
+                                    ButtonRow.restoreInProgress(topPadding: 0)
+                                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                                } else {
+                                    ButtonRow(
+                                        icon: .customSymbol("trash", tint: .red),
+                                        title: "Delete All Data",
+                                        tint: .destructiveFill,
+                                        textColor: .red,
+                                        topPadding: 0
+                                    ) {
+                                        showDeleteConfirmation = true
+                                    }
+                                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                                }
                             }
+                            .animation(.snappy, value: backupStore.isBackingUp)
+                            .animation(.snappy, value: backupStore.progressTitle)
+                            .animation(.snappy, value: syncMonitor.isInitialRestoreInProgress)
                         }
                         .padding([.top, .horizontal])
                     }
@@ -196,6 +281,10 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .task(id: scenePhase) {
+                guard scenePhase == .active else { return }
+                await syncMonitor.recheckAccess()
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -207,21 +296,74 @@ struct SettingsView: View {
                 }
             }
             .alert("Delete All Data?", isPresented: $showDeleteConfirmation) {
-                Button("Cancel", role: .cancel) {}
+                if syncMonitor.canReachICloud && !backupStore.knownFull {
+                    Button("Back Up & Delete") {
+                        backUpAndErase()
+                    }
+                }
                 Button("Delete", role: .destructive) {
+                    guard !backupStore.isBackingUp else {
+                        backupAlert = .backupInProgress
+                        return
+                    }
                     dismiss()
                     eraseAllData()
                 }
+                Button("Cancel", role: .cancel) {}
             } message: {
                 Text(
-                    "This will permanently delete all your logged entries, saved foods, and personal data. This action cannot be undone."
+                    syncMonitor.hasAccess
+                        ? "This will permanently delete all your logged entries, saved foods, and personal data from all your devices and iCloud. Any iCloud backups you have are kept. This action cannot be undone."
+                        : "This will permanently delete all your logged entries, saved foods, and personal data from this device. Any iCloud backups you have are kept. This action cannot be undone."
+                )
+            }
+            .dataTransferAlert($backupAlert)
+            .onLeave { cancelPendingErase() }
+        }
+        .environment(\.dismissSettings, { dismiss() })
+    }
+
+    private func backUpAndErase() {
+        guard !backupStore.isBackingUp else { return }
+        let followUp = PendingBackupFollowUp()
+        pendingErase = followUp
+
+        Task {
+            defer { if pendingErase === followUp { pendingErase = nil } }
+            do {
+                try await backupStore.backUpIfRoom(from: modelContext)
+                guard !followUp.isCancelled else {
+                    toastCenter?.show(.backupComplete)
+                    return
+                }
+                dismiss()
+                eraseAllData()
+            } catch is CancellationError {
+                return
+            } catch {
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                guard !followUp.isCancelled else {
+                    toastCenter?.show(.failure(String(localized: "Backup Failed"), message: syncMonitor.message(for: error)))
+                    return
+                }
+                backupAlert = DataTransferAlert(
+                    title: "Backup Failed",
+                    message: "Nothing was deleted. \(syncMonitor.message(for: error))"
                 )
             }
         }
-        .environment(\.dismissSettings, { dismiss() })
+    }
+
+    private func cancelPendingErase() {
+        guard let pendingErase, !pendingErase.isCancelled else { return }
+        pendingErase.isCancelled = true
+        self.pendingErase = nil
+        toastCenter?.show(.backupContinues(String(localized: "Nothing will be deleted")))
     }
 }
 
 #Preview {
     SettingsView()
+        .environment(CloudSyncMonitor())
+        .environment(CloudBackupStore())
 }

@@ -185,7 +185,7 @@ struct MergeFoodPickerView: View {
     ])
     let container = try! ModelContainer(
         for: schema,
-        configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        configurations: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
     )
     let context = container.mainContext
     let serving = ServingSizeUnit(unit: "serving", pluralVariant: "servings", displayOrder: 0)

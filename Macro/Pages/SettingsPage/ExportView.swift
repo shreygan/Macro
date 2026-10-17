@@ -44,6 +44,7 @@ enum LogExportRange: String, CaseIterable {
 struct ExportView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.toastCenter) private var toastCenter
+    @Environment(CloudSyncMonitor.self) private var syncMonitor
 
     @Query private var foodItems: [FoodItem]
     @Query(filter: #Predicate<LoggedEntry> { $0.parentEntry == nil })
@@ -67,7 +68,10 @@ struct ExportView: View {
     @State private var exportContentType: UTType = .commaSeparatedText
     @State private var exportFilename = ""
     @State private var isShowingExporter = false
+    @State private var movedFileURL: URL?
+    @State private var isShowingMover = false
     @State private var loadingKind: DataTransferKind?
+    @State private var exportTask: Task<Void, Never>?
     @State private var exportAlert: DataTransferAlert?
 
     private typealias PreparedExport = (
@@ -77,7 +81,7 @@ struct ExportView: View {
     )
 
     private var dateStamp: String {
-        Date().formatted(.iso8601.year().month().day())
+        Date().fileNameStamp
     }
 
     private var dayStartMinutes: Int {
@@ -191,25 +195,25 @@ struct ExportView: View {
             contentTypes: [exportContentType],
             defaultFilename: exportFilename
         ) { result in
-            switch result {
-            case .success:
-                toastCenter?.show(
-                    Toast(
-                        group: Toast.dataTransferGroup,
-                        kind: .success,
-                        symbol: "checkmark",
-                        title: String(localized: "Export Saved"),
-                        message: exportFilename
-                    )
-                )
-            case .failure(let error):
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
-                exportAlert = .exportFailed(error)
-            }
+            handleExportResult(result.map { _ in })
+            exportDocument?.removeFile()
             exportDocument = nil
         } onCancellation: {
+            exportDocument?.removeFile()
             exportDocument = nil
         }
+        .fileMover(isPresented: $isShowingMover, file: movedFileURL) { result in
+            handleExportResult(result.map { _ in })
+            removeMovedFile()
+        } onCancellation: {
+            removeMovedFile()
+        }
+        .onChange(of: isShowingExporter || isShowingMover) { _, isShowing in
+            if !isShowing {
+                withAnimation(.snappy) { loadingKind = nil }
+            }
+        }
+        .onLeave { cancelExport() }
         .dataTransferAlert($exportAlert)
     }
 
@@ -252,7 +256,7 @@ struct ExportView: View {
                 blocks: [
                     .text(
                         libraryFormat == .detailed
-                            ? "Exports each entry with its source, category, food group, serving details, notes and favorite status, along with each recipe's ingredients. Import the file to restore it."
+                            ? "Exports each entry with its source, category, food group, serving details, default location, notes and favorite status, along with each recipe's ingredients. Import the file to restore it."
                             : "Exports each entry's source, name, macros per serving, type, category, food group and note, one row per entry. Recipes are included with their totals but without ingredients."
                     ),
                     .bullets([
@@ -270,7 +274,8 @@ struct ExportView: View {
                             : LibraryCSV.simplifiedHeader)
                             .joined(separator: "\n")
                     ),
-                ]
+                ],
+                animatesBullets: true
             )
 
             exportButton(
@@ -345,7 +350,8 @@ struct ExportView: View {
                         LogCSV.exportedColumns.map(\.rawValue)
                             .joined(separator: "\n")
                     ),
-                ]
+                ],
+                animatesBullets: true
             )
 
             exportButton(
@@ -399,7 +405,8 @@ struct ExportView: View {
                             : "Photos excluded",
                         countLabel(goalCount, "goal", "goals"),
                     ]),
-                ]
+                ],
+                animatesBullets: true
             )
 
             exportButton(
@@ -409,36 +416,20 @@ struct ExportView: View {
                 isEmpty: false,
                 loadingTitle: "Creating Backup..."
             ) {
-                var backup = try MacroBackup.make(from: modelContext)
-                if !includePhotos {
-                    backup.logs = backup.logs.map(Self.strippingPhotos)
-                    backup.drafts = backup.drafts.map {
-                        var draft = $0
-                        draft.photos = []
-                        return draft
-                    }
-                }
+                let file = try await MacroBackupFile.create(
+                    from: modelContext,
+                    includePhotos: includePhotos,
+                    at: try MacroBackupFile.temporaryURL()
+                )
 
-                let data = try await Task.detached(priority: .userInitiated) {
-                    try MacroBackup.encode(backup)
-                }.value
-
+                let filename = "Macro Backup \(dateStamp)"
                 return (
-                    ExportDocument(data: data),
-                    .json,
-                    "Macro Backup \(dateStamp)"
+                    ExportDocument(fileURL: file.url, fileName: filename),
+                    .macroBackup,
+                    filename
                 )
             }
         }
-    }
-
-    nonisolated private static func strippingPhotos(_ log: MacroBackup.LogRecord)
-        -> MacroBackup.LogRecord
-    {
-        var log = log
-        log.photos = []
-        log.children = log.children.map(strippingPhotos)
-        return log
     }
 
     private func pickerRow(
@@ -483,16 +474,16 @@ struct ExportView: View {
     ) -> some View {
         ZStack {
             if loadingKind == kind {
-                HStack(spacing: 12) {
-                    ProgressView()
-                        .tint(.accentColor)
-                    Text(loadingTitle)
-                        .font(.statusLabel)
-                        .foregroundStyle(.secondary)
-                }
+                TransferStatus(
+                    title: loadingTitle,
+                    onCancel: exportTask != nil ? { cancelExport() } : nil
+                )
                 .padding(.bottom, 9)
                 .frame(height: 60)
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            } else if syncMonitor.isInitialRestoreInProgress {
+                ButtonRow.restoreInProgress()
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
             } else {
                 ButtonRow(
                     icon: .customSymbol(
@@ -511,6 +502,7 @@ struct ExportView: View {
             }
         }
         .animation(.snappy, value: loadingKind)
+        .animation(.snappy, value: syncMonitor.isInitialRestoreInProgress)
     }
 
     private func startExport(
@@ -519,17 +511,36 @@ struct ExportView: View {
     ) {
         loadingKind = kind
 
-        Task(priority: .userInitiated) {
+        exportTask = Task(priority: .userInitiated) {
             try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
 
             do {
                 let prepared = try await prepare()
-                withAnimation(.snappy) { loadingKind = nil }
-                exportDocument = prepared.document
-                exportContentType = prepared.type
+                guard !Task.isCancelled else {
+                    prepared.document.removeFile()
+                    return
+                }
+                exportTask = nil
+                let presenter = PresentationWaiter.topPresentedController()
                 exportFilename = prepared.filename
-                isShowingExporter = true
+                if let fileURL = prepared.document.fileURL {
+                    movedFileURL = try MacroBackupFile.moveToNamedTemporaryURL(
+                        fileURL,
+                        name: prepared.filename
+                    )
+                    isShowingMover = true
+                    await PresentationWaiter.waitForPresentation(over: presenter) { isShowingMover }
+                } else {
+                    exportDocument = prepared.document
+                    exportContentType = prepared.type
+                    isShowingExporter = true
+                    await PresentationWaiter.waitForPresentation(over: presenter) { isShowingExporter }
+                }
+                withAnimation(.snappy) { loadingKind = nil }
             } catch {
+                guard !Task.isCancelled else { return }
+                exportTask = nil
                 withAnimation(.snappy) { loadingKind = nil }
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
                 exportAlert = DataTransferAlert(
@@ -539,6 +550,38 @@ struct ExportView: View {
                 )
             }
         }
+    }
+
+    private func handleExportResult(_ result: Result<Void, Error>) {
+        switch result {
+        case .success:
+            toastCenter?.show(
+                Toast(
+                    group: Toast.dataTransferGroup,
+                    kind: .success,
+                    symbol: "checkmark",
+                    title: String(localized: "Export Saved"),
+                    message: exportFilename
+                )
+            )
+        case .failure(let error):
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            exportAlert = .exportFailed(error)
+        }
+    }
+
+    private func removeMovedFile() {
+        if let folder = movedFileURL?.deletingLastPathComponent() {
+            try? FileManager.default.removeItem(at: folder)
+        }
+        movedFileURL = nil
+    }
+
+    private func cancelExport() {
+        guard let exportTask else { return }
+        exportTask.cancel()
+        self.exportTask = nil
+        withAnimation(.snappy) { loadingKind = nil }
     }
 
     private func countLabel(_ count: Int, _ singular: String, _ plural: String)
@@ -552,4 +595,5 @@ struct ExportView: View {
     NavigationStack {
         ExportView()
     }
+    .environment(CloudSyncMonitor())
 }

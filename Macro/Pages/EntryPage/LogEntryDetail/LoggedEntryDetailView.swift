@@ -1055,7 +1055,7 @@ struct LoggedEntryDetailView: View {
 #Preview {
     { () -> AnyView in
 
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try! ModelContainer(
             for: LoggedEntry.self,
             FoodItem.self,

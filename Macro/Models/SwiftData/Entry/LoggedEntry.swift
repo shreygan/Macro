@@ -10,12 +10,11 @@ import SwiftData
 
 @Model
 class LoggedEntry {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
 
-    var name: String
-    var typeRawValue: String
+    var name: String = ""
+    var typeRawValue: String = ""
 
-    @Relationship(deleteRule: .nullify)
     var originalFoodItem: FoodItem?
 
     @Relationship(deleteRule: .cascade, inverse: \LoggedEntry.parentEntry)
@@ -27,22 +26,22 @@ class LoggedEntry {
     var category: CategorySource?
     var foodGroup: FoodGroupSource?
 
-    var timestamp: Date
+    var timestamp: Date = Date()
 
     var storedLocation: EntryLocation?
     var needsLocationName: Bool = false
     var savedLocation: SavedLocation?
 
-    var loggedQuantity: Double
-    var loggedUnit: String
+    var loggedQuantity: Double = 0
+    var loggedUnit: String = ""
 
-    var calories: Double
-    var protein: Double
-    var carbs: Double
-    var fat: Double
-    var fiber: Double
+    var calories: Double = 0
+    var protein: Double = 0
+    var carbs: Double = 0
+    var fat: Double = 0
+    var fiber: Double = 0
 
-    var isManualOverride: Bool
+    var isManualOverride: Bool = false
 
     var logNote: String?
 

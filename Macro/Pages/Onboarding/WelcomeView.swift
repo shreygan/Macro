@@ -8,6 +8,9 @@
 import SwiftUI
 
 struct WelcomeView: View {
+    var isRestoring = false
+    var restoringMessage: LocalizedStringKey = "Restoring from iCloud…"
+
     @State private var revealedProgress: CGFloat = 0
     @State private var dragDelta: CGFloat = 0
     @State private var isDragging = false
@@ -74,7 +77,6 @@ struct WelcomeView: View {
                         }
                         .font(.largeIcon)
                         .foregroundColor(.secondary)
-                        .padding(.bottom, 40)
                         .phaseAnimator([false, true]) { content, floating in
                             content.offset(
                                 y: isDragging ? 0 : (floating ? -8 : 8)
@@ -82,8 +84,20 @@ struct WelcomeView: View {
                         } animation: { _ in
                             isDragging ? nil : .easeInOut(duration: 1.0)
                         }
+                        .opacity(isRestoring ? 0 : 1)
+                        .overlay {
+                            VStack(spacing: 12) {
+                                ProgressView()
+                                Text(restoringMessage)
+                                    .font(.statusLabel)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .fixedSize()
+                            .opacity(isRestoring ? 1 : 0)
+                        }
+                        .padding(.bottom, 40)
 
-                        Text("by Shrey and Priyanka")
+                        Text("by Shrey")
                             .font(.detail)
                             .foregroundColor(.secondary)
                             .padding(.bottom)
@@ -92,10 +106,18 @@ struct WelcomeView: View {
                 .offset(y: -p * height)
             }
             .background(Color(UIColor.systemBackground).ignoresSafeArea())
+            .animation(.easeInOut, value: isRestoring)
+            .onChange(of: isRestoring) {
+                guard isRestoring else { return }
+                withAnimation(anim) {
+                    dragDelta = .zero
+                    revealedProgress = 0
+                }
+            }
             .simultaneousGesture(
                 DragGesture()
                     .onChanged { value in
-                        if isSliderActive { return }
+                        if isSliderActive || isRestoring { return }
 
                         if !isDragging {
                             isDragging = true
@@ -115,7 +137,7 @@ struct WelcomeView: View {
                         }
                     }
                     .onEnded { value in
-                        if isSliderActive { return }
+                        if isSliderActive || isRestoring { return }
 
                         let currentDragEnd = revealedProgress + dragDelta
                         let predicted =

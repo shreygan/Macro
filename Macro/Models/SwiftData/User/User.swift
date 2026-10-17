@@ -10,8 +10,9 @@ import SwiftData
 
 @Model
 class User {
+    var id: UUID = UUID()
     var name: String?
-    var onboardingComplete: Bool
+    var onboardingComplete: Bool = false
     var dayStartMinutes: Int = 0
     var dayCircleModeRawValue: String = DayCircleMode.goalProgress.rawValue
     var dayCircleGoalRawValue: String = DayCircleGoal.calories.rawValue
