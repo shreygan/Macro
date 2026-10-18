@@ -32,4 +32,19 @@ struct DraftLogEntry: Identifiable, Equatable {
     var duplicateOf: UUID?
 
     var entryType: EntryType? { EntryType(rawValue: typeRawValue) }
+
+    var hasMacroIssue: Bool {
+        guard importID == nil else { return false }
+        let values = MacroSanityCheck.Values(
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            fiber: fiber
+        )
+        return MacroSanityCheck.issue(
+            for: values,
+            scope: entryType == .recipe ? .sizeOnly : .full
+        ) != nil
+    }
 }

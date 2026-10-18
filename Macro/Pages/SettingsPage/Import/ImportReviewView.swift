@@ -269,6 +269,17 @@ struct ImportReviewView: View {
                     }
                 }
 
+                let macroIssueCount = itemsToSave.filter(\.hasMacroIssue).count
+                if macroIssueCount > 0 {
+                    BaseRowLayout(
+                        icon: .customSymbol("exclamationmark.triangle.fill", tint: .orange),
+                        title: "Check Macros",
+                        subtitle: "Values that look off are tagged below"
+                    ) {
+                        Text("\(macroIssueCount)")
+                    }
+                }
+
                 if !duplicateItems.isEmpty {
                     Button {
                         issueKindToShow = .duplicate
@@ -366,6 +377,7 @@ struct ImportReviewView: View {
         ) {
             beginEditing(item)
         }
+        .nameTag(item.hasMacroIssue ? "Check Macros" : nil)
     }
 
     private func beginEditing(_ item: DraftFoodItem) {
@@ -401,6 +413,7 @@ struct ImportReviewView: View {
             result.ingredients = original.ingredients
         }
         if original.type == .recipe { result.type = .recipe }
+        result.macrosReviewed = true
 
         return result
     }
