@@ -17,6 +17,7 @@ struct LocationRow: View {
     var isEnabled: Bool = true
     var promptsForPermission: Bool = true
     var nearbyName: String? = nil
+    var onShowOnMap: (() -> Void)? = nil
 
     @Environment(\.modelContext) private var modelContext
     @State private var isPickerPresented = false
@@ -54,6 +55,11 @@ struct LocationRow: View {
         return here.distance(from: there) <= radius
     }
 
+    private var mappedPlace: EntryLocation? {
+        guard case .place(let place) = selection, place.hasCoordinate else { return nil }
+        return place
+    }
+
     var body: some View {
         BaseRowLayout(title: title, fitsRightContent: true) {
             LocationPill(
@@ -61,7 +67,11 @@ struct LocationRow: View {
                 showsPermissionPrompt: showsPermissionPrompt,
                 isEnabled: isEnabled,
                 isHere: isAtSelectedPlace,
-                action: handleTap
+                action: handleTap,
+                onShowOnMap: mappedPlace == nil ? nil : onShowOnMap,
+                onOpenInMaps: mappedPlace.map { place in
+                    { Task { await place.openInMaps() } }
+                }
             )
         }
         .sheet(isPresented: $isPickerPresented) {

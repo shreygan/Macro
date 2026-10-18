@@ -17,6 +17,7 @@ struct LoggedEntryDetailView: View {
     var isPushedView: Bool = true
     var isReadOnly: Bool = false
     var showsLibraryLink: Bool = true
+    var showsMapLink: Bool = true
     private let dismissesAfterEditing: Bool
 
     @State private var isEditing: Bool = false
@@ -24,6 +25,7 @@ struct LoggedEntryDetailView: View {
     @State private var popAfterLogAgain = false
     @State private var showAddToLibrary = false
     @State private var foodToView: FoodItem? = nil
+    @State private var showingMap = false
     @State private var isDismissing = false
     @State private var savePrompt: SavePromptStep?
 
@@ -90,12 +92,14 @@ struct LoggedEntryDetailView: View {
         isPushedView: Bool = true,
         isReadOnly: Bool = false,
         showsLibraryLink: Bool = true,
+        showsMapLink: Bool = true,
         startsEditing: Bool = false
     ) {
         self.entry = entry
         self.isPushedView = isPushedView
         self.isReadOnly = isReadOnly
         self.showsLibraryLink = showsLibraryLink
+        self.showsMapLink = showsMapLink
         self.dismissesAfterEditing = startsEditing && !isReadOnly
         _isEditing = State(initialValue: dismissesAfterEditing)
 
@@ -170,6 +174,15 @@ struct LoggedEntryDetailView: View {
 
     private var showsPhotoCard: Bool {
         isEditing || !selectedPhotos.isEmpty
+    }
+
+    private var mappedLocation: EntryLocation? {
+        guard let location = entry.location, location.hasCoordinate else { return nil }
+        return location.withoutMapPin
+    }
+
+    private var canShowOnMap: Bool {
+        showsMapLink && !isReadOnly && entry.originalFoodItem != nil && mappedLocation != nil
     }
 
     private var showsNotesCard: Bool {
@@ -327,7 +340,8 @@ struct LoggedEntryDetailView: View {
                                 photos: selectedPhotos,
                                 logDate: date,
                                 isEnabled: isEditing,
-                                promptsForPermission: false
+                                promptsForPermission: false,
+                                onShowOnMap: canShowOnMap ? { showingMap = true } : nil
                             )
                         }
                     }
@@ -504,6 +518,11 @@ struct LoggedEntryDetailView: View {
                     currentEntryID: entry.id,
                     isPushedView: true
                 )
+            }
+        }
+        .navigationDestination(isPresented: $showingMap) {
+            if let food = entry.originalFoodItem, let place = mappedLocation {
+                FoodLocationsMapView(food: food, initialPlace: place)
             }
         }
         .navigationDestination(isPresented: $showingAllPhotos) {
