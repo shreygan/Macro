@@ -867,35 +867,33 @@ struct LogRecipeView: View {
                     .padding([.leading, .trailing])
 
                     Card("Ingredients") {
-                        RowGroup(.divider) {
-                            ForEach($draftIngredients) { $draft in
-                                IngredientRowView(
-                                    draft: $draft,
-                                    portionUnitOptions: portionUnitOptions,
-                                    shouldShowIngredientIcons:
-                                        shouldShowIngredientIcons,
-                                    onDelete: {
-                                        if let index =
-                                            draftIngredients.firstIndex(
-                                                where: { $0.id == draft.id }
+                        ReorderableRows(items: $draftIngredients) { $draft in
+                            IngredientRowView(
+                                draft: $draft,
+                                portionUnitOptions: portionUnitOptions,
+                                shouldShowIngredientIcons:
+                                    shouldShowIngredientIcons,
+                                onDelete: {
+                                    if let index =
+                                        draftIngredients.firstIndex(
+                                            where: { $0.id == draft.id }
+                                        )
+                                    {
+                                        withAnimation(.snappy) {
+                                            _ = draftIngredients.remove(
+                                                at: index
                                             )
-                                        {
-                                            withAnimation(.snappy) {
-                                                _ = draftIngredients.remove(
-                                                    at: index
-                                                )
-                                            }
                                         }
                                     }
-                                )
-                            }
-                        } bottomContent: {
-                            ButtonRow(
-                                icon: .customSymbol("plus.circle.fill"),
-                                title: "Add Ingredient"
-                            ) {
-                                showIngredientSelectionSheet = true
-                            }
+                                }
+                            )
+                        }
+
+                        ButtonRow(
+                            icon: .customSymbol("plus.circle.fill"),
+                            title: "Add Ingredient"
+                        ) {
+                            showIngredientSelectionSheet = true
                         }
                     }
                     .padding([.top, .leading, .trailing])

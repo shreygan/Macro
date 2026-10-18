@@ -88,7 +88,7 @@ struct IngredientRowView: View {
         }
 
         // Swipe-to-delete is only available when editable
-        Group {
+        ZStack {
             if isEnabled {
                 CustomSwipeRow {
                     mealRow
@@ -100,11 +100,5 @@ struct IngredientRowView: View {
             }
         }
         .animation(.snappy(duration: 0.3), value: isEnabled)
-        .transition(
-            .asymmetric(
-                insertion: .identity,
-                removal: .opacity.combined(with: .scale(scale: 0.9))
-            )
-        )
     }
 }

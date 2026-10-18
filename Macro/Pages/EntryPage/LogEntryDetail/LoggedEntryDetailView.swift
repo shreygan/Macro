@@ -390,29 +390,27 @@ struct LoggedEntryDetailView: View {
 
                     if isRecipe && (isEditing || !draftIngredients.isEmpty) {
                         Card("Ingredients") {
-                            RowGroup(.divider) {
-                                ForEach($draftIngredients) { $draft in
-                                    IngredientRowView(
-                                        draft: $draft,
-                                        portionUnitOptions: portionUnitOptions,
-                                        shouldShowIngredientIcons:
-                                            shouldShowIngredientIcons,
-                                        isEnabled: isEditing,
-                                        onDelete: {
-                                            draftIngredients.removeAll {
-                                                $0.id == draft.id
-                                            }
+                            ReorderableRows(items: $draftIngredients, isEnabled: isEditing) { $draft in
+                                IngredientRowView(
+                                    draft: $draft,
+                                    portionUnitOptions: portionUnitOptions,
+                                    shouldShowIngredientIcons:
+                                        shouldShowIngredientIcons,
+                                    isEnabled: isEditing,
+                                    onDelete: {
+                                        draftIngredients.removeAll {
+                                            $0.id == draft.id
                                         }
-                                    )
-                                }
-                            } bottomContent: {
-                                if isEditing {
-                                    ButtonRow(
-                                        icon: .customSymbol("plus.circle.fill"),
-                                        title: "Add Ingredient"
-                                    ) {
-                                        showIngredientSelectionSheet = true
                                     }
+                                )
+                            }
+
+                            if isEditing {
+                                ButtonRow(
+                                    icon: .customSymbol("plus.circle.fill"),
+                                    title: "Add Ingredient"
+                                ) {
+                                    showIngredientSelectionSheet = true
                                 }
                             }
                         }

@@ -69,7 +69,6 @@ struct EditRecipeView: View {
 
     @State private var focusManager = SwipeFocusManager()
 
-    @State private var localIngredientToEdit: DraftRecipeIngredient?
     @State private var globalFoodItemToEdit: FoodItem?
 
     private static func exactString(for value: Double?) -> String {
@@ -597,95 +596,81 @@ struct EditRecipeView: View {
                     .padding([.top, .leading, .trailing])
 
                     Card("Ingredients") {
-                        RowGroup(.divider) {
-                            ForEach($draftIngredients) { $draft in
-                                let unitConversionBinding = Binding<String>(
-                                    get: { draft.unit },
-                                    set: { draft.updateUnit(to: $0) }
-                                )
+                        ReorderableRows(items: $draftIngredients) { $draft in
+                            let unitConversionBinding = Binding<String>(
+                                get: { draft.unit },
+                                set: { draft.updateUnit(to: $0) }
+                            )
 
-                                CustomSwipeRow {
-                                    MealRow(
-                                        name: draft.name,
-                                        source: draft.displaySource,
-                                        isCustomDefaultServing: draft
-                                            .isCustomDefaultServing,
-                                        customServingSize: EntryHelper.format(
-                                            draft.activeMultiplier
-                                                * draft.baseServingSize
-                                        ),
-                                        servingSize: EntryHelper.format(
-                                            draft.activeMultiplier
-                                                * draft.baseServingSize
-                                        ),
-                                        servingSizeUnit: draft.servingUnitName,
-                                        servingWeight: EntryHelper.format(
-                                            draft.activeWeight
-                                        ),
-                                        servingWeightUnit: draft
-                                            .baseServingWeightUnit,
-                                        servingUnits: servingUnits,
-                                        calorie: EntryHelper.format(
-                                            draft.activeCalories
-                                        ),
-                                        protein: EntryHelper.format(
-                                            draft.activeProtein
-                                        ),
-                                        carbs: EntryHelper.format(
-                                            draft.activeCarbs
-                                        ),
-                                        fat: EntryHelper.format(
-                                            draft.activeFat
-                                        ),
-                                        fiber: EntryHelper.format(
-                                            draft.activeFiber
-                                        ),
-                                        icon: shouldShowIngredientIcons
-                                            ? draft.displayType.appSymbol : nil
-                                    ) {
-                                        HStack(spacing: 8) {
-                                            InputPill(
-                                                text: $draft.quantity,
-                                                keyboardType: .decimalPad
-                                            )
-                                            DropdownPill(
-                                                options: draft.unitOptions,
-                                                displayCustomOption: false,
-                                                selection: unitConversionBinding
-                                            )
-                                        }
-                                    }
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        localIngredientToEdit = draft
-                                    }
-                                } onDelete: {
-                                    if let index = draftIngredients.firstIndex(
-                                        where: { $0.id == draft.id })
-                                    {
-                                        withAnimation(.snappy) {
-                                            _ = draftIngredients.remove(
-                                                at: index
-                                            )
-                                        }
+                            CustomSwipeRow {
+                                MealRow(
+                                    name: draft.name,
+                                    source: draft.displaySource,
+                                    isCustomDefaultServing: draft
+                                        .isCustomDefaultServing,
+                                    customServingSize: EntryHelper.format(
+                                        draft.activeMultiplier
+                                            * draft.baseServingSize
+                                    ),
+                                    servingSize: EntryHelper.format(
+                                        draft.activeMultiplier
+                                            * draft.baseServingSize
+                                    ),
+                                    servingSizeUnit: draft.servingUnitName,
+                                    servingWeight: EntryHelper.format(
+                                        draft.activeWeight
+                                    ),
+                                    servingWeightUnit: draft
+                                        .baseServingWeightUnit,
+                                    servingUnits: servingUnits,
+                                    calorie: EntryHelper.format(
+                                        draft.activeCalories
+                                    ),
+                                    protein: EntryHelper.format(
+                                        draft.activeProtein
+                                    ),
+                                    carbs: EntryHelper.format(
+                                        draft.activeCarbs
+                                    ),
+                                    fat: EntryHelper.format(
+                                        draft.activeFat
+                                    ),
+                                    fiber: EntryHelper.format(
+                                        draft.activeFiber
+                                    ),
+                                    icon: shouldShowIngredientIcons
+                                        ? draft.displayType.appSymbol : nil
+                                ) {
+                                    HStack(spacing: 8) {
+                                        InputPill(
+                                            text: $draft.quantity,
+                                            keyboardType: .decimalPad
+                                        )
+                                        DropdownPill(
+                                            options: draft.unitOptions,
+                                            displayCustomOption: false,
+                                            selection: unitConversionBinding
+                                        )
                                     }
                                 }
-                                .transition(
-                                    .asymmetric(
-                                        insertion: .identity,
-                                        removal: .opacity.combined(
-                                            with: .scale(scale: 0.9)
+                            } onDelete: {
+                                if let index = draftIngredients.firstIndex(
+                                    where: { $0.id == draft.id })
+                                {
+                                    withAnimation(.snappy) {
+                                        _ = draftIngredients.remove(
+                                            at: index
                                         )
-                                    )
-                                )
+                                    }
+                                }
                             }
-                        } bottomContent: {
-                            ButtonRow(
-                                icon: .customSymbol("plus.circle.fill"),
-                                title: "Add Ingredient"
-                            ) {
-                                showIngredientSelectionSheet = true
-                            }
+                        }
+
+                        ButtonRow(
+                            icon: .customSymbol("plus.circle.fill"),
+                            title: "Add Ingredient"
+                        ) {
+                            showIngredientSelectionSheet = true
                         }
                     }
                     .padding([.top, .leading, .trailing])
@@ -735,13 +720,6 @@ struct EditRecipeView: View {
                     )
                 }
             }
-            //            .sheet(item: $localIngredientToEdit) { draftItem in // TODO: PLEASE GET RID OF THIS FULLY
-            //                if let index = draftIngredients.firstIndex(where: {
-            //                    $0.id == draftItem.id
-            //                }) {
-            //                    EditRecipeIngredientView(draft: $draftIngredients[index])
-            //                }
-            //            }
             .toolbar {
                 if !isPushedView {
                     ToolbarItem(placement: .topBarLeading) {
