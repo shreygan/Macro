@@ -69,9 +69,7 @@ struct LogRecipeView: View {
     @State private var focusManager = SwipeFocusManager()
 
     @State private var stickyNote: String
-    private let stickyNoteDate: Date?
-
-    private let originalNoteText: String
+    @State private var pinnedNoteBase: String
 
     @State private var newNote: String
 
@@ -97,7 +95,7 @@ struct LogRecipeView: View {
     private var hasChangedFromOriginal: Bool {
         isEdited
             || name != recipe.name
-            || stickyNote != originalNoteText
+            || stickyNote != pinnedNoteBase
             || !newNote.isEmpty
             || !selectedPhotos.isEmpty
     }
@@ -108,11 +106,11 @@ struct LogRecipeView: View {
     }
 
     private var hasPinnedNoteChanged: Bool {
-        resolvedPinnedNote != recipe.stickyNote?.text
+        stickyNote != pinnedNoteBase && resolvedPinnedNote != recipe.stickyNote?.text
     }
 
     private var pinnedNoteUpdated: Date? {
-        stickyNote == originalNoteText ? stickyNoteDate : .now
+        stickyNote == pinnedNoteBase ? recipe.stickyNote?.lastUpdated : .now
     }
 
     var mappedSourceOptions: [String] {
@@ -556,7 +554,8 @@ struct LogRecipeView: View {
             ingredients: draftIngredients.map { DraftIngredientSnapshot($0) },
             notes: DraftNoteState(
                 stickyNote: stickyNote,
-                newNote: newNote
+                newNote: newNote,
+                pinnedBase: pinnedNoteBase
             ),
             saveOptionRawValue: saveOption.rawValue
         )
@@ -729,9 +728,9 @@ struct LogRecipeView: View {
             } ?? existingIngredients
         )
 
-        self.originalNoteText = recipe.stickyNote?.text ?? ""
-        _stickyNote = State(initialValue: originalNoteText)
-        self.stickyNoteDate = recipe.stickyNote?.lastUpdated
+        let currentPinnedNote = recipe.stickyNote?.text ?? ""
+        _stickyNote = State(initialValue: currentPinnedNote)
+        _pinnedNoteBase = State(initialValue: currentPinnedNote)
 
         _newNote = State(initialValue: "")
 
@@ -774,7 +773,12 @@ struct LogRecipeView: View {
                 }
             )
 
-            _stickyNote = State(initialValue: state.notes.stickyNote)
+            if state.notes.stickyNote != state.notes.pinnedBase {
+                _stickyNote = State(initialValue: state.notes.stickyNote)
+                _pinnedNoteBase = State(
+                    initialValue: state.notes.pinnedBase ?? currentPinnedNote
+                )
+            }
             _newNote = State(initialValue: state.notes.newNote)
 
             _selectedPhotos = State(
@@ -964,7 +968,8 @@ struct LogRecipeView: View {
                                         initialPortionUnitSelection
                                     locationSelection = initialLocationSelection
 
-                                    stickyNote = originalNoteText
+                                    stickyNote = recipe.stickyNote?.text ?? ""
+                                    pinnedNoteBase = stickyNote
                                     newNote = ""
 
                                     selectedPhotos = []
@@ -1044,6 +1049,13 @@ struct LogRecipeView: View {
             if newPhase == .background && !didFinishLogging {
                 autoSaveDraft()
             }
+        }
+        .onChange(of: recipe.stickyNote?.text) { _, text in
+            guard stickyNote == pinnedNoteBase else { return }
+            stickyNote = text ?? ""
+            pinnedNoteBase = stickyNote
+            initialDraftState?.notes.stickyNote = stickyNote
+            initialDraftState?.notes.pinnedBase = stickyNote
         }
         .onLeave { handleClose() }
         .onDisappear { handleClose() }

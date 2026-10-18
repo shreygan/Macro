@@ -70,9 +70,7 @@ struct LogEntryView: View {
     @State private var manualOverrideToggle: Bool
 
     @State private var stickyNote: String
-    private let stickyNoteDate: Date?
-
-    private let originalNoteText: String
+    @State private var pinnedNoteBase: String
 
     @State private var newNote: String
 
@@ -113,7 +111,7 @@ struct LogEntryView: View {
             || name != food.name
             || portionQuantity != originalPortionQuantity
             || portionUnitSelection != originalPortionUnitSelection
-            || stickyNote != originalNoteText
+            || stickyNote != pinnedNoteBase
             || !newNote.isEmpty
             || !selectedPhotos.isEmpty
     }
@@ -124,11 +122,11 @@ struct LogEntryView: View {
     }
 
     private var hasPinnedNoteChanged: Bool {
-        resolvedPinnedNote != food.stickyNote?.text
+        stickyNote != pinnedNoteBase && resolvedPinnedNote != food.stickyNote?.text
     }
 
     private var pinnedNoteUpdated: Date? {
-        stickyNote == originalNoteText ? stickyNoteDate : .now
+        stickyNote == pinnedNoteBase ? food.stickyNote?.lastUpdated : .now
     }
 
     var mappedSourceOptions: [String] {
@@ -508,7 +506,8 @@ struct LogEntryView: View {
             manualOverrideToggle: manualOverrideToggle,
             notes: DraftNoteState(
                 stickyNote: stickyNote,
-                newNote: newNote
+                newNote: newNote,
+                pinnedBase: pinnedNoteBase
             ),
             saveOptionRawValue: saveOption.rawValue
         )
@@ -714,9 +713,9 @@ struct LogEntryView: View {
             initialValue: previousEntry?.isManualOverride ?? false
         )
 
-        self.originalNoteText = food.stickyNote?.text ?? ""
-        _stickyNote = State(initialValue: originalNoteText)
-        self.stickyNoteDate = food.stickyNote?.lastUpdated
+        let currentPinnedNote = food.stickyNote?.text ?? ""
+        _stickyNote = State(initialValue: currentPinnedNote)
+        _pinnedNoteBase = State(initialValue: currentPinnedNote)
 
         _newNote = State(initialValue: "")
 
@@ -788,7 +787,12 @@ struct LogEntryView: View {
             _fatDynamic = State(initialValue: dynamicMacros.fat)
             _fiberDynamic = State(initialValue: dynamicMacros.fiber)
 
-            _stickyNote = State(initialValue: state.notes.stickyNote)
+            if state.notes.stickyNote != state.notes.pinnedBase {
+                _stickyNote = State(initialValue: state.notes.stickyNote)
+                _pinnedNoteBase = State(
+                    initialValue: state.notes.pinnedBase ?? currentPinnedNote
+                )
+            }
             _newNote = State(initialValue: state.notes.newNote)
 
             _selectedPhotos = State(
@@ -1079,7 +1083,8 @@ struct LogEntryView: View {
                                     fatDynamic = fat
                                     fiberDynamic = fiber
 
-                                    stickyNote = originalNoteText
+                                    stickyNote = food.stickyNote?.text ?? ""
+                                    pinnedNoteBase = stickyNote
                                     newNote = ""
 
                                     selectedPhotos = []
@@ -1235,6 +1240,13 @@ struct LogEntryView: View {
             if newPhase == .background && !didFinishLogging {
                 autoSaveDraft()
             }
+        }
+        .onChange(of: food.stickyNote?.text) { _, text in
+            guard stickyNote == pinnedNoteBase else { return }
+            stickyNote = text ?? ""
+            pinnedNoteBase = stickyNote
+            initialDraftState?.notes.stickyNote = stickyNote
+            initialDraftState?.notes.pinnedBase = stickyNote
         }
         .onLeave { handleClose() }
         .onDisappear { handleClose() }
