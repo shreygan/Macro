@@ -391,18 +391,26 @@ enum LoggedEntryUpdater {
     ) -> Bool {
         guard children.count == ingredients.count else { return false }
 
-        return zip(children, ingredients).allSatisfy { child, ingredient in
-            let isSameItem =
-                ingredient.itemID == nil
-                ? child.originalFoodItem == nil && child.name == ingredient.name
-                : child.originalFoodItem?.id == ingredient.itemID
-            return isSameItem
-                && child.loggedUnit == ingredient.unit
-                && isClose(
-                    child.loggedQuantity,
-                    ingredient.quantity * multiplier
-                )
+        var unmatched = ingredients
+        for child in children {
+            guard
+                let index = unmatched.firstIndex(where: { ingredient in
+                    let isSameItem =
+                        ingredient.itemID == nil
+                        ? child.originalFoodItem == nil
+                            && child.name == ingredient.name
+                        : child.originalFoodItem?.id == ingredient.itemID
+                    return isSameItem
+                        && child.loggedUnit == ingredient.unit
+                        && isClose(
+                            child.loggedQuantity,
+                            ingredient.quantity * multiplier
+                        )
+                })
+            else { return false }
+            unmatched.remove(at: index)
         }
+        return true
     }
 
     private static func isClose(_ lhs: Double, _ rhs: Double) -> Bool {
