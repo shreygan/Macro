@@ -1390,6 +1390,7 @@ private struct FoodLogsContent: View {
             LoggedEntryDetailView(
                 entry: selection.entry,
                 showsLibraryLink: false,
+                showsMapLink: showsMapButton,
                 startsEditing: selection.startsEditing
             )
         }
