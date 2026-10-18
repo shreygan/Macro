@@ -25,6 +25,7 @@ struct LoggedEntryDetailView: View {
     @State private var showAddToLibrary = false
     @State private var foodToView: FoodItem? = nil
     @State private var isDismissing = false
+    @State private var savePrompt: SavePromptStep?
 
     @Query(sort: \EntrySource.displayOrder) var sourceOptions: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var categoryOptions:
@@ -590,21 +591,17 @@ struct LoggedEntryDetailView: View {
                 if isEditing {
                     Button {
                         UIApplication.shared.dismissKeyboard()
-                        if dismissesAfterEditing {
-                            if saveChanges() { dismiss() }
-                            return
-                        }
-                        withAnimation {
-                            if saveChanges() {
-                                isEditing = false
-                            }
-                        }
+                        attemptSave()
                     } label: {
                         Image(systemName: "checkmark")
                     }
                     .accessibilityLabel("Save Changes")
                     .fontWeight(.semibold)
                     .disabled(isLoadingPhotos)
+                    .savePromptPopover(
+                        $savePrompt,
+                        dismissesScreen: dismissesAfterEditing && !isPushedView
+                    )
                 } else if !isReadOnly {
                     Menu {
                         if let originalFood = entry.originalFoodItem {
@@ -768,6 +765,45 @@ struct LoggedEntryDetailView: View {
         carbsDynamic = carbs
         fatDynamic = fat
         fiberDynamic = fiber
+    }
+
+    private func attemptSave() {
+        let macrosChanged =
+            [calorie, protein, carbs, fat]
+            != [entry.calories, entry.protein, entry.carbs, entry.fat].map {
+                EntryHelper.format($0)
+            }
+        let issue =
+            macrosChanged
+            ? MacroSanityCheck.issue(
+                for: MacroSanityCheck.Values(
+                    calories: calorie,
+                    protein: protein,
+                    carbs: carbs,
+                    fat: fat,
+                    fiber: fiber,
+                    weight: activeServingWeight.map { $0 * activeMultiplier },
+                    weightUnit: baseServingWeightUnit
+                ),
+                scope: manualOverrideToggle ? .full : .sizeOnly
+            ) : nil
+        if let issue {
+            savePrompt = .macroCheck(issue, confirmTitle: "Save Anyway", onConfirm: commitChanges)
+        } else {
+            commitChanges()
+        }
+    }
+
+    private func commitChanges() {
+        if dismissesAfterEditing {
+            if saveChanges() { dismiss() }
+            return
+        }
+        withAnimation {
+            if saveChanges() {
+                isEditing = false
+            }
+        }
     }
 
     private func saveChanges() -> Bool {
@@ -959,6 +995,7 @@ struct LoggedEntryDetailView: View {
                 .failure(String(localized: "Couldn't Save Changes"), message: name)
             )
             modelContext.rollback()
+            savePrompt = nil
             return false
         }
     }
@@ -1006,6 +1043,7 @@ struct LoggedEntryDetailView: View {
             return true
         } catch {
             modelContext.rollback()
+            savePrompt = nil
             toastCenter?.show(.failure(failureTitle))
             return false
         }

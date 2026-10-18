@@ -58,7 +58,9 @@ struct LogRecipeView: View {
 
     @State private var draftID: UUID
     private let isResumedDraft: Bool
+    private let previousMacros: MacroSanityCheck.Values?
     @State private var didFinishLogging = false
+    @State private var savePrompt: SavePromptStep?
 
     @State private var initialDraftState: LogRecipeDraftState?
     @State private var initialPhotoData: [Data] = []
@@ -246,6 +248,26 @@ struct LogRecipeView: View {
     private func parseDouble(_ string: String) -> Double {
         let normalized = string.replacingOccurrences(of: ",", with: ".")
         return Double(normalized) ?? 0.0
+    }
+
+    private func attemptSave() {
+        let values = MacroSanityCheck.Values(
+            calories: displayCalories,
+            protein: displayProtein,
+            carbs: displayCarbs,
+            fat: displayFat
+        )
+        let isDefaultLog =
+            values.hasSameMacros(as: previousMacros)
+            || values.hasSameMacros(
+                as: .init(recipe, multiplier: EntryHelper.defaultPortionMultiplier(for: recipe))
+            )
+        let issue = isDefaultLog ? nil : MacroSanityCheck.issue(for: values, scope: .sizeOnly)
+        if let issue {
+            savePrompt = .macroCheck(issue, confirmTitle: "Log Anyway", onConfirm: saveEntry)
+        } else {
+            saveEntry()
+        }
     }
 
     private func saveEntry() {
@@ -515,6 +537,7 @@ struct LogRecipeView: View {
                 .failure(String(localized: "Couldn't Log Recipe"), message: mainLog.name)
             )
             modelContext.rollback()
+            savePrompt = nil
         }
     }
 
@@ -644,6 +667,7 @@ struct LogRecipeView: View {
         self.isPushedView = isPushedView
 
         _name = State(initialValue: previousEntry?.name ?? recipe.name)
+        self.previousMacros = previousEntry.map { MacroSanityCheck.Values($0) }
 
         let startSource = recipe.source?.source ?? ""
         let startCategory = recipe.category?.category ?? ""
@@ -969,7 +993,7 @@ struct LogRecipeView: View {
                 ToolbarItemGroup(placement: .topBarTrailing) {
 
                     Button {
-                        saveEntry()
+                        attemptSave()
                     } label: {
                         Image(systemName: "plus")
                             .foregroundStyle(.primary)
@@ -977,6 +1001,10 @@ struct LogRecipeView: View {
                     .tint(Color.accentColor)
                     .buttonStyle(.glassProminent)
                     .disabled(isLoadingPhotos)
+                    .savePromptPopover(
+                        $savePrompt,
+                        dismissesScreen: rootDismiss != nil || !isPushedView
+                    )
                 }
             }
             .safeAreaBar(edge: .top) {

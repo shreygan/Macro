@@ -60,6 +60,7 @@ struct AddEntryView: View {
     private let isResumedDraft: Bool
     private let initialDraftState: AddEntryDraftState
     @State private var didFinishAdding = false
+    @State private var savePrompt: SavePromptStep?
 
     init(
         entryType: EntryType,
@@ -236,6 +237,27 @@ struct AddEntryView: View {
         )
     }
 
+    private func attemptAdd() {
+        let issue = MacroSanityCheck.issue(
+            for: MacroSanityCheck.Values(
+                calories: calorieValue,
+                protein: proteinValue,
+                carbs: carbsValue,
+                fat: fatValue,
+                fiber: fiberValue,
+                weight: Double(
+                    servingWeight.replacingOccurrences(of: ",", with: ".")
+                ),
+                weightUnit: servingWeightUnit
+            )
+        )
+        if let issue {
+            savePrompt = .macroCheck(issue, confirmTitle: "Save Anyway", onConfirm: addEntry)
+        } else {
+            addEntry()
+        }
+    }
+
     private func addEntry() {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
@@ -404,6 +426,7 @@ struct AddEntryView: View {
                 .failure(String(localized: "Couldn't Save Food"), message: newEntry.name)
             )
             modelContext.rollback()
+            savePrompt = nil
         }
     }
 
@@ -615,7 +638,7 @@ struct AddEntryView: View {
                         ) ?? 0) <= 0
 
                     Button {
-                        addEntry()
+                        attemptAdd()
                     } label: {
                         Image(systemName: "plus")
                             .foregroundStyle(.primary)
@@ -623,6 +646,10 @@ struct AddEntryView: View {
                     .disabled(isAddDisabled)
                     .tint(Color.accentColor)
                     .buttonStyle(.glassProminent)
+                    .savePromptPopover(
+                        $savePrompt,
+                        dismissesScreen: offersLogNow && rootDismiss != nil
+                    )
                 }
             }
             .safeAreaBar(edge: .top) {

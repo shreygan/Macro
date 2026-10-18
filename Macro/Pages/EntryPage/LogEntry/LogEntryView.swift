@@ -53,6 +53,7 @@ struct LogEntryView: View {
     private let carbsStatic: String
     private let fatStatic: String
     private let fiberStatic: String
+    private let previousMacros: MacroSanityCheck.Values?
 
     @State private var calorieDynamic: String
     @State private var proteinDynamic: String
@@ -94,6 +95,7 @@ struct LogEntryView: View {
     @State private var draftID: UUID
     private let isResumedDraft: Bool
     @State private var didFinishLogging = false
+    @State private var savePrompt: SavePromptStep?
 
     @State private var initialDraftState: LogEntryDraftState?
     @State private var initialPhotoData: [Data] = []
@@ -213,6 +215,42 @@ struct LogEntryView: View {
     private func parseDouble(_ string: String) -> Double {
         let normalized = string.replacingOccurrences(of: ",", with: ".")
         return Double(normalized) ?? 0.0
+    }
+
+    private func attemptSave() {
+        let values = MacroSanityCheck.Values(
+            calories: calorie,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            fiber: fiber,
+            weight: food.servingWeight.map { $0 * activeMultiplier },
+            weightUnit: food.servingWeightUnit
+        )
+        let matchesPrevious = values.hasSameMacros(as: previousMacros)
+        let isUntouched =
+            matchesPrevious
+            || values.hasSameMacros(as: .init(food, multiplier: activeMultiplier))
+        let isDefaultLog =
+            matchesPrevious
+            || values.hasSameMacros(
+                as: .init(food, multiplier: EntryHelper.defaultPortionMultiplier(for: food))
+            )
+
+        let issue: String?
+        if manualOverrideToggle && !isUntouched {
+            issue = MacroSanityCheck.issue(for: values)
+        } else if isDefaultLog {
+            issue = nil
+        } else {
+            issue = MacroSanityCheck.issue(for: values, scope: .sizeOnly)
+        }
+
+        if let issue {
+            savePrompt = .macroCheck(issue, confirmTitle: "Log Anyway", onConfirm: saveEntry)
+        } else {
+            saveEntry()
+        }
     }
 
     private func saveEntry() {
@@ -436,6 +474,7 @@ struct LogEntryView: View {
                 .failure(String(localized: "Couldn't Log Entry"), message: newLog.name)
             )
             modelContext.rollback()
+            savePrompt = nil
         }
     }
 
@@ -639,6 +678,7 @@ struct LogEntryView: View {
         self.carbsStatic = carbStr
         self.fatStatic = fatStr
         self.fiberStatic = fibStr
+        self.previousMacros = previousEntry.map { MacroSanityCheck.Values($0) }
 
         let defaultMultiplier = EntryHelper.defaultPortionMultiplier(for: food)
 
@@ -1065,7 +1105,7 @@ struct LogEntryView: View {
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
-                        saveEntry()
+                        attemptSave()
                     } label: {
                         Image(systemName: "plus")
                             .foregroundStyle(.primary)
@@ -1073,6 +1113,10 @@ struct LogEntryView: View {
                     .tint(Color.accentColor)
                     .buttonStyle(.glassProminent)
                     .disabled(isLoadingPhotos)
+                    .savePromptPopover(
+                        $savePrompt,
+                        dismissesScreen: rootDismiss != nil || !isPushedView
+                    )
                 }
             }
             .onChange(of: isEdited) { oldVal, newVal in

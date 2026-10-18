@@ -50,6 +50,7 @@ struct AddRecipeView: View {
     private let isResumedDraft: Bool
     @State private var didFinishAdding = false
     @State private var initialDraftState: AddRecipeDraftState?
+    @State private var savePrompt: SavePromptStep?
 
     init(
         offersLogNow: Bool = false,
@@ -260,6 +261,23 @@ struct AddRecipeView: View {
         return isNameValid && hasIngredients && hasServingSize
     }
 
+    private func attemptAdd() {
+        let issue = MacroSanityCheck.issue(
+            for: MacroSanityCheck.Values(
+                calories: displayCalories,
+                protein: displayProtein,
+                carbs: displayCarbs,
+                fat: displayFat
+            ),
+            scope: .sizeOnly
+        )
+        if let issue {
+            savePrompt = .macroCheck(issue, confirmTitle: "Save Anyway", onConfirm: addRecipe)
+        } else {
+            addRecipe()
+        }
+    }
+
     private func addRecipe() {
         guard isRecipeValid else {
             print(
@@ -412,6 +430,7 @@ struct AddRecipeView: View {
                 .failure(String(localized: "Couldn't Save Recipe"), message: newRecipe.name)
             )
             modelContext.rollback()
+            savePrompt = nil
         }
     }
 
@@ -668,7 +687,7 @@ struct AddRecipeView: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        addRecipe()
+                        attemptAdd()
                     } label: {
                         Image(systemName: "plus")
                             .foregroundStyle(.primary)
@@ -676,6 +695,10 @@ struct AddRecipeView: View {
                     .disabled(!isRecipeValid)
                     .tint(Color.accentColor)
                     .buttonStyle(.glassProminent)
+                    .savePromptPopover(
+                        $savePrompt,
+                        dismissesScreen: (offersLogNow && rootDismiss != nil) || !isPushedView
+                    )
                 }
             }
             .safeAreaBar(edge: .top) {

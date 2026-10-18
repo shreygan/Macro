@@ -64,6 +64,8 @@ struct EditRecipeView: View {
     @State private var showIngredientSelectionSheet = false
 
     @State private var saveMode: EditRecipeSaveMode = .updateWithLogs
+    @State private var savePrompt: SavePromptStep?
+    @State private var initialMacroValues: MacroSanityCheck.Values?
 
     @State private var focusManager = SwipeFocusManager()
 
@@ -267,6 +269,27 @@ struct EditRecipeView: View {
         dismiss()
     }
 
+    private var portionMacroValues: MacroSanityCheck.Values {
+        MacroSanityCheck.Values(
+            calories: displayCalories,
+            protein: displayProtein,
+            carbs: displayCarbs,
+            fat: displayFat
+        )
+    }
+
+    private func attemptSave() {
+        let values = portionMacroValues
+        let issue =
+            !isImportMode && values == initialMacroValues
+            ? nil : MacroSanityCheck.issue(for: values, scope: .sizeOnly)
+        if let issue {
+            savePrompt = .macroCheck(issue, confirmTitle: "Save Anyway", onConfirm: saveRecipe)
+        } else {
+            saveRecipe()
+        }
+    }
+
     private func saveRecipe() {
         guard !isImportMode else {
             saveImportDraft()
@@ -420,6 +443,7 @@ struct EditRecipeView: View {
                     .failure(String(localized: "Couldn't Save Changes"), message: name)
                 )
                 modelContext.rollback()
+                savePrompt = nil
             }
 
         } else {
@@ -480,6 +504,7 @@ struct EditRecipeView: View {
                     .failure(String(localized: "Couldn't Save Copy"), message: name)
                 )
                 modelContext.rollback()
+                savePrompt = nil
             }
         }
     }
@@ -691,6 +716,11 @@ struct EditRecipeView: View {
                 }
             }
             .withCustomKeyboardToolbar()
+            .onAppear {
+                if initialMacroValues == nil {
+                    initialMacroValues = portionMacroValues
+                }
+            }
             .navigationTitle("Edit Recipe")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showIngredientSelectionSheet) {
@@ -748,7 +778,7 @@ struct EditRecipeView: View {
                     }
 
                     Button {
-                        saveRecipe()
+                        attemptSave()
                     } label: {
                         Image(systemName: "checkmark")
                             .foregroundStyle(.primary)
@@ -756,6 +786,10 @@ struct EditRecipeView: View {
                     .disabled(!isRecipeValid)
                     .tint(Color.accentColor)
                     .buttonStyle(.glassProminent)
+                    .savePromptPopover(
+                        $savePrompt,
+                        dismissesScreen: !isPushedView
+                    )
                 }
             }
             .safeAreaBar(edge: .top) {

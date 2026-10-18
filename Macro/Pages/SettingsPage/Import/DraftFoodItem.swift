@@ -37,6 +37,24 @@ struct DraftFoodItem: Identifiable, Equatable {
     var defaultLocation: EntryLocation? = nil
     var ingredients: [DraftImportIngredient] = []
     var duplicateOf: UUID? = nil
+    var macrosReviewed = false
+
+    var hasMacroIssue: Bool {
+        guard importID == nil, !macrosReviewed else { return false }
+        let values = MacroSanityCheck.Values(
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            fiber: fiber,
+            weight: servingWeight,
+            weightUnit: servingWeightUnit
+        )
+        return MacroSanityCheck.issue(
+            for: values,
+            scope: type == .recipe ? .sizeOnly : .full
+        ) != nil
+    }
 }
 
 struct DraftImportIngredient: Equatable {

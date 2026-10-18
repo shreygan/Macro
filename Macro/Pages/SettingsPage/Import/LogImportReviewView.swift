@@ -199,6 +199,18 @@ struct LogImportReviewView: View {
                     Text("\(newEntries.count)")
                 }
 
+                let macroIssueCount = entriesToSave.filter(\.hasMacroIssue).count
+                if macroIssueCount > 0 {
+                    BaseRowLayout(
+                        icon: .customSymbol("exclamationmark.triangle.fill", tint: .orange),
+                        title: "Check Macros",
+                        subtitle: "Values that look off are tagged below",
+                        info: "Delete a tagged log here, or fix it from its log after importing."
+                    ) {
+                        Text("\(macroIssueCount)")
+                    }
+                }
+
                 if !duplicateEntries.isEmpty {
                     Button {
                         issueKindToShow = .duplicate
@@ -294,6 +306,7 @@ struct LogImportReviewView: View {
             icon: entry.entryType.flatMap { $0 == .food ? nil : $0.appSymbol }
         )
         .location(entry.location?.name)
+        .nameTag(entry.hasMacroIssue ? "Check Macros" : nil)
         .attachmentHints(hasNote: !(entry.note ?? "").isEmpty, hasPhotos: false)
     }
 

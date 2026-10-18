@@ -64,8 +64,8 @@ struct EditEntryView: View {
     @State private var stickyNote: String
 
     @State private var saveMode: EditSaveMode = .updateWithLogs
-    @State private var showUpdateRecipesAlert: Bool = false
-    @State private var uniqueRecipesCount: Int = 0
+    @State private var savePrompt: SavePromptStep?
+    private let initialMacroValues: MacroSanityCheck.Values
 
     init(
         foodItem: FoodItem,
@@ -162,6 +162,131 @@ struct EditEntryView: View {
         let initialNoteText =
             draftItem?.stickyNote ?? foodItem.stickyNote?.text ?? ""
         _stickyNote = State(initialValue: initialNoteText)
+
+        let initialWeight = Self.exactString(
+            for: draftItem?.servingWeight ?? foodItem.servingWeight
+        )
+        self.initialMacroValues = MacroSanityCheck.Values(
+            calories: Self.exactString(for: draftItem?.calories ?? foodItem.calories),
+            protein: Self.exactString(for: draftItem?.protein ?? foodItem.protein),
+            carbs: Self.exactString(for: draftItem?.carbs ?? foodItem.carbs),
+            fat: Self.exactString(for: draftItem?.fat ?? foodItem.fat),
+            fiber: Self.exactString(for: draftItem?.fiber ?? foodItem.fiber),
+            weight: Double(initialWeight.replacingOccurrences(of: ",", with: ".")),
+            weightUnit: draftItem?.servingWeightUnit ?? foodItem.servingWeightUnit
+        )
+    }
+
+    private var macroValues: MacroSanityCheck.Values {
+        MacroSanityCheck.Values(
+            calories: calorieValue,
+            protein: proteinValue,
+            carbs: carbsValue,
+            fat: fatValue,
+            fiber: fiberValue,
+            weight: parseOptionalDouble(servingWeight),
+            weightUnit: servingWeightUnit
+        )
+    }
+
+    private func attemptSave() {
+        let values = macroValues
+        let issue =
+            !isImportMode && values == initialMacroValues
+            ? nil : MacroSanityCheck.issue(for: values)
+        let recipeCount =
+            isImportMode || saveMode == .copy ? 0 : recipeUsageCount()
+        let recipesStep = recipeCount > 0 ? updateRecipesStep(recipeCount: recipeCount) : nil
+
+        if let issue {
+            savePrompt = SavePromptStep(
+                title: String(localized: "Check Macros?"),
+                message: issue,
+                actions: [
+                    recipesStep.map {
+                        SavePromptAction(title: String(localized: "Save Anyway"), next: $0)
+                    } ?? SavePromptAction(title: String(localized: "Save Anyway"), action: confirmSave)
+                ]
+            )
+        } else if let recipesStep {
+            savePrompt = recipesStep
+        } else {
+            confirmSave()
+        }
+    }
+
+    private func updateRecipesStep(recipeCount: Int) -> SavePromptStep {
+        let isPlural = recipeCount > 1
+        return SavePromptStep(
+            title: String(localized: "Update Recipes?"),
+            message: isPlural
+                ? String(
+                    localized:
+                        "This item is used in \(recipeCount) recipes. Do you want to apply these changes to existing recipes, or leave them as is?"
+                )
+                : String(
+                    localized:
+                        "This item is used in a recipe. Do you want to apply these changes to that recipe, or leave it as is?"
+                ),
+            actions: [
+                SavePromptAction(
+                    title: isPlural
+                        ? String(localized: "Update All Recipes")
+                        : String(localized: "Update Recipe")
+                ) {
+                    performSave(cascade: true)
+                },
+                SavePromptAction(title: String(localized: "Keep Recipes Unchanged")) {
+                    performSave(cascade: false)
+                },
+            ]
+        )
+    }
+
+    private func recipeUsageCount() -> Int {
+        let allRecipeIngredients =
+            (try? modelContext.fetch(FetchDescriptor<RecipeIngredient>())) ?? []
+        let usages = allRecipeIngredients.filter {
+            $0.ingredientItem?.id == foodItem.id
+        }
+        return Set(usages.compactMap { $0.parentRecipe }).count
+    }
+
+    private func confirmSave() {
+        if isImportMode {
+            saveImportDraft()
+        } else {
+            performSave(cascade: false)
+        }
+    }
+
+    private func saveImportDraft() {
+        let trimmedNote = stickyNote.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+
+        let updatedDraft = DraftFoodItem(
+            type: type,
+            name: name,
+            source: source,
+            category: category,
+            foodGroup: foodGroup,
+            servingSize: parseDouble(servingSize),
+            servingUnit: servingSizeUnit,
+            servingWeight: parseOptionalDouble(servingWeight),
+            servingWeightUnit: servingWeightUnit,
+            isAIEstimated: isAIEstimated,
+            calories: parseDouble(calorieValue),
+            protein: parseDouble(proteinValue),
+            carbs: parseDouble(carbsValue),
+            fat: parseDouble(fatValue),
+            fiber: parseDouble(fiberValue),
+            isCustomDefaultServing: isCustomDefaultServing,
+            customServingSize: parseOptionalDouble(customServingSize),
+            stickyNote: trimmedNote
+        )
+        onImportSave?(updatedDraft)
+        dismiss()
     }
 
     private var activeMultiplier: Double {
@@ -360,6 +485,7 @@ struct EditEntryView: View {
                     .failure(String(localized: "Couldn't Save Changes"), message: name)
                 )
                 modelContext.rollback()
+                savePrompt = nil
             }
         } else {
             let resolvedStickyNote =
@@ -407,6 +533,7 @@ struct EditEntryView: View {
                     .failure(String(localized: "Couldn't Save Copy"), message: name)
                 )
                 modelContext.rollback()
+                savePrompt = nil
             }
         }
     }
@@ -617,36 +744,7 @@ struct EditEntryView: View {
                         }
 
                         Button {
-                            let trimmedNote = stickyNote.trimmingCharacters(
-                                in: .whitespacesAndNewlines
-                            )
-
-                            let updatedDraft = DraftFoodItem(
-                                type: type,
-                                name: name,
-                                source: source,
-                                category: category,
-                                foodGroup: foodGroup,
-                                servingSize: parseDouble(servingSize),
-                                servingUnit: servingSizeUnit,
-                                servingWeight: parseOptionalDouble(
-                                    servingWeight
-                                ),
-                                servingWeightUnit: servingWeightUnit,
-                                isAIEstimated: isAIEstimated,
-                                calories: parseDouble(calorieValue),
-                                protein: parseDouble(proteinValue),
-                                carbs: parseDouble(carbsValue),
-                                fat: parseDouble(fatValue),
-                                fiber: parseDouble(fiberValue),
-                                isCustomDefaultServing: isCustomDefaultServing,
-                                customServingSize: parseOptionalDouble(
-                                    customServingSize
-                                ),
-                                stickyNote: trimmedNote
-                            )
-                            onImportSave?(updatedDraft)
-                            dismiss()
+                            attemptSave()
                         } label: {
                             Image(systemName: "checkmark")
                                 .foregroundStyle(.primary)
@@ -654,6 +752,10 @@ struct EditEntryView: View {
                         .disabled(isSaveDisabled)
                         .tint(Color.accentColor)
                         .buttonStyle(.glassProminent)
+                        .savePromptPopover(
+                            $savePrompt,
+                            dismissesScreen: true
+                        )
 
                     } else {
                         Menu {
@@ -682,27 +784,7 @@ struct EditEntryView: View {
                         }
 
                         Button {
-                            if saveMode == .copy {
-                                performSave(cascade: false)
-                            } else {
-                                let allRecipeIngredients =
-                                    (try? modelContext.fetch(
-                                        FetchDescriptor<RecipeIngredient>()
-                                    )) ?? []
-                                let usages = allRecipeIngredients.filter {
-                                    $0.ingredientItem?.id == foodItem.id
-                                }
-
-                                if usages.isEmpty {
-                                    performSave(cascade: false)
-                                } else {
-                                    let uniqueRecipes = Set(
-                                        usages.compactMap { $0.parentRecipe }
-                                    )
-                                    uniqueRecipesCount = uniqueRecipes.count
-                                    showUpdateRecipesAlert = true
-                                }
-                            }
+                            attemptSave()
                         } label: {
                             Image(systemName: "checkmark")
                                 .foregroundStyle(.primary)
@@ -710,29 +792,12 @@ struct EditEntryView: View {
                         .disabled(isSaveDisabled)
                         .tint(Color.accentColor)
                         .buttonStyle(.glassProminent)
+                        .savePromptPopover(
+                            $savePrompt,
+                            dismissesScreen: true
+                        )
                     }
                 }
-            }
-            .alert("Update Recipes?", isPresented: $showUpdateRecipesAlert) {
-                Button(
-                    uniqueRecipesCount > 1
-                        ? "Update All Recipes" : "Update Recipe"
-                ) {
-                    performSave(cascade: true)
-                }
-
-                Button("Keep Recipes Unchanged") {
-                    performSave(cascade: false)
-                }
-
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                let pluralText =
-                    "This item is used in \(uniqueRecipesCount) recipes. Do you want to apply these changes to existing recipes, or leave them as is?"
-                let singularText =
-                    "This item is used in a recipe. Do you want to apply these changes to that recipe, or leave it as is?"
-
-                Text(uniqueRecipesCount > 1 ? pluralText : singularText)
             }
             .safeAreaBar(edge: .top) {
                 Card {
