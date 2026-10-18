@@ -19,6 +19,12 @@ struct DefaultLocationRow: View {
 
     @State private var isPickerPresented = false
     @State private var pickerSelection: LocationSelection = .none
+    @State private var lastChoice: Choice?
+
+    private struct Choice {
+        let selection: LocationSelection
+        let location: EntryLocation
+    }
 
     private var nearby: NearbyPlaceSearch? {
         let trimmed = sourceName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -92,19 +98,34 @@ struct DefaultLocationRow: View {
     }
 
     private func openPicker() {
-        pickerSelection = location.map { .place($0) } ?? .none
+        if let lastChoice, lastChoice.location == location {
+            pickerSelection = lastChoice.selection
+        } else {
+            pickerSelection = location.map { .place($0) } ?? .none
+        }
         isPickerPresented = true
     }
 
     private func apply(_ selection: LocationSelection) async {
+        if let lastChoice, lastChoice.selection == selection, lastChoice.location == location {
+            return
+        }
         switch selection {
         case .none:
+            lastChoice = nil
             if location != nil { location = nil }
         case .place(let place):
-            guard place != location else { return }
+            guard place != location else {
+                lastChoice = Choice(selection: selection, location: place)
+                return
+            }
             let named = await DefaultLocationResolver.named(place)
             guard pickerSelection == selection else { return }
-            store(named)
+            store(named) { named in
+                var pinned = named
+                pinned.mapPin = place.mapPin
+                return .place(pinned)
+            }
         case .current(let resolved):
             let place: EntryLocation?
             if let resolved {
@@ -116,16 +137,20 @@ struct DefaultLocationRow: View {
             guard let place, pickerSelection.isCurrent else { return }
             let named = await DefaultLocationResolver.named(place)
             guard pickerSelection.isCurrent else { return }
-            store(named)
+            store(named) { .current($0) }
         }
     }
 
-    private func store(_ place: EntryLocation?) {
+    private func store(
+        _ place: EntryLocation?,
+        choosing selection: (EntryLocation) -> LocationSelection
+    ) {
         guard let place else {
             toastCenter?.show(.failure(String(localized: "Couldn't Set Default Location")))
             return
         }
         location = place.withoutMapPin
+        lastChoice = Choice(selection: selection(place), location: place.withoutMapPin)
     }
 }
 
