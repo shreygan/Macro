@@ -13,6 +13,12 @@ struct LocationPill: View {
     var isEnabled: Bool = true
     var isHere: Bool = false
     var action: () -> Void
+    var onShowOnMap: (() -> Void)? = nil
+    var onOpenInMaps: (() -> Void)? = nil
+
+    private var showsMapMenu: Bool {
+        !isEnabled && (onShowOnMap != nil || onOpenInMaps != nil)
+    }
 
     private var showsLocationSymbol: Bool {
         selection.isCurrent || isHere
@@ -44,31 +50,65 @@ struct LocationPill: View {
     }
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                if let symbol {
-                    Image(systemName: symbol)
-                        .font(.smallIcon)
-                        .foregroundStyle(showsLocationSymbol ? Color.accentColor : Color.orange)
-                        .transition(.scale(scale: 0.8).combined(with: .opacity))
-                }
+        Group {
+            if showsMapMenu {
+                ZStack {
+                    label
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
 
-                Text(text)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .foregroundStyle(
-                        !isEnabled || isPlaceholder ? .secondary : .primary
-                    )
+                    Menu {
+                        mapMenuContent
+                    } label: {
+                        label
+                            .opacity(0.011)
+                    }
+                    .menuStyle(.button)
+                }
+            } else {
+                Button(action: action) {
+                    label
+                }
+                .disabled(!isEnabled)
             }
-            .pillBackground(isEnabled: isEnabled)
         }
         .buttonStyle(UndimmedPlainButtonStyle())
-        .disabled(!isEnabled)
         .animation(.snappy(duration: 0.3), value: isEnabled)
         .animation(.snappy(duration: 0.3), value: selection)
         .animation(.snappy(duration: 0.3), value: isHere)
         .accessibilityLabel("Location")
         .accessibilityValue(text)
+    }
+
+    private var label: some View {
+        HStack(spacing: 4) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.smallIcon)
+                    .foregroundStyle(showsLocationSymbol ? Color.accentColor : Color.orange)
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+            }
+
+            Text(text)
+                .underline(showsMapMenu, pattern: .dot)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(
+                    !isEnabled || isPlaceholder ? Color.secondary : Color.primary
+                )
+        }
+        .pillBackground(isEnabled: isEnabled)
+    }
+
+    @ViewBuilder
+    private var mapMenuContent: some View {
+        if let onShowOnMap {
+            Button("Show on Map", systemImage: "map", action: onShowOnMap)
+        }
+
+        if let onOpenInMaps {
+            Button("Open in Maps", systemImage: "arrow.up.forward.app", action: onOpenInMaps)
+        }
     }
 }
 
