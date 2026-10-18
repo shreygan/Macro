@@ -136,7 +136,7 @@ private struct NotesHistoryContent: View {
             }
         }
         .navigationDestination(item: $selectedEntry) { entry in
-            LoggedEntryDetailView(entry: entry, isReadOnly: true)
+            LoggedEntryDetailView(entry: entry, showsActionsAndLinks: false)
         }
         .navigationTitle("Notes")
         .navigationSubtitle(food.name)

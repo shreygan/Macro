@@ -15,9 +15,11 @@ struct LoggedEntryDetailView: View {
 
     let entry: LoggedEntry
     var isPushedView: Bool = true
-    var isReadOnly: Bool = false
+    var allowsEditing: Bool = true
+    var showsActionsAndLinks: Bool = true
     var showsLibraryLink: Bool = true
     var showsMapLink: Bool = true
+    var onRemovePhotos: (() -> Void)? = nil
     private let dismissesAfterEditing: Bool
 
     @State private var isEditing: Bool = false
@@ -59,6 +61,7 @@ struct LoggedEntryDetailView: View {
 
     @State private var stickyNote: String
     @State private var pinnedNoteText: String
+    @State private var originalPinnedNote: String
     @State private var showingAllNotes: Bool = false
     @State private var showingAllPhotos: Bool = false
     @State private var hasPhotoHistory: Bool = false
@@ -90,17 +93,21 @@ struct LoggedEntryDetailView: View {
     init(
         entry: LoggedEntry,
         isPushedView: Bool = true,
-        isReadOnly: Bool = false,
+        allowsEditing: Bool = true,
+        showsActionsAndLinks: Bool = true,
         showsLibraryLink: Bool = true,
         showsMapLink: Bool = true,
-        startsEditing: Bool = false
+        startsEditing: Bool = false,
+        onRemovePhotos: (() -> Void)? = nil
     ) {
         self.entry = entry
         self.isPushedView = isPushedView
-        self.isReadOnly = isReadOnly
+        self.allowsEditing = allowsEditing
+        self.showsActionsAndLinks = showsActionsAndLinks
         self.showsLibraryLink = showsLibraryLink
         self.showsMapLink = showsMapLink
-        self.dismissesAfterEditing = startsEditing && !isReadOnly
+        self.onRemovePhotos = onRemovePhotos
+        self.dismissesAfterEditing = startsEditing && allowsEditing
         _isEditing = State(initialValue: dismissesAfterEditing)
 
         _name = State(initialValue: entry.name)
@@ -129,6 +136,9 @@ struct LoggedEntryDetailView: View {
 
         _stickyNote = State(initialValue: entry.logNote ?? "")
         _pinnedNoteText = State(
+            initialValue: entry.originalFoodItem?.stickyNote?.text ?? ""
+        )
+        _originalPinnedNote = State(
             initialValue: entry.originalFoodItem?.stickyNote?.text ?? ""
         )
 
@@ -182,7 +192,7 @@ struct LoggedEntryDetailView: View {
     }
 
     private var canShowOnMap: Bool {
-        showsMapLink && !isReadOnly && entry.originalFoodItem != nil && mappedLocation != nil
+        showsMapLink && showsActionsAndLinks && entry.originalFoodItem != nil && mappedLocation != nil
     }
 
     private var showsNotesCard: Bool {
@@ -354,7 +364,7 @@ struct LoggedEntryDetailView: View {
                             pinnedUpdated: pinnedNoteUpdated,
                             allowsPinning: entry.originalFoodItem != nil,
                             isEditable: isEditing,
-                            onViewAll: entry.originalFoodItem == nil || isReadOnly
+                            onViewAll: entry.originalFoodItem == nil || !showsActionsAndLinks || isEditing
                                 ? nil : { showingAllNotes = true }
                         )
                         .padding([.top, .horizontal])
@@ -365,7 +375,7 @@ struct LoggedEntryDetailView: View {
                             images: $selectedPhotos,
                             isLoading: $isLoadingPhotos,
                             isEditing: isEditing,
-                            onViewAll: hasPhotoHistory && !isReadOnly
+                            onViewAll: hasPhotoHistory && showsActionsAndLinks && !isEditing
                                 ? { showingAllPhotos = true } : nil,
                             onUseTime: usePhotoTime,
                             onUseLocation: usePhotoLocation,
@@ -594,7 +604,7 @@ struct LoggedEntryDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isEditing)
         .toolbar {
-            if !isEditing && !isReadOnly {
+            if !isEditing && allowsEditing {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Edit Entry", systemImage: "pencil") {
                         withAnimation {
@@ -619,7 +629,7 @@ struct LoggedEntryDetailView: View {
                         $savePrompt,
                         dismissesScreen: dismissesAfterEditing && !isPushedView
                     )
-                } else if !isReadOnly {
+                } else if showsActionsAndLinks {
                     Menu {
                         if let originalFood = entry.originalFoodItem {
                             Button {
@@ -694,6 +704,11 @@ struct LoggedEntryDetailView: View {
             }
         }
         .interactiveDismissDisabled(isEditing)
+        .onChange(of: entry.originalFoodItem?.stickyNote?.text) { _, text in
+            guard pinnedNoteText == originalPinnedNote else { return }
+            pinnedNoteText = text ?? ""
+            originalPinnedNote = pinnedNoteText
+        }
         .onChange(of: portionUnitSelection) { oldUnit, newUnit in
             guard oldUnit != newUnit, let weight = activeServingWeight else {
                 return
@@ -852,7 +867,7 @@ struct LoggedEntryDetailView: View {
         )
         entry.logNote = trimmedNote.isEmpty ? nil : trimmedNote
 
-        if let food = entry.originalFoodItem {
+        if let food = entry.originalFoodItem, pinnedNoteText != originalPinnedNote {
             let trimmedPinned = pinnedNoteText.trimmingCharacters(
                 in: .whitespacesAndNewlines
             )
@@ -954,6 +969,9 @@ struct LoggedEntryDetailView: View {
         entry.fiber =
             Double(fiber.replacingOccurrences(of: ",", with: ".")) ?? 0.0
 
+        let removesPhotos = (entry.photos ?? []).contains { photo in
+            !selectedPhotos.contains { $0.sourcePhoto === photo }
+        }
         entry.photos = EntryHelper.applyPhotos(
             selectedPhotos,
             replacing: entry.photos,
@@ -1006,6 +1024,8 @@ struct LoggedEntryDetailView: View {
                 replacing: entry.storedLocation,
                 in: modelContext
             )
+            originalPinnedNote = pinnedNoteText
+            if removesPhotos { onRemovePhotos?() }
             return true
         } catch {
             toastCenter?.show(
@@ -1052,6 +1072,7 @@ struct LoggedEntryDetailView: View {
         entry.originalFoodItem = food
         guard save(failureTitle: String(localized: "Couldn't Link to Library")) else { return }
         pinnedNoteText = food.stickyNote?.text ?? ""
+        originalPinnedNote = pinnedNoteText
     }
 
     private func save(failureTitle: String) -> Bool {
@@ -1089,6 +1110,7 @@ struct LoggedEntryDetailView: View {
 
         stickyNote = entry.logNote ?? ""
         pinnedNoteText = entry.originalFoodItem?.stickyNote?.text ?? ""
+        originalPinnedNote = pinnedNoteText
 
         selectedPhotos = EntryHelper.loggedPhotos(from: entry.photos)
         isLoadingPhotos = false

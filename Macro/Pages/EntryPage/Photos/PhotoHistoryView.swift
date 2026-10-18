@@ -158,7 +158,7 @@ private struct PhotoHistoryContent: View {
         } action: { width in
             framingWidth = max(0, width - 32)
         }        .navigationDestination(item: $selectedEntry) { entry in
-            LoggedEntryDetailView(entry: entry, isReadOnly: true)
+            LoggedEntryDetailView(entry: entry, showsActionsAndLinks: false)
         }
         .fullScreenCover(item: $viewerPhoto) { photo in
             PhotoViewer(

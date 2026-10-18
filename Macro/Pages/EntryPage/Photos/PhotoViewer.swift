@@ -25,6 +25,7 @@ struct PhotoViewer: View {
 
     @State private var isChromeHidden = false
     @State private var logToShow: LoggedEntry?
+    @State private var closesAfterLog = false
     @State private var metadata: [PersistentIdentifier: PhotoMetadata] = [:]
 
     private let chromeAnimation = Animation.easeInOut(duration: 0.2)
@@ -140,8 +141,12 @@ struct PhotoViewer: View {
                     LoggedEntryDetailView(
                         entry: entry,
                         isPushedView: false,
-                        isReadOnly: true
+                        showsActionsAndLinks: false,
+                        onRemovePhotos: { closesAfterLog = true }
                     )
+                }
+                .onLeave {
+                    if closesAfterLog { dismiss() }
                 }
             }
         }
