@@ -198,7 +198,12 @@ struct MergeFoodsView: View {
         }
         .onAppear(perform: loadUsage)
         .navigationDestination(item: $selectedLog) { log in
-            LoggedEntryDetailView(entry: log, isReadOnly: true, showsLibraryLink: false)
+            LoggedEntryDetailView(
+                entry: log,
+                allowsEditing: false,
+                showsActionsAndLinks: false,
+                showsLibraryLink: false
+            )
         }
         .navigationDestination(isPresented: $showingAllLogs) {
             if let plan {
@@ -820,7 +825,12 @@ private struct MergeLogsView: View {
         .navigationSubtitle(plan.trimmedName)
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selectedLog) { log in
-            LoggedEntryDetailView(entry: log, isReadOnly: true, showsLibraryLink: false)
+            LoggedEntryDetailView(
+                entry: log,
+                allowsEditing: false,
+                showsActionsAndLinks: false,
+                showsLibraryLink: false
+            )
         }
     }
 }
