@@ -44,6 +44,7 @@ struct MapPinPickerView: View {
     @State private var isFlyingToSelection = false
     @State private var featureTask: Task<Void, Never>?
     @State private var camera: MapCamera?
+    @State private var settledRegion: MKCoordinateRegion?
     @State private var userCenter: CLLocationCoordinate2D?
     @State private var results: [EntryLocation]
     @State private var resultSymbols: [EntryLocation: String]
@@ -123,7 +124,8 @@ struct MapPinPickerView: View {
         {
             _position = State(initialValue: .region(Self.region(around: coordinate)))
         } else if manager.isAuthorized {
-            _position = State(initialValue: .userLocation(fallback: .automatic))
+            let fallback = manager.lastLocation.map { MapCameraPosition.region(Self.region(around: $0.coordinate)) }
+            _position = State(initialValue: .userLocation(fallback: fallback ?? .automatic))
         } else if let last = manager.lastLocation {
             _position = State(initialValue: .region(Self.region(around: last.coordinate)))
         } else {
@@ -288,6 +290,9 @@ struct MapPinPickerView: View {
         .onAppear {
             selectSavedResult()
             selectRestoredMarker()
+            if position.followsUserLocation {
+                Task { _ = await LocationManager.shared.currentLocation() }
+            }
         }
         .onDisappear {
             namingTask?.cancel()
@@ -395,12 +400,11 @@ struct MapPinPickerView: View {
             withAnimation(.snappy(duration: 0.2)) { isMoving = false }
             isFlyingToSelection = false
             camera = context.camera
-            if position.followsUserLocation {
-                position = .camera(context.camera)
-                userCenter = context.region.center
-            }
-            searchArea(context.region)
-            updateCenter(context.region.center)
+            settledRegion = context.region
+            settleCamera()
+        }
+        .onChange(of: LocationManager.shared.lastLocation) {
+            if position.followsUserLocation { settleCamera() }
         }
         .overlay {
             pin
@@ -900,6 +904,23 @@ struct MapPinPickerView: View {
             .0
     }
 
+    private func settleCamera() {
+        guard let region = settledRegion, let camera else { return }
+        if position.followsUserLocation {
+            guard Self.isNearUser(region.center) else { return }
+            position = .camera(camera)
+            userCenter = region.center
+        }
+        searchArea(region)
+        updateCenter(region.center)
+    }
+
+    private static func isNearUser(_ center: CLLocationCoordinate2D) -> Bool {
+        guard let user = LocationManager.shared.lastLocation else { return false }
+        let tolerance = max(user.horizontalAccuracy, 200)
+        return user.distance(from: CLLocation(latitude: center.latitude, longitude: center.longitude)) <= tolerance
+    }
+
     private func centerOnUser() async {
         let manager = LocationManager.shared
         if !manager.isAuthorized {
@@ -909,6 +930,7 @@ struct MapPinPickerView: View {
         withAnimation {
             position = .userLocation(fallback: position)
         }
+        _ = await manager.currentLocation()
     }
 
     private func saveAndSelect(_ pending: PendingSave) {
