@@ -36,12 +36,21 @@ enum LibraryCSV {
         case isAIEstimated = "AI Estimated"
         case isCustomDefaultServing = "Custom Default Serving"
         case customServingSize = "Custom Serving Size"
+        case hydrationPercent = "Hydration Percent"
+        case caffeine = "Caffeine (mg)"
+        case abv = "ABV (%)"
+        case drinkNutrition = "Drink Nutrition"
+        case drinkSymbol = "Drink Symbol"
+        case drinkTint = "Drink Tint"
+        case drinkSizes = "Drink Sizes"
+        case logDrinkOrder = "Log Drink Order"
         case defaultLocation = "Default Location"
         case defaultLocationAddress = "Default Location Address"
         case defaultLocationLatitude = "Default Location Latitude"
         case defaultLocationLongitude = "Default Location Longitude"
         case defaultLocationMapID = "Default Location Map ID"
         case favoriteOrder = "Favorite Order"
+        case inLibrary = "In Library"
         case note = "Note"
         case noteUpdated = "Note Updated"
         case dateAdded = "Date Added"
@@ -164,7 +173,7 @@ enum LibraryCSV {
             item.modelContext.map { DefaultLocationResolver.resolved(location, in: $0) } ?? location
         }
 
-        return [
+        var fields: [Column: String] = [
             .record: Record.entry.rawValue,
             .id: item.id.uuidString,
             .type: item.type.rawValue,
@@ -192,10 +201,107 @@ enum LibraryCSV {
             .defaultLocationMapID: location?.mapItemID ?? "",
             .favoriteOrder: item.favoriteEntry.map { String($0.orderIndex) }
                 ?? "",
+            .inLibrary: format(item.isInLibrary),
             .note: item.stickyNote?.text ?? "",
             .noteUpdated: format(item.stickyNote?.lastUpdated),
             .dateAdded: format(item.dateAdded),
         ]
+        if let drink = MacroBackup.drinkRecord(item) {
+            fields[.hydrationPercent] = format(drink.hydrationPercent)
+            fields[.caffeine] = format(drink.caffeineMg)
+            fields[.abv] = format(drink.abv)
+            fields[.drinkNutrition] = format(drink.hasNutrition)
+            fields[.drinkSymbol] = drink.symbol ?? ""
+            fields[.drinkTint] = drink.tint ?? ""
+            fields[.drinkSizes] = formatSizes(drink.sizes)
+            fields[.logDrinkOrder] = drink.hydrationOrder.map { String($0) } ?? ""
+        }
+        return fields
+    }
+
+    static func formatSizes(_ sizes: [MacroBackup.DrinkSizeRecord]) -> String {
+        sizes.sorted { $0.displayOrder < $1.displayOrder }.map { size in
+            var text = "\(format(size.volumeML)) ml"
+            if let name = size.name, !name.isEmpty { text = "\(name): \(text)" }
+            if size.isDefault { text += " (default)" }
+            return text
+        }
+        .joined(separator: "; ")
+    }
+
+    static func parseSizes(_ string: String) -> [MacroBackup.DrinkSizeRecord] {
+        var sizes: [MacroBackup.DrinkSizeRecord] = []
+        var carried = ""
+        for part in string.split(separator: ";") {
+            let joined = carried.isEmpty ? String(part) : carried + ";" + part
+            carried = ""
+            var text = joined.trimmingCharacters(in: .whitespaces)
+            var isDefault = false
+            if normalized(text).hasSuffix("(default)") {
+                isDefault = true
+                text = String(text.dropLast("(default)".count)).trimmingCharacters(in: .whitespaces)
+            }
+            var name: String?
+            if let colon = text.lastIndex(of: ":") {
+                let rawName = text[..<colon].trimmingCharacters(in: .whitespaces)
+                name = rawName.isEmpty ? nil : rawName
+                text = text[text.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            }
+            var factor = 1.0
+            let lowered = normalized(text)
+            if let suffix = millilitersPerVolumeUnit.keys
+                .filter({ lowered.hasSuffix($0) })
+                .max(by: { $0.count < $1.count })
+            {
+                factor = millilitersPerVolumeUnit[suffix] ?? 1
+                text = String(text.dropLast(suffix.count)).trimmingCharacters(in: .whitespaces)
+            }
+            guard let volume = positive(text).map({ $0 * factor }) else {
+                carried = joined
+                continue
+            }
+            sizes.append(
+                MacroBackup.DrinkSizeRecord(
+                    id: UUID(),
+                    name: name,
+                    volumeML: volume,
+                    displayOrder: sizes.count,
+                    isDefault: isDefault && !sizes.contains(where: \.isDefault)
+                )
+            )
+        }
+        if !sizes.isEmpty && !sizes.contains(where: \.isDefault) {
+            sizes[0].isDefault = true
+        }
+        return sizes
+    }
+
+    private static func drink(
+        _ field: (Column) -> String,
+        type: EntryType,
+        macros: [Double]
+    ) -> MacroBackup.DrinkRecord? {
+        let drinkColumns: [Column] = [
+            .hydrationPercent, .caffeine, .abv, .drinkNutrition, .drinkSymbol,
+            .drinkTint, .drinkSizes, .logDrinkOrder,
+        ]
+        guard type == .drink || drinkColumns.contains(where: { !field($0).isEmpty }) else {
+            return nil
+        }
+        let nutrition = field(.drinkNutrition)
+        let symbol = field(.drinkSymbol)
+        let tint = field(.drinkTint)
+        return MacroBackup.DrinkRecord(
+            hydrationPercent: Double(field(.hydrationPercent)).map { min(max($0, 0), 100) } ?? 100,
+            caffeineMg: Double(field(.caffeine)).map { max($0, 0) },
+            abv: Double(field(.abv)).map { min(max($0, 0), 100) },
+            hasNutrition: nutrition.isEmpty ? macros.contains { $0 > 0 } : bool(nutrition),
+            symbol: DrinkSymbol.contains(symbol) ? symbol : nil,
+            tint: DrinkTint(rawValue: tint) == nil ? nil : tint,
+            hydrationOrder: Int(field(.logDrinkOrder)),
+            seedKey: nil,
+            sizes: parseSizes(field(.drinkSizes))
+        )
     }
 
     private static func ingredientFields(
@@ -575,21 +681,23 @@ enum LibraryCSV {
         else { return nil }
 
         let servingUnit = field(.servingUnit)
-        let servingWeightUnit = field(.servingWeightUnit)
+        let weight = canonicalWeight(positive(field(.servingWeight)), unit: field(.servingWeightUnit))
         let note = field(.note)
         let favorite = field(.favoriteOrder)
         let favoriteOrder = Int(favorite) ?? (bool(favorite) ? Int.max : nil)
+        let type = EntryType(rawValue: normalized(field(.type))) ?? .food
+        let inLibrary = field(.inLibrary)
 
         return DraftFoodItem(
-            type: EntryType(rawValue: normalized(field(.type))) ?? .food,
+            type: type,
             name: name,
             source: field(.source),
             category: field(.category),
             foodGroup: field(.foodGroup),
             servingSize: positive(field(.servingSize)) ?? 1.0,
             servingUnit: servingUnit.isEmpty ? "serving" : servingUnit,
-            servingWeight: positive(field(.servingWeight)),
-            servingWeightUnit: servingWeightUnit.isEmpty ? "g" : servingWeightUnit,
+            servingWeight: weight.value,
+            servingWeightUnit: weight.unit,
             isAIEstimated: bool(field(.isAIEstimated)),
             calories: calories,
             protein: protein,
@@ -606,7 +714,9 @@ enum LibraryCSV {
                 ? field(.servingUnitPlural) : nil,
             noteUpdated: date(field(.noteUpdated)),
             dateAdded: date(field(.dateAdded)),
-            defaultLocation: defaultLocation(field)
+            defaultLocation: defaultLocation(field),
+            drink: drink(field, type: type, macros: [calories, protein, carbs, fat, fiber]),
+            isInLibrary: inLibrary.isEmpty ? nil : bool(inLibrary)
         )
     }
 
@@ -649,16 +759,24 @@ enum LibraryCSV {
 
         let baseServingSize = positive(field(.servingSize)) ?? 1.0
         let baseServingUnit = field(.servingUnit)
-        let servingWeightUnit = field(.servingWeightUnit)
-        let quantityUnit = field(.quantityUnit)
+        let weight = canonicalWeight(positive(field(.servingWeight)), unit: field(.servingWeightUnit))
+        var quantityUnit = field(.quantityUnit)
 
-        let quantity: Double
+        var quantity: Double
         if field(.quantity).isEmpty {
             quantity = baseServingSize
         } else if let parsed = Double(field(.quantity)), parsed >= 0 {
             quantity = parsed
         } else {
             return nil
+        }
+
+        if normalized(quantityUnit) != normalized(baseServingUnit),
+            let canonical = canonicalUnit(for: quantityUnit),
+            canonical.unit == weight.unit
+        {
+            quantity *= canonical.factor
+            quantityUnit = canonical.unit
         }
 
         return DraftImportIngredient(
@@ -672,9 +790,8 @@ enum LibraryCSV {
                 : quantityUnit,
             baseServingSize: baseServingSize,
             baseServingUnitName: baseServingUnit.isEmpty ? nil : baseServingUnit,
-            baseServingWeight: positive(field(.servingWeight)),
-            baseServingWeightUnit: servingWeightUnit.isEmpty
-                ? "g" : servingWeightUnit,
+            baseServingWeight: weight.value,
+            baseServingWeightUnit: weight.unit,
             baseCalories: calories,
             baseProtein: protein,
             baseCarbs: carbs,
@@ -698,6 +815,37 @@ enum LibraryCSV {
     static func positive(_ string: String) -> Double? {
         guard let value = Double(string), value > 0 else { return nil }
         return value
+    }
+
+    static let millilitersPerVolumeUnit: [String: Double] = [
+        "ml": 1, "milliliter": 1, "milliliters": 1, "millilitre": 1, "millilitres": 1,
+        "l": 1000, "liter": 1000, "liters": 1000, "litre": 1000, "litres": 1000,
+        "fl oz": VolumeUnit.millilitersPerFluidOunce, "fl. oz": VolumeUnit.millilitersPerFluidOunce,
+        "fl.oz": VolumeUnit.millilitersPerFluidOunce, "floz": VolumeUnit.millilitersPerFluidOunce,
+        "fluid ounce": VolumeUnit.millilitersPerFluidOunce, "fluid ounces": VolumeUnit.millilitersPerFluidOunce,
+    ]
+
+    static let gramsPerMassUnit: [String: Double] = [
+        "g": 1, "gram": 1, "grams": 1, "kg": 1000, "kilogram": 1000, "kilograms": 1000,
+        "mg": 0.001, "oz": 28.349523125, "ounce": 28.349523125, "ounces": 28.349523125,
+        "lb": 453.59237, "lbs": 453.59237, "pound": 453.59237, "pounds": 453.59237,
+    ]
+
+    static func canonicalUnit(for unit: String, includesMass: Bool = true) -> (factor: Double, unit: String)? {
+        let key = normalized(unit)
+        if let factor = millilitersPerVolumeUnit[key] {
+            return (factor, VolumeUnit.milliliters.rawValue)
+        }
+        if includesMass, let factor = gramsPerMassUnit[key] {
+            return (factor, "g")
+        }
+        return nil
+    }
+
+    static func canonicalWeight(_ value: Double?, unit: String) -> (value: Double?, unit: String) {
+        guard !unit.isEmpty else { return (value, "g") }
+        guard let canonical = canonicalUnit(for: unit) else { return (value, unit) }
+        return (value.map { $0 * canonical.factor }, canonical.unit)
     }
 
     static func bool(_ string: String) -> Bool {

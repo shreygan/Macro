@@ -30,6 +30,7 @@ struct DraftLogEntry: Identifiable, Equatable {
     var displayOrder: Int
     var components: [DraftLogEntry] = []
     var duplicateOf: UUID?
+    var hydration: MacroBackup.HydrationRecord? = nil
 
     var entryType: EntryType? { EntryType(rawValue: typeRawValue) }
 

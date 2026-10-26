@@ -164,7 +164,9 @@ private struct StorageCounts {
     var libraryTotal: Int { foods + recipes + ingredients + drinks }
 
     init(context: ModelContext) {
-        let foodItems = (try? context.fetch(FetchDescriptor<FoodItem>())) ?? []
+        let foodItems = (try? context.fetch(
+            FetchDescriptor<FoodItem>(predicate: #Predicate { $0.isInLibrary })
+        )) ?? []
         for item in foodItems {
             switch item.type {
             case .food: foods += 1

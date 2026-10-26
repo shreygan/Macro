@@ -35,12 +35,16 @@ struct DraftFoodItem: Identifiable, Equatable {
     var noteUpdated: Date? = nil
     var dateAdded: Date? = nil
     var defaultLocation: EntryLocation? = nil
+    var drink: MacroBackup.DrinkRecord? = nil
+    var isInLibrary: Bool? = nil
     var ingredients: [DraftImportIngredient] = []
     var duplicateOf: UUID? = nil
     var macrosReviewed = false
 
     var hasMacroIssue: Bool {
-        guard importID == nil, !macrosReviewed else { return false }
+        guard importID == nil, !macrosReviewed,
+            type != .drink || drink?.hasNutrition != false
+        else { return false }
         let values = MacroSanityCheck.Values(
             calories: calories,
             protein: protein,

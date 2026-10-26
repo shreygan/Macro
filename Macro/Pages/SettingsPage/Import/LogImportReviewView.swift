@@ -12,6 +12,7 @@ import UniformTypeIdentifiers
 struct LogImportReviewView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.toastCenter) private var toastCenter
+    @Environment(\.volumeUnit) private var volumeUnit
 
     @Query private var users: [User]
 
@@ -293,8 +294,11 @@ struct LogImportReviewView: View {
             source: source,
             isCustomDefaultServing: false,
             customServingSize: "",
-            servingSize: EntryHelper.format(entry.quantity),
-            servingSizeUnit: entry.unit,
+            servingSize: entry.unit == VolumeUnit.milliliters.rawValue
+                ? volumeUnit.formattedValue(entry.quantity)
+                : EntryHelper.format(entry.quantity),
+            servingSizeUnit: entry.unit == VolumeUnit.milliliters.rawValue
+                ? volumeUnit.rawValue : entry.unit,
             servingWeight: "",
             servingWeightUnit: "",
             servingUnits: [],
@@ -303,8 +307,9 @@ struct LogImportReviewView: View {
             carbs: EntryHelper.format(entry.carbs),
             fat: EntryHelper.format(entry.fat),
             fiber: EntryHelper.format(entry.fiber),
-            icon: entry.entryType.flatMap { $0 == .food ? nil : $0.appSymbol }
+            icon: entry.entryType?.appSymbol
         )
+        .drink(entry.drinkRowInfo)
         .location(entry.location?.name)
         .nameTag(entry.hasMacroIssue ? "Check Macros" : nil)
         .attachmentHints(hasNote: !(entry.note ?? "").isEmpty, hasPhotos: false)
@@ -534,6 +539,7 @@ struct LogImportReviewView: View {
         library: [FoodItem],
         savedLocations: [SavedLocation]
     ) {
+        var children: [LoggedEntry] = []
         for (index, component) in draft.components.enumerated() {
             var component = component
             component.displayOrder = index
@@ -546,6 +552,11 @@ struct LogImportReviewView: View {
                 savedLocations: savedLocations
             )
             modelContext.insert(child)
+            children.append(child)
+        }
+        if draft.hydration == nil, !children.isEmpty {
+            parent.drinkAmounts = children.reduce(.zero) { $0 + $1.drinkAmounts }
+            parent.sizeName = nil
         }
     }
 
@@ -608,6 +619,16 @@ struct LogImportReviewView: View {
         log.isManualOverride = draft.isManualOverride
         log.logNote = draft.note
         log.displayOrder = draft.displayOrder
+        log.isHydrationLog = draft.hydration?.isHydrationLog ?? false
+        log.drinkAmounts = draft.hydration.map {
+            DrinkAmounts(
+                volumeML: $0.volumeML,
+                hydrationML: $0.hydrationML,
+                caffeineMg: $0.caffeineMg,
+                alcoholGrams: $0.alcoholGrams
+            )
+        } ?? .zero
+        log.sizeName = draft.hydration?.sizeName
 
         log.originalFoodItem =
             resolver.matchFood(
@@ -616,6 +637,13 @@ struct LogImportReviewView: View {
                 source: draft.source,
                 in: library
             ) ?? log.originalFoodItem
+
+        if draft.hydration == nil, draft.components.isEmpty,
+            let food = log.originalFoodItem, food.type == .drink
+        {
+            log.drinkAmounts = DrinkAmounts(food: food, quantity: draft.quantity, unit: draft.unit)
+            log.sizeName = HydrationLogger.sizeName(for: food, volumeML: log.volumeML)
+        }
     }
 }
 
