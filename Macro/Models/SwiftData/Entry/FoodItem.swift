@@ -37,7 +37,20 @@ class FoodItem {
 
     var defaultLocation: EntryLocation?
 
+    var hydrationPercent: Double = 100
+    var caffeineMg: Double?
+    var abv: Double?
+    var hasNutrition: Bool = false
+    var symbol: String?
+    var tintRawValue: String?
+    var hydrationOrder: Int?
+    var seedKey: String?
+    var isInLibrary: Bool = true
+
     var dateAdded: Date = Date()
+
+    @Relationship(deleteRule: .cascade, inverse: \DrinkSize.food)
+    var drinkSizes: [DrinkSize]? = []
 
     @Relationship(deleteRule: .cascade, inverse: \Note.foodItem)
     var stickyNote: Note?

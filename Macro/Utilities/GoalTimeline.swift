@@ -19,6 +19,8 @@ struct GoalTargets: Equatable {
     var fatMode: GoalLimitMode
     var fiber: Double
     var fiberMode: GoalLimitMode
+    var water: Double = 0
+    var waterMode: GoalLimitMode = .off
 }
 
 extension MacroBackup.GoalRecord {
@@ -33,12 +35,18 @@ extension MacroBackup.GoalRecord {
             fat: fat,
             fatMode: GoalLimitMode(rawValue: fatMode) ?? .off,
             fiber: fiber,
-            fiberMode: GoalLimitMode(rawValue: fiberMode) ?? .off
+            fiberMode: GoalLimitMode(rawValue: fiberMode) ?? .off,
+            water: water ?? 0,
+            waterMode: waterMode.flatMap(GoalLimitMode.init(rawValue:)) ?? .off
         )
     }
 }
 
 extension UserGoals {
+    var waterGoalML: Double? {
+        waterMode != .off && water > 0 ? water : nil
+    }
+
     var targets: GoalTargets {
         GoalTargets(
             calories: calories,
@@ -50,7 +58,9 @@ extension UserGoals {
             fat: fat,
             fatMode: fatMode,
             fiber: fiber,
-            fiberMode: fiberMode
+            fiberMode: fiberMode,
+            water: water,
+            waterMode: waterMode
         )
     }
 
@@ -73,6 +83,8 @@ extension UserGoals {
             fatMode: targets.fatMode,
             fiber: targets.fiber,
             fiberMode: targets.fiberMode,
+            water: targets.water,
+            waterMode: targets.waterMode,
             owner: owner
         )
     }
@@ -92,6 +104,8 @@ extension UserGoals {
         fatMode = targets.fatMode
         fiber = targets.fiber
         fiberMode = targets.fiberMode
+        water = targets.water
+        waterMode = targets.waterMode
     }
 }
 

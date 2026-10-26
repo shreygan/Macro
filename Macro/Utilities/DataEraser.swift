@@ -18,6 +18,7 @@ extension ModelContext {
         try deleteEach(SavedLocation.self)
         try deleteEach(RecentLocation.self)
         try deleteEach(FavoriteEntry.self)
+        try deleteEach(DrinkSize.self)
         try deleteEach(FoodItem.self)
         try deleteEach(EntrySource.self)
         try deleteEach(CategorySource.self)

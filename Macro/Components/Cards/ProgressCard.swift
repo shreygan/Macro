@@ -14,6 +14,7 @@ struct DailyProgress {
     var carbs: Double
     var fat: Double
     var fiber: Double
+    var water: Double = 0
 }
 
 extension DailyProgress {
@@ -23,7 +24,8 @@ extension DailyProgress {
             protein: entries.reduce(0) { $0 + $1.protein },
             carbs: entries.reduce(0) { $0 + $1.carbs },
             fat: entries.reduce(0) { $0 + $1.fat },
-            fiber: entries.reduce(0) { $0 + $1.fiber }
+            fiber: entries.reduce(0) { $0 + $1.fiber },
+            water: entries.reduce(0) { $0 + $1.hydrationML }
         )
     }
 }
