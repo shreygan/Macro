@@ -32,11 +32,24 @@ struct CustomSwipeRow<Content: View>: View {
 
     @State private var isDragging: Bool = false
     @State private var isVerticalDrag: Bool = false
+    @State private var contentHeight: CGFloat?
 
-    private let buttonSize: CGFloat = 44
+    private let fullButtonSize: CGFloat = 44
+    private let compactButtonSize: CGFloat = 36
+    private let fullButtonHeight: CGFloat = 60
+    private let fullButtonMargin: CGFloat = 8
     private let buttonSpacing: CGFloat = 12
     private let leadingPadding: CGFloat = 8
     private let trailingPadding: CGFloat = 16
+
+    private var isCompact: Bool {
+        guard let contentHeight else { return false }
+        return contentHeight < fullButtonHeight + fullButtonMargin * 2
+    }
+
+    private var buttonSize: CGFloat {
+        isCompact ? compactButtonSize : fullButtonSize
+    }
 
     private var totalRevealWidth: CGFloat {
         let buttonCount =
@@ -55,190 +68,102 @@ struct CustomSwipeRow<Content: View>: View {
             + leadingPadding
     }
 
+    private func actionButton(
+        symbol: String,
+        color: Color,
+        title: LocalizedStringKey,
+        positionFromRight: Int,
+        action: @escaping () -> Void
+    ) -> some View {
+        let scale = computeButtonScale(positionFromRight: positionFromRight)
+        return Button {
+            closeRow()
+            action()
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: buttonSize, height: buttonSize)
+                    .background(color)
+                    .clipShape(Circle())
+
+                if !isCompact {
+                    Text(title)
+                        .font(.swipeLabel)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .accessibilityLabel(Text(title))
+        .scaleEffect(scale)
+        .opacity(scale > 0.01 ? 1 : 0)
+    }
+
     var body: some View {
         ZStack(alignment: .trailing) {
 
             HStack(spacing: buttonSpacing) {
-
-                if let onFavAction = onFavorite {
-                    let favPos =
-                        (onDelete != nil ? 1 : 0) + (onEdit != nil ? 1 : 0)
-                        + (onPin != nil ? 1 : 0) + (onHide != nil ? 1 : 0)
-                    let favScale = computeButtonScale(positionFromRight: favPos)
-                    Button(action: {
-                        closeRow()
-                        onFavAction()
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(
-                                systemName: isFavorited
-                                    ? "star.slash.fill" : "star.fill"
-                            )
-                            .font(
-                                .system(
-                                    size: 16,
-                                    weight: .semibold
-                                )
-                            )
-                            .foregroundColor(.white)
-                            .frame(
-                                width: buttonSize,
-                                height: buttonSize
-                            )
-                            .background(Color.yellow)
-                            .clipShape(Circle())
-
-                            Text(isFavorited ? unfavoriteTitle : favoriteTitle)
-                                .font(.swipeLabel)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .scaleEffect(favScale)
-                    .opacity(favScale > 0.01 ? 1 : 0)
-                }
-
-                if let onPinAction = onPin {
-                    let pinPos =
-                        (onDelete != nil ? 1 : 0) + (onEdit != nil ? 1 : 0)
-                        + (onHide != nil ? 1 : 0)
-                    let pinScale = computeButtonScale(positionFromRight: pinPos)
-                    Button(action: {
-                        closeRow()
-                        onPinAction()
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(
-                                systemName: isPinned
-                                    ? "pin.slash.fill" : "pin.fill"
-                            )
-                            .font(
-                                .system(
-                                    size: 16,
-                                    weight: .semibold
-                                )
-                            )
-                            .foregroundColor(.white)
-                            .frame(
-                                width: buttonSize,
-                                height: buttonSize
-                            )
-                            .background(Color.orange)
-                            .clipShape(Circle())
-
-                            Text(isPinned ? "Unpin" : "Pin")
-                                .font(.swipeLabel)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .scaleEffect(pinScale)
-                    .opacity(pinScale > 0.01 ? 1 : 0)
-                }
-
-                if let onEditAction = onEdit {
-                    let editPos =
-                        (onDelete != nil ? 1 : 0) + (onHide != nil ? 1 : 0)
-                    let editScale = computeButtonScale(
-                        positionFromRight: editPos
+                if let onFavorite {
+                    actionButton(
+                        symbol: isFavorited ? "star.slash.fill" : "star.fill",
+                        color: .yellow,
+                        title: isFavorited ? unfavoriteTitle : favoriteTitle,
+                        positionFromRight: (onDelete != nil ? 1 : 0) + (onEdit != nil ? 1 : 0)
+                            + (onPin != nil ? 1 : 0) + (onHide != nil ? 1 : 0),
+                        action: onFavorite
                     )
-                    Button(action: {
-                        closeRow()
-                        onEditAction()
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "pencil")
-                                .font(
-                                    .system(
-                                        size: 16,
-                                        weight: .semibold
-                                    )
-                                )
-                                .foregroundColor(.white)
-                                .frame(
-                                    width: buttonSize,
-                                    height: buttonSize
-                                )
-                                .background(Color.gray)
-                                .clipShape(Circle())
-
-                            Text(editTitle)
-                                .font(.swipeLabel)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .scaleEffect(editScale)
-                    .opacity(editScale > 0.01 ? 1 : 0)
                 }
 
-                if let onHideAction = onHide {
-                    let hidePos = (onDelete != nil ? 1 : 0)
-                    let hideScale = computeButtonScale(positionFromRight: hidePos)
-                    Button(action: {
-                        closeRow()
-                        onHideAction()
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(
-                                systemName: isHidden
-                                    ? "eye.fill" : "eye.slash.fill"
-                            )
-                            .font(
-                                .system(
-                                    size: 16,
-                                    weight: .semibold
-                                )
-                            )
-                            .foregroundColor(.white)
-                            .frame(
-                                width: buttonSize,
-                                height: buttonSize
-                            )
-                            .background(Color.indigo)
-                            .clipShape(Circle())
-
-                            Text(isHidden ? "Unhide" : "Hide")
-                                .font(.swipeLabel)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .scaleEffect(hideScale)
-                    .opacity(hideScale > 0.01 ? 1 : 0)
+                if let onPin {
+                    actionButton(
+                        symbol: isPinned ? "pin.slash.fill" : "pin.fill",
+                        color: .orange,
+                        title: isPinned ? "Unpin" : "Pin",
+                        positionFromRight: (onDelete != nil ? 1 : 0) + (onEdit != nil ? 1 : 0)
+                            + (onHide != nil ? 1 : 0),
+                        action: onPin
+                    )
                 }
 
-                if let onDeleteAction = onDelete {
-                    let deleteScale = computeButtonScale(positionFromRight: 0)
-                    Button(action: {
-                        closeRow()
-                        onDeleteAction()
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "trash")
-                                .font(
-                                    .system(
-                                        size: 16,
-                                        weight: .semibold
-                                    )
-                                )
-                                .foregroundColor(.white)
-                                .frame(
-                                    width: buttonSize,
-                                    height: buttonSize
-                                )
-                                .background(Color.red)
-                                .clipShape(Circle())
+                if let onEdit {
+                    actionButton(
+                        symbol: "pencil",
+                        color: .gray,
+                        title: editTitle,
+                        positionFromRight: (onDelete != nil ? 1 : 0) + (onHide != nil ? 1 : 0),
+                        action: onEdit
+                    )
+                }
 
-                            Text("Delete")
-                                .font(.swipeLabel)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .scaleEffect(deleteScale)
-                    .opacity(deleteScale > 0.01 ? 1 : 0)
+                if let onHide {
+                    actionButton(
+                        symbol: isHidden ? "eye.fill" : "eye.slash.fill",
+                        color: .indigo,
+                        title: isHidden ? "Unhide" : "Hide",
+                        positionFromRight: onDelete != nil ? 1 : 0,
+                        action: onHide
+                    )
+                }
+
+                if let onDelete {
+                    actionButton(
+                        symbol: "trash",
+                        color: .red,
+                        title: "Delete",
+                        positionFromRight: 0,
+                        action: onDelete
+                    )
                 }
             }
             .padding(.trailing, trailingPadding)
             .frame(width: totalRevealWidth, alignment: .trailing)
 
             content
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    contentHeight = height                }
                 .frame(minHeight: buttonSize + 16)
                 .contentShape(Rectangle())
                 .clipped()

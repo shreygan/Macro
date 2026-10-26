@@ -143,6 +143,7 @@ extension Toast {
 
     static func foodsMerged(
         _ record: FoodMergeRecord,
+        title: String = String(localized: "Foods Merged"),
         in context: ModelContext,
         presenter: ToastCenter?
     ) -> Toast {
@@ -151,7 +152,7 @@ extension Toast {
             kind: .success,
             symbol: "arrow.triangle.merge",
             tint: .accentColor,
-            title: String(localized: "Foods Merged"),
+            title: title,
             message: record.mergedName,
             action: Toast.Action(title: String(localized: "Undo")) { [weak presenter] in
                 do {
@@ -228,13 +229,17 @@ extension Toast {
     ) -> Toast {
         let entry = record.entry
         let name = entry.name
+        let isDrink = entry.entryType == .drink && entry.volumeML > 0
+        let unit = (try? context.fetch(FetchDescriptor<User>()))?.first?.volumeUnit ?? .localeDefault
         return Toast(
             group: entryGroup,
             kind: .success,
             symbol: "checkmark",
             title: title,
-            message: entry.name,
-            messageDetail: String(localized: "\(EntryHelper.formatMacro(entry.calories)) kcal"),
+            message: isDrink ? [entry.name, entry.sizeName].compactMap(\.self).joined(separator: " · ") : entry.name,
+            messageDetail: isDrink
+                ? unit.formattedAmount(entry.volumeML)
+                : String(localized: "\(EntryHelper.formatMacro(entry.calories)) kcal"),
             location: {
                 guard !entry.isDeleted, entry.modelContext != nil, !entry.needsLocationName
                 else { return nil }
@@ -250,8 +255,8 @@ extension Toast {
                             startsEditing: true
                         )
                     }
-                    .modelContext(context)
-                    .textInputAutocapitalization(.never)
+                    .textInputAutocapitalization(.never),
+                    in: context
                 )
             },
             secondaryAction: Toast.Action(title: String(localized: "Undo")) { [weak presenter] in
@@ -268,9 +273,48 @@ extension Toast {
         )
     }
 
+    static func hydrationLogged(
+        _ entry: LoggedEntry,
+        originalDrink: MacroBackup.FoodRecord? = nil,
+        title: String,
+        unit: VolumeUnit,
+        in context: ModelContext,
+        presenter: ToastCenter
+    ) -> Toast {
+        let name = entry.name
+        return Toast(
+            group: entryGroup,
+            kind: .success,
+            symbol: "checkmark",
+            title: title,
+            message: [entry.name, entry.sizeName].compactMap(\.self).joined(separator: " · "),
+            messageDetail: unit.formattedAmount(entry.volumeML),
+            action: Toast.Action(title: String(localized: "Edit")) { [weak presenter] in
+                guard !entry.isDeleted, entry.modelContext != nil else { return }
+                presenter?.presentSheet(
+                    LogDrinkSheet(editing: entry),
+                    in: context,
+                    detents: [.medium()]
+                )
+            },
+            secondaryAction: Toast.Action(title: String(localized: "Undo")) { [weak presenter] in
+                do {
+                    try withAnimation {
+                        try QuickLogger.undo(LogUndoRecord(entry: entry, originalFood: originalDrink), in: context)
+                    }
+                } catch {
+                    presenter?.show(
+                        .failure(String(localized: "Couldn't Undo Log"), message: name)
+                    )
+                }
+            }
+        )
+    }
+
     static func favoriteToggled(
         _ food: FoodItem,
         previousOrder: Int?,
+        wasInLibrary: Bool = true,
         in context: ModelContext,
         presenter: ToastCenter?
     ) -> Toast {
@@ -290,11 +334,49 @@ extension Toast {
                 else { return }
                 do {
                     _ = try withAnimation {
-                        try FoodItemStore.toggleFavorite(food, in: context, at: previousOrder)
+                        food.isInLibrary = wasInLibrary
+                        return try FoodItemStore.toggleFavorite(food, in: context, at: previousOrder)
                     }
                 } catch {
                     presenter?.show(
                         .failure(String(localized: "Couldn't Update Favorites"), message: food.name)
+                    )
+                }
+            }
+        )
+    }
+
+    static func libraryMembershipChanged(
+        _ food: FoodItem,
+        previousFavoriteOrder: Int?,
+        in context: ModelContext,
+        presenter: ToastCenter?
+    ) -> Toast {
+        let isInLibrary = food.isInLibrary
+        return Toast(
+            group: entryGroup,
+            kind: isInLibrary ? .success : .info,
+            symbol: isInLibrary ? "plus.circle" : "minus.circle",
+            title: isInLibrary
+                ? String(localized: "Added to Library")
+                : String(localized: "Removed from Library"),
+            message: food.name,
+            action: Toast.Action(title: String(localized: "Undo")) { [weak presenter] in
+                guard !food.isDeleted, food.modelContext != nil,
+                    food.isInLibrary == isInLibrary
+                else { return }
+                do {
+                    _ = try withAnimation {
+                        try FoodItemStore.setInLibrary(
+                            !isInLibrary,
+                            for: food,
+                            restoringFavoriteAt: previousFavoriteOrder,
+                            in: context
+                        )
+                    }
+                } catch {
+                    presenter?.show(
+                        .failure(String(localized: "Couldn't Update Library"), message: food.name)
                     )
                 }
             }
@@ -315,29 +397,43 @@ extension Toast {
             message: food.name,
             action: Toast.Action(title: String(localized: "Log Now")) { [weak presenter] in
                 guard !food.isDeleted, food.modelContext != nil else { return }
+                let tracksHydration = (try? context.fetch(FetchDescriptor<User>()))?.first?.tracksHydration ?? true
                 presenter?.presentSheet(
                     LogFoodSheet(food: food)
-                        .modelContext(context)
-                        .textInputAutocapitalization(.never)
+                        .textInputAutocapitalization(.never),
+                    in: context,
+                    detents: tracksHydration && food.isLoggableDrink ? [.medium()] : nil
                 )
             }
         )
     }
 }
 
+extension Transaction {
+    @Entry var isMenuDelete = false
+}
+
 @MainActor
 enum EntryActions {
+    private static func deleteTransaction(fromMenu: Bool) -> Transaction {
+        var transaction = Transaction(animation: .default)
+        transaction.isMenuDelete = fromMenu
+        return transaction
+    }
+
     static func toggleFavorite(
         _ food: FoodItem,
         in context: ModelContext,
         toastCenter: ToastCenter?
     ) {
+        let wasInLibrary = food.isInLibrary
         do {
             let previousOrder = try FoodItemStore.toggleFavorite(food, in: context)
             toastCenter?.show(
                 .favoriteToggled(
                     food,
                     previousOrder: previousOrder,
+                    wasInLibrary: wasInLibrary,
                     in: context,
                     presenter: toastCenter
                 )
@@ -349,13 +445,54 @@ enum EntryActions {
         }
     }
 
-    static func delete(
-        _ entry: LoggedEntry,
+    static func addBuiltInToLibrary(
+        _ food: FoodItem,
         in context: ModelContext,
         toastCenter: ToastCenter?
     ) {
         do {
-            let record = try withAnimation {
+            let stored = try BuiltInCatalog.stored(food, in: context)
+            setInLibrary(true, for: stored, in: context, toastCenter: toastCenter)
+        } catch {
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Update Library"), message: food.name)
+            )
+        }
+    }
+
+    static func setInLibrary(
+        _ isInLibrary: Bool,
+        for food: FoodItem,
+        in context: ModelContext,
+        toastCenter: ToastCenter?
+    ) {
+        do {
+            let previousOrder = try withAnimation {
+                try FoodItemStore.setInLibrary(isInLibrary, for: food, in: context)
+            }
+            toastCenter?.show(
+                .libraryMembershipChanged(
+                    food,
+                    previousFavoriteOrder: previousOrder,
+                    in: context,
+                    presenter: toastCenter
+                )
+            )
+        } catch {
+            toastCenter?.show(
+                .failure(String(localized: "Couldn't Update Library"), message: food.name)
+            )
+        }
+    }
+
+    static func delete(
+        _ entry: LoggedEntry,
+        in context: ModelContext,
+        toastCenter: ToastCenter?,
+        fromMenu: Bool = false
+    ) {
+        do {
+            let record = try withTransaction(deleteTransaction(fromMenu: fromMenu)) {
                 try EntryDeleter.delete(entry, in: context)
             }
             guard let record else { return }
@@ -364,6 +501,54 @@ enum EntryActions {
             toastCenter?.show(
                 .failure(String(localized: "Couldn't Delete Entry"), message: entry.name)
             )
+        }
+    }
+
+    static func opensAsHydrationLog(_ entry: LoggedEntry, tracksHydration: Bool) -> Bool {
+        entry.isHydrationLog && tracksHydration
+    }
+
+    static func canLogAgain(_ entry: LoggedEntry, tracksHydration: Bool = true) -> Bool {
+        guard let food = entry.originalFoodItem else { return false }
+        return !opensAsHydrationLog(entry, tracksHydration: tracksHydration)
+            || (food.isLoggableDrink && entry.volumeML > 0)
+    }
+
+    static func logHydrationAgain(
+        _ entry: LoggedEntry,
+        dayStartMinutes: Int,
+        unit: VolumeUnit,
+        in context: ModelContext,
+        toastCenter: ToastCenter?
+    ) {
+        guard let drink = entry.originalFoodItem, drink.isLoggableDrink, entry.volumeML > 0 else { return }
+        let timestamp = Date.now
+        let today = Calendar.current.logicalDay(for: timestamp, dayStartMinutes: dayStartMinutes)
+        let goalFeedback = WaterGoalFeedback(at: timestamp, in: context)
+        do {
+            let logged = try withAnimation {
+                try HydrationLogger.log(
+                    drink,
+                    volumeML: entry.volumeML,
+                    sizeName: HydrationLogger.sizeName(for: drink, volumeML: entry.volumeML),
+                    at: timestamp,
+                    in: context
+                )
+            }
+            goalFeedback.playIfReached()
+            if let toastCenter {
+                toastCenter.show(
+                    .hydrationLogged(
+                        logged,
+                        title: HydrationLogger.loggedTitle(forDay: today, logicalToday: today),
+                        unit: unit,
+                        in: context,
+                        presenter: toastCenter
+                    )
+                )
+            }
+        } catch {
+            toastCenter?.show(.failure(String(localized: "Couldn't Log Drink"), message: drink.name))
         }
     }
 
@@ -378,11 +563,17 @@ enum EntryActions {
                 try FoodMerger.merge(plan, in: context)
             }
             guard let record else { return false }
-            toastCenter?.show(.foodsMerged(record, in: context, presenter: toastCenter))
+            let title = plan.kept.type == .drink
+                ? String(localized: "Drinks Merged") : String(localized: "Foods Merged")
+            toastCenter?.show(.foodsMerged(record, title: title, in: context, presenter: toastCenter))
             return true
         } catch {
             toastCenter?.show(
-                .failure(String(localized: "Couldn't Merge Foods"), message: plan.trimmedName)
+                .failure(
+                    plan.kept.type == .drink
+                        ? String(localized: "Couldn't Merge Drinks") : String(localized: "Couldn't Merge Foods"),
+                    message: plan.trimmedName
+                )
             )
             return false
         }
@@ -391,10 +582,11 @@ enum EntryActions {
     static func delete(
         _ draft: EntryDraft,
         in context: ModelContext,
-        toastCenter: ToastCenter?
+        toastCenter: ToastCenter?,
+        fromMenu: Bool = false
     ) {
         do {
-            let record = try withAnimation {
+            let record = try withTransaction(deleteTransaction(fromMenu: fromMenu)) {
                 try EntryDeleter.delete(draft, in: context)
             }
             guard let record else { return }

@@ -72,6 +72,7 @@ public struct GoalSlider: View {
     private let fillColor: Color
     private let trackFill: Color
     private let range: ClosedRange<Double>
+    private let modes: [GoalLimitMode]
     private let onChange: ((Double) -> Void)?
     private let onChangeEnd: ((Double) -> Void)?
     private let onEditingChanged: ((Bool) -> Void)?
@@ -87,6 +88,7 @@ public struct GoalSlider: View {
         value: Binding<Double>,
         limitMode: Binding<GoalLimitMode>,
         in range: ClosedRange<Double> = 0...100,
+        modes: [GoalLimitMode] = GoalLimitMode.allCases,
         onChange: ((Double) -> Void)? = nil,
         onChangeEnd: ((Double) -> Void)? = nil,
         onEditingChanged: ((Bool) -> Void)? = nil
@@ -104,6 +106,8 @@ public struct GoalSlider: View {
             initialValue: formatNumber(value.wrappedValue)
         )
         self.range = range
+        self.modes = modes
+        self._lastActiveMode = State(initialValue: modes.first { $0 != .off } ?? .ceiling)
         self.onChange = onChange
         self.onChangeEnd = onChangeEnd
         self.onEditingChanged = onEditingChanged
@@ -143,7 +147,7 @@ public struct GoalSlider: View {
                                 .foregroundColor(tint)
 
                         case .customSymbol(let name, let tint):
-                            Image(systemName: name)
+                            Image(symbol: name)
                                 .font(.system(size: titleFontSize * 0.7))
                                 .foregroundColor(tint)
                         }
@@ -278,11 +282,12 @@ public struct GoalSlider: View {
             .opacity(limitMode == .off ? 0.4 : 1.0)
 
             Picker("Limit Mode", selection: $limitMode) {
-                ForEach(GoalLimitMode.allCases, id: \.self) { mode in
+                ForEach(modes, id: \.self) { mode in
                     Text(mode.rawValue).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
+            .background(Capsule().fill(Color.segmentTrackUnderlay))
             .scaleEffect(0.7)
             .frame(height: 20)
             .frame(width: trackWidth)

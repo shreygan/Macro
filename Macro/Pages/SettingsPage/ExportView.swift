@@ -281,7 +281,7 @@ struct ExportView: View {
             exportButton(
                 kind: .library,
                 title: "Export CSV File",
-                emptyTitle: foodItems.isEmpty
+                emptyTitle: !foodItems.contains(where: \.isInLibrary)
                     ? "Library Is Empty" : "No Matching Entries",
                 isEmpty: filteredFoods.isEmpty,
                 loadingTitle: "Creating CSV..."
@@ -395,7 +395,7 @@ struct ExportView: View {
                     ),
                     .bullets([
                         countLabel(
-                            foodItems.count,
+                            foodItems.filter(\.isInLibrary).count,
                             "library entry",
                             "library entries"
                         ),

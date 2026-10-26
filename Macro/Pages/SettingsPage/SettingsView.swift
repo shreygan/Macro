@@ -179,6 +179,19 @@ struct SettingsView: View {
                                         .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
+
+                                    NavigationLink {
+                                        HydrationSettingsView(user: user)
+                                    } label: {
+                                        NavigationRow(
+                                            icon: .customSymbol("drop"),
+                                            title: "Hydration",
+                                            subtitle: user.tracksHydration
+                                                ? nil : String(localized: "Off")
+                                        )
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                             .padding([.top, .leading, .trailing])

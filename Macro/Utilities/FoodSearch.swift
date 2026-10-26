@@ -283,7 +283,7 @@ struct FoodSearch {
         relevance(name: food.name, fields: Self.fields(of: food))
     }
 
-    private func relevance(name: String, fields: [String?]) -> Relevance? {
+    func relevance(name: String, fields: [String?]) -> Relevance? {
         guard !isEmpty else { return nil }
 
         let name = Field(name)

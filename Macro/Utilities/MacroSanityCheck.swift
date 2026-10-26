@@ -105,9 +105,13 @@ enum MacroSanityCheck {
     static let maxCalories: Double = 5000
     static let maxMacroGrams: Double = 500
 
-    static func issue(for values: Values, scope: Scope = .full) -> String? {
+    static func issue(for values: Values, scope: Scope = .full, alcoholCalories: Double? = nil) -> String? {
         if let issue = sizeIssue(for: values) { return issue }
         guard scope == .full else { return nil }
+
+        if let issue = alcoholIssue(calories: values.calories, alcoholCalories: alcoholCalories) {
+            return issue
+        }
 
         if let weight = values.weightInGrams, weight > 0 {
             let weightLabel = weightText(values)
@@ -156,6 +160,16 @@ enum MacroSanityCheck {
         }
 
         return nil
+    }
+
+    static func alcoholIssue(calories: Double, alcoholCalories: Double?) -> String? {
+        guard let alcoholCalories, alcoholCalories >= 10,
+            calories < alcoholCalories - max(5, alcoholCalories * 0.05)
+        else { return nil }
+        return String(
+            localized:
+                "Calories (\(kcal(calories))) are lower than the alcohol alone (\(kcal(alcoholCalories)))."
+        )
     }
 
     private static func sizeIssue(for values: Values) -> String? {

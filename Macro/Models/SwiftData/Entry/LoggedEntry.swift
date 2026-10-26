@@ -43,6 +43,13 @@ class LoggedEntry {
 
     var isManualOverride: Bool = false
 
+    var isHydrationLog: Bool = false
+    var volumeML: Double = 0
+    var hydrationML: Double = 0
+    var caffeineMg: Double = 0
+    var alcoholGrams: Double = 0
+    var sizeName: String?
+
     var logNote: String?
 
     var displayOrder: Int = 0

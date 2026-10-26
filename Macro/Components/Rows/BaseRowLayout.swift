@@ -117,7 +117,7 @@ struct BaseRowLayout<RightContent: View>: View {
                         .frame(width: 15)
 
                 case .customSymbol(let systemName, let tint):
-                    Image(systemName: systemName)
+                    Image(symbol: systemName)
                         .font(.rowIcon)
                         .foregroundStyle(tint)
                         .frame(width: 15)

@@ -5,6 +5,7 @@
 //  Created by Shrey Gangwar on 10/7/26.
 //
 
+import SwiftData
 import SwiftUI
 
 struct Toast: Identifiable {
@@ -105,7 +106,11 @@ final class ToastCenter {
         }
     }
 
-    func presentSheet<Content: View>(_ content: Content) {
+    func presentSheet<Content: View>(
+        _ content: Content,
+        in context: ModelContext,
+        detents: [UISheetPresentationController.Detent]? = nil
+    ) {
         guard let scene = windowScene,
             let window = scene.windows.first(where: { $0.isKeyWindow && !($0 is ToastWindow) })
                 ?? scene.windows.first(where: { !($0 is ToastWindow) }),
@@ -115,14 +120,22 @@ final class ToastCenter {
         while let presented = top.presentedViewController {
             if presented.isBeingDismissed {
                 presented.transitionCoordinator?.animate(alongsideTransition: nil) { [weak self] _ in
-                    self?.presentSheet(content)
+                    self?.presentSheet(content, in: context, detents: detents)
                 }
                 return
             }
             top = presented
         }
 
-        let host = UIHostingController(rootView: content.environment(\.toastCenter, self))
+        let host = UIHostingController(
+            rootView: content
+                .userSettingsEnvironment()
+                .modelContext(context)
+                .environment(\.toastCenter, self)
+        )
+        if let detents {
+            host.sheetPresentationController?.detents = detents
+        }
         top.present(host, animated: true)
     }
 }

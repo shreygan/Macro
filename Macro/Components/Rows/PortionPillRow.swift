@@ -12,6 +12,7 @@ import SwiftUI
 struct PortionPillRow: View {
     var title: String = "Portion"
     var isEnabled: Bool = true
+    var showsUnitPicker: Bool = true
     var allowsCustomUnit: Bool = false
     var pendingCustomUnit: Binding<String?>? = nil
 
@@ -38,19 +39,27 @@ struct PortionPillRow: View {
 
                 ZStack(alignment: .trailing) {
                     HStack(spacing: 8) {
-                        InputPill(
-                            text: $quantity,
-                            keyboardType: .decimalPad
-                        )
+                        if showsUnitPicker {
+                            InputPill(
+                                text: $quantity,
+                                keyboardType: .decimalPad
+                            )
 
-                        DropdownPill(
-                            options: availableUnits,
-                            displayCustomOption: allowsCustomUnit,
-                            isEnabled: isEnabled,
-                            commitsCustomOnEnd: allowsCustomUnit,
-                            pendingCustom: pendingCustomUnit,
-                            selection: $unit
-                        )
+                            DropdownPill(
+                                options: availableUnits,
+                                displayCustomOption: allowsCustomUnit,
+                                isEnabled: isEnabled,
+                                commitsCustomOnEnd: allowsCustomUnit,
+                                pendingCustom: pendingCustomUnit,
+                                selection: $unit
+                            )
+                        } else {
+                            InputPill(
+                                text: $quantity,
+                                unit: unit,
+                                keyboardType: .decimalPad
+                            )
+                        }
                     }
                     .opacity(isEnabled ? 1.0 : 0.0)
                     .allowsHitTesting(isEnabled)

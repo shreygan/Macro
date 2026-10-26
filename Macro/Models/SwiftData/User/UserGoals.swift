@@ -29,6 +29,9 @@ class UserGoals {
     var fiber: Double = 0
     var fiberMode: GoalLimitMode = GoalLimitMode.off
 
+    var water: Double = 0
+    var waterMode: GoalLimitMode = GoalLimitMode.off
+
     var owner: User?
 
     init(
@@ -44,6 +47,8 @@ class UserGoals {
         fatMode: GoalLimitMode,
         fiber: Double,
         fiberMode: GoalLimitMode,
+        water: Double = 0,
+        waterMode: GoalLimitMode = .off,
         owner: User? = nil
     ) {
         self.id = id
@@ -58,10 +63,24 @@ class UserGoals {
         self.fatMode = fatMode
         self.fiber = fiber
         self.fiberMode = fiberMode
+        self.water = water
+        self.waterMode = waterMode
         self.owner = owner
     }
 
+    @MainActor
     func hasSameTargets(as other: UserGoals) -> Bool {
         targets == other.targets
+    }
+
+    @MainActor
+    func hasSameMacroTargets(as other: UserGoals) -> Bool {
+        var targets = targets
+        var otherTargets = other.targets
+        targets.water = 0
+        targets.waterMode = .off
+        otherTargets.water = 0
+        otherTargets.waterMode = .off
+        return targets == otherTargets
     }
 }

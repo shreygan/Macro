@@ -40,6 +40,7 @@ enum SyncDeduplicator {
     static func run(in context: ModelContext) -> Bool {
         mergeLists(in: context)
         let replacedLocalGoals = mergeUsers(in: context)
+        mergeSeededDrinks(in: context)
         mergeRecentLocations(in: context)
         mergeFavorites(in: context)
         mergeNotes(in: context)
@@ -136,6 +137,7 @@ enum SyncDeduplicator {
             }
             survivor.onboardingComplete = survivor.onboardingComplete || duplicate.onboardingComplete
             if survivor.name == nil { survivor.name = duplicate.name }
+            survivor.seededDrinkKeys.formUnion(duplicate.seededDrinkKeys)
             context.delete(duplicate)
         }
         return replacedLocalGoals
@@ -143,6 +145,63 @@ enum SyncDeduplicator {
 
     private static func firstGoalDate(of user: User) -> Date {
         (user.goalsHistory ?? []).filter { !$0.isDeleted }.map(\.date).min() ?? .distantFuture
+    }
+
+    private static func mergeSeededDrinks(in context: ModelContext) {
+        let seeded = live(FoodItem.self, in: context).filter { $0.seedKey != nil }
+        let groups = Dictionary(grouping: seeded) { $0.seedKey ?? "" }
+        for group in groups.values where group.count > 1 {
+            let sorted = group.sorted {
+                ($0.dateAdded, $0.id.uuidString) < ($1.dateAdded, $1.id.uuidString)
+            }
+            let survivor = sorted[0]
+            for duplicate in sorted.dropFirst() {
+                absorb(duplicate, into: survivor)
+                context.delete(duplicate)
+            }
+        }
+    }
+
+    private static func absorb(_ duplicate: FoodItem, into survivor: FoodItem) {
+        for log in duplicate.loggedEntries ?? [] { log.originalFoodItem = survivor }
+        for ingredient in duplicate.usedInRecipes ?? [] { ingredient.ingredientItem = survivor }
+        for draft in duplicate.drafts ?? [] { draft.foodItem = survivor }
+        duplicate.loggedEntries = []
+        duplicate.usedInRecipes = []
+        duplicate.drafts = []
+
+        if survivor.favoriteEntry == nil, let favorite = duplicate.favoriteEntry {
+            duplicate.favoriteEntry = nil
+            favorite.foodItem = survivor
+            survivor.favoriteEntry = favorite
+        }
+        if survivor.stickyNote == nil, let note = duplicate.stickyNote {
+            duplicate.stickyNote = nil
+            note.foodItem = survivor
+            survivor.stickyNote = note
+        }
+
+        let keptVolumes = (survivor.drinkSizes ?? []).map(\.volumeML)
+        var nextOrder = ((survivor.drinkSizes ?? []).map(\.displayOrder).max() ?? -1) + 1
+        let movedSizes = duplicate.sortedDrinkSizes.filter { size in
+            !keptVolumes.contains { HydrationLogger.isSameVolume($0, size.volumeML) }
+        }
+        for size in movedSizes {
+            size.isDefault = false
+            size.displayOrder = nextOrder
+            size.food = survivor
+            nextOrder += 1
+        }
+        duplicate.drinkSizes = (duplicate.drinkSizes ?? []).filter { size in
+            !movedSizes.contains { $0 === size }
+        }
+
+        if survivor.hydrationOrder == nil {
+            survivor.hydrationOrder = duplicate.hydrationOrder
+        }
+        if duplicate.isInLibrary {
+            survivor.isInLibrary = true
+        }
     }
 
     private static func mergeRecentLocations(in context: ModelContext) {
@@ -227,6 +286,18 @@ enum SyncDeduplicator {
         }
         renumber(live(SavedLocation.self, in: context), order: \.displayOrder) {
             ($0.createdAt, $0.id.uuidString) < ($1.createdAt, $1.id.uuidString)
+        }
+        renumberPinnedDrinks(live(FoodItem.self, in: context).filter { $0.hydrationOrder != nil })
+    }
+
+    private static func renumberPinnedDrinks(_ drinks: [FoodItem]) {
+        let orders = drinks.compactMap(\.hydrationOrder)
+        guard Set(orders).count < orders.count else { return }
+        let sorted = drinks.sorted {
+            ($0.hydrationOrder ?? 0, $0.id.uuidString) < ($1.hydrationOrder ?? 0, $1.id.uuidString)
+        }
+        for (index, drink) in sorted.enumerated() where drink.hydrationOrder != index {
+            drink.hydrationOrder = index
         }
     }
 

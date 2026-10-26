@@ -18,12 +18,21 @@ struct LogHistoryRow: View {
         var fat: Double
         var fiber: Double
         var isRecalculated = false
+        var drink: DrinkRowInfo? = nil
     }
 
     let entry: LoggedEntry
     let servingUnits: [ServingSizeUnit]
     var override: Override? = nil
     var action: (() -> Void)?
+
+    @Environment(\.volumeUnit) private var volumeUnit
+    @Environment(\.tracksHydration) private var tracksHydration
+
+    private var drink: DrinkRowInfo? {
+        guard let override else { return DrinkRowInfo(entry: entry) }
+        return override.drink
+    }
 
     private var category: String? {
         guard let category = entry.category?.category, !category.isEmpty
@@ -33,11 +42,13 @@ struct LogHistoryRow: View {
 
     private var detailText: Text {
         var parts = [
-            EntryHelper.portionText(
-                quantity: override?.quantity ?? entry.loggedQuantity,
-                unit: override?.unit ?? entry.loggedUnit,
-                servingUnits: servingUnits
-            )
+            drink?.amountText(unit: volumeUnit)
+                ?? EntryHelper.portionText(
+                    quantity: override?.quantity ?? entry.loggedQuantity,
+                    unit: override?.unit ?? entry.loggedUnit,
+                    servingUnits: servingUnits,
+                    volumeUnit: volumeUnit
+                )
         ]
 
         if let source = entry.source?.source, !source.isEmpty,
@@ -98,10 +109,19 @@ struct LogHistoryRow: View {
                     .font(.subtitle)
                     .foregroundStyle(Color.tertiaryText)
 
-                macrosText
-                    .contentTransition(override == nil ? .identity : .numericText())
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let facts = drink?.factsText(unit: volumeUnit, includesHydration: tracksHydration) {
+                    Text(facts)
+                        .font(.subtitle)
+                        .foregroundStyle(Color.tertiaryText)
+                        .lineLimit(1)
+                }
+
+                if drink?.hasMacros ?? true {
+                    macrosText
+                        .contentTransition(override == nil ? .identity : .numericText())
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer(minLength: 0)
@@ -134,30 +154,109 @@ struct LogHistoryRow: View {
     }
 
     private var macrosText: Text {
+        Self.macrosText(
+            calories: override?.calories ?? entry.calories,
+            protein: override?.protein ?? entry.protein,
+            carbs: override?.carbs ?? entry.carbs,
+            fat: override?.fat ?? entry.fat,
+            fiber: override?.fiber ?? entry.fiber,
+            valueColor: override?.isRecalculated == true ? Color.accentColor : .primary
+        )
+    }
+
+    static func macrosText(
+        calories: Double,
+        protein: Double,
+        carbs: Double,
+        fat: Double,
+        fiber: Double,
+        valueColor: Color = .primary
+    ) -> Text {
         let strut = Text("\u{200B}").font(.rowValue)
-        var result = macroText(.calorie, value: override?.calories ?? entry.calories, isFirst: true)
+        let macroText = { (icon: RowIcon, value: Double, isFirst: Bool) in
+            icon.macroText(
+                EntryHelper.formatMacro(value),
+                iconSize: 12,
+                valueSize: 12,
+                valueColor: valueColor,
+                isFirst: isFirst
+            )
+        }
+        var result = macroText(.calorie, calories, true)
 
         let macros: [(RowIcon, Double)] = [
-            (.protein, override?.protein ?? entry.protein),
-            (.carbs, override?.carbs ?? entry.carbs),
-            (.fat, override?.fat ?? entry.fat),
-            (.fiber, override?.fiber ?? entry.fiber),
+            (.protein, protein),
+            (.carbs, carbs),
+            (.fat, fat),
+            (.fiber, fiber),
         ]
         for (icon, value) in macros where value > 0 {
-            result = Text("\(result)\(macroText(icon, value: value, isFirst: false))")
+            result = Text("\(result)\(macroText(icon, value, false))")
         }
 
         return Text("\(result)\(strut)")
     }
+}
 
-    private func macroText(_ icon: RowIcon, value: Double, isFirst: Bool) -> Text {
-        icon.macroText(
-            EntryHelper.formatMacro(value),
-            iconSize: 12,
-            valueSize: 12,
-            valueColor: override?.isRecalculated == true ? Color.accentColor : .primary,
-            isFirst: isFirst
-        )
+struct HydrationDayHistoryRow: View {
+    let day: Date
+    let summary: HydrationDaySummary
+    var action: () -> Void
+
+    @Environment(\.volumeUnit) private var volumeUnit
+    @Environment(\.tracksHydration) private var tracksHydration
+
+    var body: some View {
+        let info = summary.rowInfo
+
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(EntryHelper.logDayText(day))
+                    .font(.compactTitle)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+
+                if let amount = info.amountText(unit: volumeUnit) {
+                    Text(amount)
+                        .font(.subtitle)
+                        .foregroundStyle(Color.tertiaryText)
+                        .lineLimit(1)
+                }
+
+                if let facts = info.factsText(unit: volumeUnit, includesHydration: tracksHydration) {
+                    Text(facts)
+                        .font(.subtitle)
+                        .foregroundStyle(Color.tertiaryText)
+                        .lineLimit(1)
+                }
+
+                if info.hasMacros {
+                    LogHistoryRow.macrosText(
+                        calories: summary.calories,
+                        protein: summary.protein,
+                        carbs: summary.carbs,
+                        fat: summary.fat,
+                        fiber: summary.fiber
+                    )
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.chevron)
+                .foregroundStyle(Color.tertiaryText)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, RowMetrics.verticalPadding)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: action)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Opens Hydration")
+        .accessibilityAction { action() }
     }
 }
 

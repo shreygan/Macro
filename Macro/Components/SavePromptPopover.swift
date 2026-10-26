@@ -81,6 +81,7 @@ private struct SavePromptPopoverContent: View {
                         bottomPadding: 0
                     ) {
                         if item.next != nil {
+                            item.action()
                             withAnimation(.smooth(duration: 0.3)) {
                                 showsNextStep = true
                             }
@@ -152,6 +153,27 @@ extension SavePromptStep {
             title: String(localized: "Check Macros?"),
             message: issue,
             actions: [SavePromptAction(title: String(localized: confirmTitle), action: onConfirm)]
+        )
+    }
+
+    static func alcoholCheck(
+        _ issue: String,
+        alcoholCalories: Double,
+        next: SavePromptStep? = nil,
+        onUse: @escaping () -> Void,
+        onSaveAnyway: @escaping () -> Void = {}
+    ) -> SavePromptStep {
+        SavePromptStep(
+            title: String(localized: "Check Macros?"),
+            message: issue,
+            actions: [
+                SavePromptAction(
+                    title: String(localized: "Use \(EntryHelper.format(alcoholCalories)) kcal"),
+                    next: next,
+                    action: onUse
+                ),
+                SavePromptAction(title: String(localized: "Save Anyway"), next: next, action: onSaveAnyway),
+            ]
         )
     }
 }

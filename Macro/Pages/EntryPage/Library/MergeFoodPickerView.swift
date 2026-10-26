@@ -10,6 +10,8 @@ import SwiftUI
 
 struct MergeFoodPickerView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.toastCenter) private var toastCenter
 
     let food: FoodItem
     var onConfirm: (FoodMergePlan) -> Void
@@ -20,32 +22,85 @@ struct MergeFoodPickerView: View {
     @State private var selectedIDs: [UUID] = []
     @State private var searchText = ""
     @State private var isShowingReview = false
+    @State private var reviewFoods: [FoodItem] = []
+    @State private var storedBuiltIns: [FoodItem] = []
+    @State private var didMerge = false
+
+    private var libraryFoods: [FoodItem] {
+        allFoods.filter {
+            $0.type == food.type && $0.id != food.id && ($0.seedKey == nil || $0.isInLibrary)
+        }
+    }
+
+    private var builtIns: [FoodItem] {
+        BuiltInCatalog.items(stored: allFoods, type: food.type)
+            .filter { $0.id != food.id && $0.seedKey != food.seedKey }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
 
     private var candidates: [FoodItem] {
-        allFoods.filter { $0.type == food.type && $0.id != food.id }
+        libraryFoods + builtIns
     }
 
     private var similarFoods: [FoodItem] {
-        let words = Self.nameWords(food.name)
-        guard !words.isEmpty else { return [] }
-        return candidates
-            .map { ($0, Self.similarity(words, Self.nameWords($0.name))) }
-            .filter { $0.1 >= 0.6 }
-            .sorted { $0.1 > $1.1 }
-            .map(\.0)
+        FoodNameMatch.similar(to: food.name, in: candidates)
     }
 
     private var otherFoods: [FoodItem] {
         let similarIDs = Set(similarFoods.map(\.id))
-        return candidates.filter { !similarIDs.contains($0.id) }
+        return libraryFoods.filter { !similarIDs.contains($0.id) }
     }
 
-    private var searchResults: [FoodItem] {
+    private var otherBuiltIns: [FoodItem] {
+        let similarIDs = Set(similarFoods.map(\.id))
+        return builtIns.filter { !similarIDs.contains($0.id) }
+    }
+
+    private func searchResults(in foods: [FoodItem]) -> [FoodItem] {
         let search = FoodSearch(searchText)
-        return candidates
+        return foods
             .compactMap { food in search.relevance(of: food).map { (food, $0) } }
             .sorted { $0.1 < $1.1 }
             .map(\.0)
+    }
+
+    private var searchResults: [FoodItem] {
+        searchResults(in: libraryFoods)
+    }
+
+    private var builtInResults: [FoodItem] {
+        searchResults(in: builtIns)
+    }
+
+    private func review() {
+        var stored: [FoodItem] = []
+        for item in selectedFoods {
+            guard !BuiltInCatalog.isStored(item) else {
+                stored.append(item)
+                continue
+            }
+            do {
+                let copy = try BuiltInCatalog.stored(item, in: modelContext)
+                storedBuiltIns.append(copy)
+                if let index = selectedIDs.firstIndex(of: item.id) {
+                    selectedIDs[index] = copy.id
+                }
+                stored.append(copy)
+            } catch {
+                toastCenter?.show(.failure(String(localized: "Couldn't Open \(item.name)")))
+                return
+            }
+        }
+        reviewFoods = stored
+        isShowingReview = true
+    }
+
+    private func discardUnusedBuiltIns() {
+        guard !didMerge else { return }
+        for item in storedBuiltIns {
+            BuiltInCatalog.discardIfUnused(item, in: modelContext)
+        }
+        storedBuiltIns = []
     }
 
     private var selectedFoods: [FoodItem] {
@@ -70,8 +125,16 @@ struct MergeFoodPickerView: View {
                             if !otherFoods.isEmpty {
                                 list(similarFoods.isEmpty ? typeTitle : "All \(typeTitle)", foods: otherFoods)
                             }
-                        } else if !searchResults.isEmpty {
-                            list(nil, foods: searchResults)
+                            if !otherBuiltIns.isEmpty {
+                                list("Built-In", foods: otherBuiltIns)
+                            }
+                        } else {
+                            if !searchResults.isEmpty {
+                                list(nil, foods: searchResults)
+                            }
+                            if !builtInResults.isEmpty {
+                                list("Built-In", foods: builtInResults)
+                            }
                         }
                     }
                 }
@@ -83,8 +146,19 @@ struct MergeFoodPickerView: View {
                         systemImage: "square.stack",
                         description: Text("There's nothing to merge this with yet.")
                     )
-                } else if !searchText.isEmpty && searchResults.isEmpty {
-                    ContentUnavailableView.search(text: searchText)
+                } else if !searchText.isEmpty && searchResults.isEmpty && builtInResults.isEmpty {
+                    ContentUnavailableView {
+                        Label(
+                            "No \(typeTitle) match \"\(searchText)\"",
+                            systemImage: AppSymbols.from(food.type.rawValue.capitalized)?.rawValue ?? "magnifyingglass"
+                        )
+                    } description: {
+                        SearchSuggestionButton(
+                            suggestion: FoodSearch.suggestion(for: searchText, in: candidates),
+                            fallback: "Try a new search."
+                        ) { searchText = $0 }
+                        .font(.subheadline)
+                    }
                 }
             }
             .navigationTitle("Merge With")
@@ -110,7 +184,7 @@ struct MergeFoodPickerView: View {
 
                 ToolbarItem(placement: .bottomBar) {
                     Button {
-                        isShowingReview = true
+                        review()
                     } label: {
                         Image(systemName: "arrow.right")
                     }
@@ -121,10 +195,11 @@ struct MergeFoodPickerView: View {
             }
             .navigationDestination(isPresented: $isShowingReview) {
                 MergeFoodsView(
-                    foods: [food] + selectedFoods,
+                    foods: [food] + reviewFoods,
                     kept: food,
                     servingUnits: servingUnits,
                     onConfirm: { plan in
+                        didMerge = true
                         onConfirm(plan)
                         dismiss()
                     }
@@ -133,6 +208,7 @@ struct MergeFoodPickerView: View {
         }
         .environment(\.tabBarHeight, 0)
         .sensoryFeedback(.selection, trigger: selectedIDs.count)
+        .onDisappear(perform: discardUnusedBuiltIns)
     }
 
     private func list(_ title: String?, foods: [FoodItem]) -> some View {
@@ -158,22 +234,6 @@ struct MergeFoodPickerView: View {
         } else {
             selectedIDs.append(item.id)
         }
-    }
-
-    private static let ignoredWords: Set<String> = [
-        "serving", "servings", "slice", "slices", "piece", "pieces", "the", "and", "with",
-    ]
-
-    private static func nameWords(_ name: String) -> Set<String> {
-        let words = name.lowercased()
-            .components(separatedBy: CharacterSet.letters.inverted)
-            .filter { $0.count >= 3 && !ignoredWords.contains($0) }
-        return Set(words)
-    }
-
-    private static func similarity(_ lhs: Set<String>, _ rhs: Set<String>) -> Double {
-        guard !lhs.isEmpty, !rhs.isEmpty else { return 0 }
-        return Double(lhs.intersection(rhs).count) / Double(min(lhs.count, rhs.count))
     }
 }
 

@@ -598,8 +598,8 @@ struct FloatingKeyboardModifier: ViewModifier {
                     .onGeometryChange(for: CGRect.self) { proxy in
                         proxy.frame(in: .global)
                     } action: { frame in
-                        measuredToolbarHeight = frame.height
-                        measuredToolbarTop = frame.minY
+                        measuredToolbarHeight = frame.height.rounded()
+                        measuredToolbarTop = frame.minY.rounded()
                     }
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }

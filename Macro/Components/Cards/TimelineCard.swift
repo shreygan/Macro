@@ -69,20 +69,26 @@ private enum TimelineItem: Identifiable {
     }
 }
 
+extension LoggedEntry {
+    var showsOnTimeline: Bool {
+        entryType != .drink || calories > 0 || protein > 0 || carbs > 0 || fat > 0 || fiber > 0
+    }
+}
+
 struct TimelineCard<MenuContent: View>: View {
     @Query private var entries: [LoggedEntry]
     @Query private var drafts: [EntryDraft]
-    @Query(sort: \ServingSizeUnit.displayOrder) private var servingUnits:
-        [ServingSizeUnit]
     @Binding var clickedEntry: LoggedEntry?
     @Binding var clickedDraft: EntryDraft?
 
     let menuItems: (LoggedEntry) -> MenuContent
     var onDeleteDraft: ((EntryDraft) -> Void)?
+    var showsAllDrinks: Bool
 
     init(
         date: Date,
         dayStartMinutes: Int = 0,
+        showsAllDrinks: Bool = false,
         clickedEntry: Binding<LoggedEntry?> = .constant(nil),
         clickedDraft: Binding<EntryDraft?> = .constant(nil),
         onDeleteDraft: ((EntryDraft) -> Void)? = nil,
@@ -116,6 +122,53 @@ struct TimelineCard<MenuContent: View>: View {
         self._clickedEntry = clickedEntry
         self._clickedDraft = clickedDraft
         self.onDeleteDraft = onDeleteDraft
+        self.showsAllDrinks = showsAllDrinks
+        self.menuItems = menuItems
+    }
+
+    var body: some View {
+        Card("Timeline") {
+            TimelineList(
+                entries: showsAllDrinks ? entries : entries.filter(\.showsOnTimeline),
+                drafts: drafts,
+                emptyText: "No entries logged today.",
+                onSelectEntry: { clickedEntry = $0 },
+                onSelectDraft: { clickedDraft = $0 },
+                onDeleteDraft: onDeleteDraft,
+                menuItems: menuItems
+            )
+        }
+    }
+}
+
+struct TimelineList<MenuContent: View>: View {
+    @Query(sort: \ServingSizeUnit.displayOrder) private var servingUnits:
+        [ServingSizeUnit]
+    @Environment(\.volumeUnit) private var volumeUnit
+
+    let entries: [LoggedEntry]
+    var drafts: [EntryDraft] = []
+    let emptyText: LocalizedStringKey
+    var onSelectEntry: (LoggedEntry) -> Void
+    var onSelectDraft: (EntryDraft) -> Void = { _ in }
+    var onDeleteDraft: ((EntryDraft) -> Void)? = nil
+    let menuItems: (LoggedEntry) -> MenuContent
+
+    init(
+        entries: [LoggedEntry],
+        drafts: [EntryDraft] = [],
+        emptyText: LocalizedStringKey,
+        onSelectEntry: @escaping (LoggedEntry) -> Void,
+        onSelectDraft: @escaping (EntryDraft) -> Void = { _ in },
+        onDeleteDraft: ((EntryDraft) -> Void)? = nil,
+        @ViewBuilder menuItems: @escaping (LoggedEntry) -> MenuContent
+    ) {
+        self.entries = entries
+        self.drafts = drafts
+        self.emptyText = emptyText
+        self.onSelectEntry = onSelectEntry
+        self.onSelectDraft = onSelectDraft
+        self.onDeleteDraft = onDeleteDraft
         self.menuItems = menuItems
     }
 
@@ -126,15 +179,16 @@ struct TimelineCard<MenuContent: View>: View {
 
     @ViewBuilder
     private func entryRow(_ entry: LoggedEntry) -> some View {
+        let isVolume = entry.loggedUnit == VolumeUnit.milliliters.rawValue
         let mealRow = MealRow(
             name: entry.name,
             source: entry.source?.source ?? "",
             isCustomDefaultServing: false,
             customServingSize: "",
-            servingSize: EntryHelper.format(
-                entry.loggedQuantity
-            ),
-            servingSizeUnit: entry.loggedUnit,
+            servingSize: isVolume
+                ? volumeUnit.formattedValue(entry.loggedQuantity)
+                : EntryHelper.format(entry.loggedQuantity),
+            servingSizeUnit: isVolume ? volumeUnit.rawValue : entry.loggedUnit,
             servingWeight: "",
             servingWeightUnit: "",
             servingUnits: servingUnits,
@@ -143,10 +197,12 @@ struct TimelineCard<MenuContent: View>: View {
             carbs: String(entry.carbs),
             fat: String(entry.fat),
             fiber: String(entry.fiber),
+            icon: entry.entryType?.appSymbol,
             action: {
-                clickedEntry = entry
+                onSelectEntry(entry)
             }
         )
+        .drink(DrinkRowInfo(entry: entry))
         .attachmentHints(
             hasNote: !(entry.logNote ?? "").isEmpty,
             hasPhotos: !(entry.photos ?? []).isEmpty
@@ -160,7 +216,7 @@ struct TimelineCard<MenuContent: View>: View {
                     .allowsHitTesting(false)
                     .contentShape(Rectangle())
             } primaryAction: {
-                clickedEntry = entry
+                onSelectEntry(entry)
             }
             .buttonStyle(.plain)
             .padding(.top, -8)
@@ -174,13 +230,13 @@ struct TimelineCard<MenuContent: View>: View {
     @ViewBuilder
     private func draftRow(_ draft: EntryDraft) -> some View {
         let row = DraftRow(draft: draft, servingUnits: servingUnits) {
-            clickedDraft = draft
+            onSelectDraft(draft)
         }
 
         if let onDeleteDraft {
             Menu {
                 Button {
-                    clickedDraft = draft
+                    onSelectDraft(draft)
                 } label: {
                     Label("Finish Logging", systemImage: "checkmark.circle")
                 }
@@ -197,7 +253,7 @@ struct TimelineCard<MenuContent: View>: View {
                     .allowsHitTesting(false)
                     .contentShape(Rectangle())
             } primaryAction: {
-                clickedDraft = draft
+                onSelectDraft(draft)
             }
             .buttonStyle(.plain)
             .padding(.top, -8)
@@ -226,107 +282,131 @@ struct TimelineCard<MenuContent: View>: View {
     var body: some View {
         let items = items
 
-        Card("Timeline") {
-            VStack(spacing: 0) {
-                if items.isEmpty {
-                    VStack(spacing: 16) {
-                        Text("No entries logged today.")
-                            .font(.compactTitle)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 8)
-                    .padding(.bottom, 16)
-                } else {
-                    ForEach(Array(items.enumerated()), id: \.element.id) {
-                        index,
-                        item in
-                        let isFirst = index == 0
-                        let isLast = index == items.count - 1
+        VStack(spacing: 0) {
+            if items.isEmpty {
+                VStack(spacing: 16) {
+                    Text(emptyText)
+                        .font(.compactTitle)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+            } else {
+                ForEach(Array(items.enumerated()), id: \.element.id) {
+                    index,
+                    item in
+                    let isFirst = index == 0
+                    let isLast = index == items.count - 1
 
-                        VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
 
-                            HStack(spacing: 0) {
-                                Text(formatTime(item.timestamp))
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.primary)
-                                    .fixedSize()
+                        HStack(spacing: 0) {
+                            Text(formatTime(item.timestamp))
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                                .fixedSize()
 
-                                if let detail = item.detail {
-                                    Text(" · \(detail)")
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                }
-
-                                if item.isDraft {
-                                    Text("Draft")
-                                        .tagStyle()
-                                        .fixedSize()
-                                        .padding(.leading, 6)
-                                }
+                            if let detail = item.detail {
+                                Text(" · \(detail)")
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
                             }
-                            .font(.subtitle)
-                            .padding(.leading, 4)
-                            .padding(.trailing, 16)
-                            .padding(.bottom, 6)
 
+                            if item.isDraft {
+                                Text("Draft")
+                                    .tagStyle()
+                                    .fixedSize()
+                                    .padding(.leading, 6)
+                            }
+                        }
+                        .font(.subtitle)
+                        .padding(.leading, 4)
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 6)
+                        .modifier(TimelineRemovalFade())
+
+                        Group {
                             if let entry = item.entry {
                                 entryRow(entry)
                             } else if let draft = item.draft {
                                 draftRow(draft)
                             }
                         }
-                        .clipped()
-                        .transition(
-                            .asymmetric(
-                                insertion: .opacity.combined(with: .scale(scale: 0.95)),
-                                removal: .opacity.animation(.linear(duration: 0))
-                            )
-                        )
-                        .padding(.leading, 20)
-                        .overlay(alignment: .topLeading) {
-                            ZStack(alignment: .top) {
-                                if isFirst && isLast {
-                                    Capsule()
-                                        .fill(Color.trackFill)
-                                        .frame(width: 2)
-                                        .padding(.top, 8)
-                                        .padding(.bottom, 16)
-                                } else if isFirst {
-                                    Rectangle()
-                                        .fill(Color.trackFill)
-                                        .frame(width: 2)
-                                        .padding(.top, 8)
-                                } else if isLast {
-                                    Capsule()
-                                        .fill(Color.trackFill)
-                                        .frame(width: 2)
-                                        .padding(.bottom, 16)
-                                } else {
-                                    Rectangle()
-                                        .fill(Color.trackFill)
-                                        .frame(width: 2)
-                                }
-
-                                timelineDot(isDraft: item.isDraft)
-                                    .padding(.top, 4)
-                            }
-                            .frame(width: 32)
-                            .frame(maxHeight: .infinity, alignment: .top)
-                        }
+                        .modifier(TimelineRemovalFade(isMenuLabel: true))
                     }
+                    .clipped()
+                    .padding(.leading, 20)
+                    .overlay(alignment: .topLeading) {
+                        ZStack(alignment: .top) {
+                            if isFirst && isLast {
+                                Capsule()
+                                    .fill(Color.trackFill)
+                                    .frame(width: 2)
+                                    .padding(.top, 8)
+                                    .padding(.bottom, 16)
+                            } else if isFirst {
+                                Rectangle()
+                                    .fill(Color.trackFill)
+                                    .frame(width: 2)
+                                    .padding(.top, 8)
+                            } else if isLast {
+                                Capsule()
+                                    .fill(Color.trackFill)
+                                    .frame(width: 2)
+                                    .padding(.bottom, 16)
+                            } else {
+                                Rectangle()
+                                    .fill(Color.trackFill)
+                                    .frame(width: 2)
+                            }
+
+                            timelineDot(isDraft: item.isDraft)
+                                .padding(.top, 4)
+                        }
+                        .frame(width: 32)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .modifier(TimelineRemovalFade())
+                    }
+                    .transition(TimelineRowTransition())
                 }
             }
-            .padding(.top, 12)
-            .padding(.bottom, 8)
         }
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
 
     private func formatTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter.string(from: date).lowercased()
+        date.formatted(date: .omitted, time: .shortened).lowercased()
+    }
+}
+
+private extension EnvironmentValues {
+    @Entry var isTimelineRowRemoving = false
+}
+
+private struct TimelineRowTransition: Transition {
+    func body(content: Content, phase: TransitionPhase) -> some View {
+        content
+            .opacity(phase == .willAppear ? 0 : 1)
+            .scaleEffect(phase == .willAppear ? 0.95 : 1)
+            .environment(\.isTimelineRowRemoving, phase == .didDisappear)
+    }
+}
+
+private struct TimelineRemovalFade: ViewModifier {
+    @Environment(\.isTimelineRowRemoving) private var isRemoving
+    var isMenuLabel = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isRemoving ? 0 : 1)
+            .transaction(value: isRemoving) { transaction in
+                if isMenuLabel && transaction.isMenuDelete {
+                    transaction.animation = nil
+                }
+            }
     }
 }
 
@@ -371,7 +451,7 @@ extension TimelineCard where MenuContent == EmptyView {
     // 1. Eggs & Tater Tots
     let eggsEntry = LoggedEntry(
         name: "Eggs & Tater Tots",
-        typeRawValue: "meal",
+        typeRawValue: "food",
         timestamp: makeTime(hour: 9, minute: 45),
         loggedQuantity: 1,
         loggedUnit: "serving",
@@ -399,7 +479,7 @@ extension TimelineCard where MenuContent == EmptyView {
     // 2. Double Chicken Bowl
     let chickenEntry = LoggedEntry(
         name: "Double Chicken Bowl",
-        typeRawValue: "meal",
+        typeRawValue: "recipe",
         timestamp: makeTime(hour: 14, minute: 9),
         loggedQuantity: 1,
         loggedUnit: "serving",
@@ -418,18 +498,36 @@ extension TimelineCard where MenuContent == EmptyView {
         timestamp: makeTime(hour: 14, minute: 11),
         loggedQuantity: 310,
         loggedUnit: "ml",
-        calories: 750,
+        calories: 60,
         protein: 0,
         carbs: 13,
         fat: 0,
         fiber: 0
     )
+    let coconutFood = FoodItem(
+        name: "Coconut Water",
+        type: .drink,
+        servingSize: 1,
+        servingWeight: 310,
+        servingWeightUnit: "ml",
+        isAIEstimated: false,
+        calories: 60,
+        protein: 0,
+        carbs: 13,
+        fat: 0,
+        fiber: 0,
+        isCustomDefaultServing: false
+    )
+    coconutFood.symbol = "leaf.fill"
+    coconutFood.tintRawValue = DrinkTint.green.rawValue
+    coconutEntry.originalFoodItem = coconutFood
     context.insert(coconutEntry)
+    coconutEntry.snapshotDrinkAmounts(children: [])
 
     // 4. Vanilla Chocolate Sprinkle Bar
     let barEntry = LoggedEntry(
         name: "Vanilla Chocolate Sprinkle Bar",
-        typeRawValue: "snack",
+        typeRawValue: "food",
         timestamp: makeTime(hour: 16, minute: 3),
         loggedQuantity: 1,
         loggedUnit: "serving",
@@ -467,7 +565,7 @@ extension TimelineCard where MenuContent == EmptyView {
     // 5. Lights Caramel Action
     let iceCreamEntry = LoggedEntry(
         name: "Lights Caramel Action",
-        typeRawValue: "snack",
+        typeRawValue: "food",
         timestamp: makeTime(hour: 20, minute: 3),
         loggedQuantity: 1,
         loggedUnit: "serving",
@@ -525,3 +623,4 @@ extension TimelineCard where MenuContent == EmptyView {
     .background(Color(UIColor.systemGroupedBackground))
     .modelContainer(container)
 }
+

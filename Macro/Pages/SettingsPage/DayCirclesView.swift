@@ -14,6 +14,8 @@ struct DayCirclesView: View {
 
     let user: User
 
+    @State private var showsPreviewInfo = false
+
     private var sampleScores: [DayGoalScore?] {
         switch user.dayCircleMode {
         case .goalProgress:
@@ -43,6 +45,7 @@ struct DayCirclesView: View {
             case .carbs: [1, 1, 0.65, nil, 0.35, 1, 0.85]
             case .fat: [0.5, 1, 1, nil, 0.75, 0.9, 1]
             case .fiber: [0.45, 0.7, 1, nil, 0.6, 1, 0.3]
+            case .water: [1, 0.75, 1, nil, 0.5, 1, 0.9]
             }
         return fractions.map { fraction in
             fraction.map { DayGoalScore(fraction: $0, allHit: $0 == 1) }
@@ -62,6 +65,16 @@ struct DayCirclesView: View {
             set: { rawValue in
                 guard let goal = DayCircleGoal(rawValue: rawValue) else { return }
                 user.dayCircleGoal = goal
+                save()
+            }
+        )
+    }
+
+    private var includesWater: Binding<Bool> {
+        Binding(
+            get: { user.dayCirclesIncludeWater },
+            set: { isOn in
+                user.dayCirclesIncludeWater = isOn
                 save()
             }
         )
@@ -91,7 +104,35 @@ struct DayCirclesView: View {
             ScrollView {
                 VStack {
                     Card("Preview") {
+                        if showsPreviewInfo {
+                            Text("Today fills as you approach your limits. A dot marks days with drafts, and the star stays outlined until they're logged.")
+                                .font(.subtitle)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16)
+                                .padding(.top, 6)
+                                .transition(.opacity)
+                        }
+
                         preview
+                    } headerAccessory: {
+                        Button {
+                            withAnimation(.snappy(duration: 0.3)) {
+                                showsPreviewInfo.toggle()
+                            }
+                        } label: {
+                            Image(systemName: "info")
+                                .font(.menuIcon)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 28, height: 28)
+                                .background(Circle().fill(Color.controlFill))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, -2)
+                        .padding(.trailing, -6)
+                        .accessibilityLabel("About Day Circles")
+                        .accessibilityValue(showsPreviewInfo ? "Shown" : "Hidden")
                     }
                     .padding(.horizontal)
 
@@ -113,13 +154,25 @@ struct DayCirclesView: View {
                     }
                     .padding([.top, .horizontal])
 
-                    if showsGoalPicker {
+                    if showsGoalPicker || showsWaterToggle {
                         Card {
-                            goalRow
-                                .hidden()
+                            ZStack {
+                                goalRow
+                                waterRow
+                            }
+                            .hidden()
                         }
                         .overlay(alignment: .top) {
-                            goalRow
+                            ZStack {
+                                if showsGoalPicker {
+                                    goalRow
+                                        .transition(.opacity)
+                                }
+                                if showsWaterToggle {
+                                    waterRow
+                                        .transition(.opacity)
+                                }
+                            }
                         }
                         .padding([.top, .horizontal])
                         .transition(.opacity)
@@ -134,6 +187,18 @@ struct DayCirclesView: View {
 
     private var showsGoalPicker: Bool {
         user.dayCircleMode == .oneGoal && !user.activeDayCircleGoals.isEmpty
+    }
+
+    private var showsWaterToggle: Bool {
+        switch user.dayCircleMode {
+        case .goalProgress: user.offersDayCirclesWaterToggle
+        case .loggedDays: user.tracksHydration
+        case .oneGoal, .off: false
+        }
+    }
+
+    private var waterRow: some View {
+        ToggleRow(title: "Include Water", isOn: includesWater)
     }
 
     private var goalRow: some View {
@@ -151,7 +216,7 @@ struct DayCirclesView: View {
             title: mode.rawValue,
             subtitle: isAvailable
                 ? mode.explanation
-                : String(localized: "Turn on a goal in Macro Goals to use this.")
+                : String(localized: "Turn on a goal to use this.")
         ) {
             Image(systemName: "checkmark")
                 .font(.menuIcon)

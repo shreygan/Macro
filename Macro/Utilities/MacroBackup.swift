@@ -38,6 +38,11 @@ nonisolated struct MacroBackup: Codable, Sendable {
         var dayStartMinutes: Int
         var dayCircleMode: String? = nil
         var dayCircleGoal: String? = nil
+        var dayCirclesIncludeWater: Bool? = nil
+        var volumeUnit: String? = nil
+        var tracksHydration: Bool? = nil
+        var skipsWaterGoalPrompt: Bool? = nil
+        var seededDrinkKeys: [String]? = nil
     }
 
     struct GoalRecord: Codable, Sendable {
@@ -53,6 +58,8 @@ nonisolated struct MacroBackup: Codable, Sendable {
         var fatMode: String
         var fiber: Double
         var fiberMode: String
+        var water: Double? = nil
+        var waterMode: String? = nil
     }
 
     struct ListRecord: Codable, Sendable {
@@ -116,6 +123,28 @@ nonisolated struct MacroBackup: Codable, Sendable {
         var dateAdded: Date
         var note: NoteRecord?
         var ingredients: [IngredientRecord]
+        var drink: DrinkRecord? = nil
+        var isInLibrary: Bool? = nil
+    }
+
+    struct DrinkRecord: Codable, Sendable, Equatable {
+        var hydrationPercent: Double
+        var caffeineMg: Double?
+        var abv: Double?
+        var hasNutrition: Bool
+        var symbol: String?
+        var tint: String?
+        var hydrationOrder: Int?
+        var seedKey: String?
+        var sizes: [DrinkSizeRecord]
+    }
+
+    struct DrinkSizeRecord: Codable, Sendable, Equatable {
+        var id: UUID
+        var name: String?
+        var volumeML: Double
+        var displayOrder: Int
+        var isDefault: Bool
     }
 
     struct FavoriteRecord: Codable, Sendable {
@@ -163,6 +192,16 @@ nonisolated struct MacroBackup: Codable, Sendable {
         var displayOrder: Int
         var photos: [PhotoRecord]
         var children: [LogRecord]
+        var hydration: HydrationRecord? = nil
+    }
+
+    struct HydrationRecord: Codable, Sendable, Equatable {
+        var isHydrationLog: Bool
+        var volumeML: Double
+        var hydrationML: Double
+        var caffeineMg: Double
+        var alcoholGrams: Double
+        var sizeName: String?
     }
 
     struct DraftRecord: Codable, Sendable {
@@ -245,7 +284,12 @@ extension MacroBackup {
                     onboardingComplete: $0.onboardingComplete,
                     dayStartMinutes: $0.dayStartMinutes,
                     dayCircleMode: $0.dayCircleModeRawValue,
-                    dayCircleGoal: $0.dayCircleGoalRawValue
+                    dayCircleGoal: $0.dayCircleGoalRawValue,
+                    dayCirclesIncludeWater: $0.dayCirclesIncludeWater,
+                    volumeUnit: $0.volumeUnitRawValue,
+                    tracksHydration: $0.tracksHydration,
+                    skipsWaterGoalPrompt: $0.skipsWaterGoalPrompt,
+                    seededDrinkKeys: $0.seededDrinkKeys.sorted()
                 )
             },
             goals: (user?.goalsHistory ?? [])
@@ -319,7 +363,9 @@ extension MacroBackup {
             fat: goal.fat,
             fatMode: goal.fatMode.rawValue,
             fiber: goal.fiber,
-            fiberMode: goal.fiberMode.rawValue
+            fiberMode: goal.fiberMode.rawValue,
+            water: goal.water,
+            waterMode: goal.waterMode.rawValue
         )
     }
 
@@ -370,6 +416,38 @@ extension MacroBackup {
                         baseFiber: $0.baseFiber,
                         dateAdded: $0.dateAdded
                     )
+                },
+            drink: drinkRecord(food),
+            isInLibrary: food.isInLibrary
+        )
+    }
+
+    @MainActor
+    static func drinkRecord(_ food: FoodItem) -> DrinkRecord? {
+        let sizes = food.drinkSizes ?? []
+        let hasDrinkData =
+            food.type == .drink || !sizes.isEmpty || food.seedKey != nil
+            || food.hydrationOrder != nil
+        guard hasDrinkData else { return nil }
+        return DrinkRecord(
+            hydrationPercent: food.hydrationPercent,
+            caffeineMg: food.caffeineMg,
+            abv: food.abv,
+            hasNutrition: food.hasNutrition,
+            symbol: food.symbol,
+            tint: food.tintRawValue,
+            hydrationOrder: food.hydrationOrder,
+            seedKey: food.seedKey,
+            sizes: sizes
+                .sorted { $0.displayOrder < $1.displayOrder }
+                .map {
+                    DrinkSizeRecord(
+                        id: $0.id,
+                        name: $0.name,
+                        volumeML: $0.volumeML,
+                        displayOrder: $0.displayOrder,
+                        isDefault: $0.isDefault
+                    )
                 }
         )
     }
@@ -419,7 +497,23 @@ extension MacroBackup {
             photos: collector?.records(log.photos) ?? photoRecords(log.photos),
             children: (log.childEntries ?? [])
                 .sorted { $0.displayOrder < $1.displayOrder }
-                .map { logRecord($0, photos: collector) }
+                .map { logRecord($0, photos: collector) },
+            hydration: hydrationRecord(log)
+        )
+    }
+
+    @MainActor
+    static func hydrationRecord(_ log: LoggedEntry) -> HydrationRecord? {
+        guard log.isHydrationLog || log.drinkAmounts != .zero || log.sizeName != nil else {
+            return nil
+        }
+        return HydrationRecord(
+            isHydrationLog: log.isHydrationLog,
+            volumeML: log.volumeML,
+            hydrationML: log.hydrationML,
+            caffeineMg: log.caffeineMg,
+            alcoholGrams: log.alcoholGrams,
+            sizeName: log.sizeName
         )
     }
 

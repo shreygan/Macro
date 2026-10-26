@@ -79,6 +79,7 @@ struct BackupRestorer {
             let photos = PendingBackupPhotos()
             var summary = apply(file.backup, exact: false, photos: photos)
             try saveOrRollback()
+            SyncDeduplicator.run(in: context)
             do {
                 try await attach(photos, from: file)
             } catch {
@@ -262,6 +263,10 @@ struct BackupRestorer {
             existingFoods.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
+        let existingDrinksBySeedKey = Dictionary(
+            existingFoods.compactMap { food in food.seedKey.map { ($0, food) } },
+            uniquingKeysWith: { first, _ in first }
+        )
         let savedLocationsByID = restoreSavedLocations(backup, exact: exact)
         restoreRecentLocations(backup, savedLocationsByID: savedLocationsByID)
 
@@ -274,9 +279,21 @@ struct BackupRestorer {
             savedLocation: { $0.flatMap { savedLocationsByID[$0] } }
         )
         var restoredFoods: [(record: MacroBackup.FoodRecord, item: FoodItem)] = []
+        var matchedDrinkIDs: Set<UUID> = []
 
         for record in backup.foods {
             if foodsByID[record.id] != nil {
+                summary.skippedExisting += 1
+                continue
+            }
+            if let key = record.drink?.seedKey, let local = existingDrinksBySeedKey[key] {
+                if BuiltInCatalog.isUnchanged(local) {
+                    record.apply(to: local, relationships: relationships, in: context)
+                } else {
+                    record.fillMissing(on: local, relationships: relationships, in: context)
+                }
+                foodsByID[record.id] = local
+                matchedDrinkIDs.insert(record.id)
                 summary.skippedExisting += 1
                 continue
             }
@@ -293,14 +310,15 @@ struct BackupRestorer {
             record.insertIngredients(into: recipe, relationships: relationships, in: context)
         }
 
-        let restoredIDs = Set(restoredFoods.map(\.item.id))
+        let restoredIDs = Set(restoredFoods.map(\.item.id)).union(matchedDrinkIDs)
         let existingFavorites =
             (try? context.fetch(FetchDescriptor<FavoriteEntry>())) ?? []
         var nextFavoriteOrder = (existingFavorites.map(\.orderIndex).max() ?? -1) + 1
 
         for favorite in backup.favorites.sorted(by: { $0.orderIndex < $1.orderIndex }) {
             guard restoredIDs.contains(favorite.foodID),
-                let food = foodsByID[favorite.foodID]
+                let food = foodsByID[favorite.foodID],
+                food.favoriteEntry == nil
             else { continue }
 
             let order = exact ? favorite.orderIndex : nextFavoriteOrder
@@ -391,15 +409,30 @@ struct BackupRestorer {
         RecentLocationStore.record(uses, in: context)
     }
 
-    private func restoreDayCircles(
+    private func restorePreferences(
         from record: MacroBackup.UserRecord?,
         to user: User
     ) {
+        if let unit = record?.volumeUnit.flatMap(VolumeUnit.init(rawValue:)) {
+            user.volumeUnit = unit
+        }
+        if let tracksHydration = record?.tracksHydration {
+            user.tracksHydration = tracksHydration
+        }
+        if let skipsWaterGoalPrompt = record?.skipsWaterGoalPrompt {
+            user.skipsWaterGoalPrompt = skipsWaterGoalPrompt
+        }
+        if let seededDrinkKeys = record?.seededDrinkKeys {
+            user.seededDrinkKeys.formUnion(seededDrinkKeys)
+        }
         if let mode = record?.dayCircleMode.flatMap(DayCircleMode.init(rawValue:)) {
             user.dayCircleMode = mode
         }
         if let goal = record?.dayCircleGoal.flatMap(DayCircleGoal.init(rawValue:)) {
             user.dayCircleGoal = goal
+        }
+        if let includesWater = record?.dayCirclesIncludeWater {
+            user.dayCirclesIncludeWater = includesWater
         }
     }
 
@@ -419,7 +452,7 @@ struct BackupRestorer {
                 onboardingComplete: backup.user?.onboardingComplete ?? false
             )
             user.dayStartMinutes = backup.user?.dayStartMinutes ?? 0
-            restoreDayCircles(from: backup.user, to: user)
+            restorePreferences(from: backup.user, to: user)
             context.insert(user)
         }
 
@@ -427,8 +460,9 @@ struct BackupRestorer {
             user.name = record.name
             user.onboardingComplete = record.onboardingComplete
             user.dayStartMinutes = record.dayStartMinutes
-            restoreDayCircles(from: record, to: user)
+            restorePreferences(from: record, to: user)
         }
+        user.seededDrinkKeys.formUnion(backup.user?.seededDrinkKeys ?? [])
 
         let existingGoalIDs = Set((user.goalsHistory ?? []).map(\.id))
         let deviceStart = exact ? nil : user.goalTimeline.periods.first?.startDay
@@ -545,9 +579,63 @@ extension MacroBackup.FoodRecord {
             dateAdded: dateAdded
         )
         context.insert(food)
+        food.isInLibrary = isInLibrary ?? true
+        applyDrink(to: food, in: context)
         return food
     }
 
+    @MainActor
+    private func applyDrink(to food: FoodItem, in context: ModelContext) {
+        MacroBackup.applyDrink(drink, to: food, in: context)
+    }
+}
+
+extension MacroBackup {
+    @MainActor
+    static func applyDrink(_ record: DrinkRecord?, to food: FoodItem, in context: ModelContext) {
+        let sizeRecords = record?.sizes ?? []
+        let existingSizes = food.sortedDrinkSizes
+        let removedSizes = existingSizes.dropFirst(sizeRecords.count)
+        food.drinkSizes = (food.drinkSizes ?? []).filter { size in
+            !removedSizes.contains { $0 === size }
+        }
+        for size in removedSizes {
+            context.delete(size)
+        }
+
+        food.hydrationPercent = record?.hydrationPercent ?? 100
+        food.caffeineMg = record?.caffeineMg
+        food.abv = record?.abv
+        food.hasNutrition = record?.hasNutrition ?? false
+        food.symbol = record?.symbol
+        food.tintRawValue = record?.tint
+        food.hydrationOrder = record?.hydrationOrder
+        food.seedKey = record?.seedKey
+
+        for (index, sizeRecord) in sizeRecords.enumerated() {
+            guard index < existingSizes.count else {
+                let size = DrinkSize(
+                    id: sizeRecord.id,
+                    name: sizeRecord.name,
+                    volumeML: sizeRecord.volumeML,
+                    displayOrder: sizeRecord.displayOrder,
+                    isDefault: sizeRecord.isDefault
+                )
+                context.insert(size)
+                size.food = food
+                continue
+            }
+            let size = existingSizes[index]
+            size.id = sizeRecord.id
+            size.name = sizeRecord.name
+            size.volumeML = sizeRecord.volumeML
+            size.displayOrder = sizeRecord.displayOrder
+            size.isDefault = sizeRecord.isDefault
+        }
+    }
+}
+
+extension MacroBackup.FoodRecord {
     @MainActor
     private func linkedDefaultLocation(_ relationships: RecordRelationships) -> EntryLocation? {
         guard var location = defaultLocation, let id = location.savedLocationID else {
@@ -555,6 +643,39 @@ extension MacroBackup.FoodRecord {
         }
         location.savedLocationID = relationships.savedLocation(id)?.id
         return location
+    }
+
+    @MainActor
+    func fillMissing(on food: FoodItem, relationships: RecordRelationships, in context: ModelContext) {
+        if isInLibrary == true {
+            food.isInLibrary = true
+        }
+        if food.stickyNote == nil, let note {
+            food.stickyNote = Note(text: note.text, lastUpdated: note.lastUpdated)
+        }
+        if food.defaultLocation == nil {
+            food.defaultLocation = linkedDefaultLocation(relationships)
+        }
+        guard let drink else { return }
+        if food.hydrationOrder == nil {
+            food.hydrationOrder = drink.hydrationOrder
+        }
+
+        let keptVolumes = (food.drinkSizes ?? []).map(\.volumeML)
+        var nextOrder = ((food.drinkSizes ?? []).map(\.displayOrder).max() ?? -1) + 1
+        for sizeRecord in drink.sizes.sorted(by: { $0.displayOrder < $1.displayOrder })
+        where !keptVolumes.contains(where: { HydrationLogger.isSameVolume($0, sizeRecord.volumeML) }) {
+            let size = DrinkSize(
+                id: sizeRecord.id,
+                name: sizeRecord.name,
+                volumeML: sizeRecord.volumeML,
+                displayOrder: nextOrder,
+                isDefault: false
+            )
+            context.insert(size)
+            size.food = food
+            nextOrder += 1
+        }
     }
 
     @MainActor
@@ -578,6 +699,8 @@ extension MacroBackup.FoodRecord {
         food.customServingSize = customServingSize
         food.defaultLocation = linkedDefaultLocation(relationships)
         food.dateAdded = dateAdded
+        food.isInLibrary = isInLibrary ?? true
+        applyDrink(to: food, in: context)
 
         if let note {
             if let existing = food.stickyNote {
@@ -669,6 +792,16 @@ extension MacroBackup.LogRecord {
             logNote: logNote,
             displayOrder: displayOrder
         )
+        if let hydration {
+            log.isHydrationLog = hydration.isHydrationLog
+            log.drinkAmounts = DrinkAmounts(
+                volumeML: hydration.volumeML,
+                hydrationML: hydration.hydrationML,
+                caffeineMg: hydration.caffeineMg,
+                alcoholGrams: hydration.alcoholGrams
+            )
+            log.sizeName = hydration.sizeName
+        }
         log.photos = photos.compactMap { $0.makePhoto() }
         context.insert(log)
         pending?.add(log, isDraft: false, photos: photos)

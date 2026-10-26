@@ -29,3 +29,36 @@ extension ButtonStyle where Self == FilterChipStyle {
         FilterChipStyle(isSelected: isSelected)
     }
 }
+
+struct FilterChipIconStyle: ButtonStyle {
+    static let diameter = FontSize.compactLineHeight + 16
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.buttonIcon)
+            .frame(width: Self.diameter, height: Self.diameter)
+            .background(Color.controlFill)
+            .foregroundStyle(Color.primary)
+            .clipShape(Circle())
+            .contentShape(Circle())
+            .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+extension ButtonStyle where Self == FilterChipIconStyle {
+    static var filterChipIcon: FilterChipIconStyle { FilterChipIconStyle() }
+}
+
+extension View {
+    func chipScrollFade(width: CGFloat = 16) -> some View {
+        mask {
+            HStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: width)
+                Rectangle()
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: width)
+            }
+        }
+    }
+}

@@ -35,7 +35,39 @@ nonisolated struct EntryLocation: Codable, Hashable, Sendable {
     var mapItemID: String? = nil
     var savedLocationID: UUID? = nil
     var needsName: Bool = false
-    var mapPin: MapPin? = nil
+    private var mapPinLatitude: Double? = nil
+    private var mapPinLongitude: Double? = nil
+
+    init(
+        name: String,
+        address: String? = nil,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        mapItemID: String? = nil,
+        savedLocationID: UUID? = nil,
+        needsName: Bool = false,
+        mapPin: MapPin? = nil
+    ) {
+        self.name = name
+        self.address = address
+        self.latitude = latitude
+        self.longitude = longitude
+        self.mapItemID = mapItemID
+        self.savedLocationID = savedLocationID
+        self.needsName = needsName
+        self.mapPin = mapPin
+    }
+
+    var mapPin: MapPin? {
+        get {
+            guard let mapPinLatitude, let mapPinLongitude else { return nil }
+            return MapPin(latitude: mapPinLatitude, longitude: mapPinLongitude)
+        }
+        set {
+            mapPinLatitude = newValue?.latitude
+            mapPinLongitude = newValue?.longitude
+        }
+    }
 
     var hasCoordinate: Bool {
         latitude != nil && longitude != nil

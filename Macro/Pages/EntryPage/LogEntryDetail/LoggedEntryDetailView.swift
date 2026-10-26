@@ -8,10 +8,19 @@
 import SwiftData
 import SwiftUI
 
+struct HydrationLogEdit {
+    let drink: FoodItem?
+    let volumeML: Double
+    let timestamp: Date
+    var location: EntryLocation?
+}
+
 struct LoggedEntryDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) var dismiss
     @Environment(\.toastCenter) private var toastCenter
+    @Environment(\.volumeUnit) private var volumeUnit
+    @Environment(\.tracksHydration) private var tracksHydration
 
     let entry: LoggedEntry
     var isPushedView: Bool = true
@@ -21,6 +30,13 @@ struct LoggedEntryDetailView: View {
     var showsMapLink: Bool = true
     var onRemovePhotos: (() -> Void)? = nil
     private let dismissesAfterEditing: Bool
+    private let onSaveDismiss: (() -> Void)?
+    private let pendingDrink: FoodItem?
+    private let drinkSnapshot: DrinkSnapshot
+
+    private var linkedFood: FoodItem? {
+        pendingDrink ?? entry.originalFoodItem
+    }
 
     @State private var isEditing: Bool = false
     @State private var foodToLogAgain: FoodItem? = nil
@@ -31,6 +47,7 @@ struct LoggedEntryDetailView: View {
     @State private var isDismissing = false
     @State private var savePrompt: SavePromptStep?
 
+    @Query private var users: [User]
     @Query(sort: \EntrySource.displayOrder) var sourceOptions: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) var categoryOptions:
         [CategorySource]
@@ -50,8 +67,13 @@ struct LoggedEntryDetailView: View {
 
     @State private var portionQuantity: String
     @State private var portionUnitSelection: String
+    @State private var chosenVolumeML: Double?
+    @State private var recentDrinkAmounts: [Double] = []
+    @State private var skipsPortionRescale = false
 
     @State private var manualOverrideToggle: Bool
+    @State private var caffeine: String
+    @State private var abv: String
 
     @State private var calorie: String
     @State private var protein: String
@@ -98,6 +120,8 @@ struct LoggedEntryDetailView: View {
         showsLibraryLink: Bool = true,
         showsMapLink: Bool = true,
         startsEditing: Bool = false,
+        onSaveDismiss: (() -> Void)? = nil,
+        hydrationEdit: HydrationLogEdit? = nil,
         onRemovePhotos: (() -> Void)? = nil
     ) {
         self.entry = entry
@@ -108,38 +132,60 @@ struct LoggedEntryDetailView: View {
         self.showsMapLink = showsMapLink
         self.onRemovePhotos = onRemovePhotos
         self.dismissesAfterEditing = startsEditing && allowsEditing
+        self.onSaveDismiss = onSaveDismiss
+        let pendingDrink = hydrationEdit?.drink.flatMap {
+            $0.id == entry.originalFoodItem?.id ? nil : $0
+        }
+        self.pendingDrink = pendingDrink
+        self.drinkSnapshot = DrinkSnapshot(entry)
+        let food = pendingDrink ?? entry.originalFoodItem
+        let loggedMacro = { (pending: Double?, logged: Double) -> String in
+            let storedText = EntryHelper.formatLoggedMacro(logged, of: entry, food: entry.originalFoodItem)
+            guard let hydrationEdit else { return storedText }
+            if let pending, let drink = pendingDrink {
+                let servingVolume = drink.servingVolumeML ?? 0
+                guard servingVolume > 0 else { return "0" }
+                return EntryHelper.scale(EntryHelper.format(pending), by: hydrationEdit.volumeML / servingVolume)
+            }
+            let ratio = entry.volumeML > 0 ? hydrationEdit.volumeML / entry.volumeML : 1
+            return EntryHelper.isUnscaled(ratio) ? storedText : EntryHelper.formatMacroField(logged * ratio)
+        }
         _isEditing = State(initialValue: dismissesAfterEditing)
 
-        _name = State(initialValue: entry.name)
-        _sourceSelection = State(initialValue: entry.source?.source ?? "")
-        _categorySelection = State(initialValue: entry.category?.category ?? "")
-        _foodGroupSelection = State(
-            initialValue: entry.foodGroup?.foodGroup ?? ""
-        )
+        _name = State(initialValue: pendingDrink?.name ?? entry.name)
+        let tags = pendingDrink.map { ($0.source, $0.category, $0.foodGroup) }
+            ?? (entry.source, entry.category, entry.foodGroup)
+        _sourceSelection = State(initialValue: tags.0?.source ?? "")
+        _categorySelection = State(initialValue: tags.1?.category ?? "")
+        _foodGroupSelection = State(initialValue: tags.2?.foodGroup ?? "")
 
-        _date = State(initialValue: entry.timestamp)
-        _time = State(initialValue: entry.timestamp)
-        _locationSelection = State(initialValue: LocationSelection(entry.location))
+        _date = State(initialValue: hydrationEdit?.timestamp ?? entry.timestamp)
+        _time = State(initialValue: hydrationEdit?.timestamp ?? entry.timestamp)
+        _locationSelection = State(initialValue: LocationSelection(hydrationEdit.map(\.location) ?? entry.location))
 
         _portionQuantity = State(
-            initialValue: EntryHelper.format(entry.loggedQuantity)
+            initialValue: EntryHelper.format(hydrationEdit?.volumeML ?? entry.loggedQuantity)
         )
-        _portionUnitSelection = State(initialValue: entry.loggedUnit)
+        _portionUnitSelection = State(
+            initialValue: hydrationEdit == nil ? entry.loggedUnit : VolumeUnit.milliliters.rawValue
+        )
 
         _manualOverrideToggle = State(initialValue: entry.isManualOverride)
+        _caffeine = State(initialValue: Self.caffeineText(for: entry))
+        _abv = State(initialValue: Self.abvText(for: entry))
 
-        _calorie = State(initialValue: EntryHelper.format(entry.calories))
-        _protein = State(initialValue: EntryHelper.format(entry.protein))
-        _carbs = State(initialValue: EntryHelper.format(entry.carbs))
-        _fat = State(initialValue: EntryHelper.format(entry.fat))
-        _fiber = State(initialValue: EntryHelper.format(entry.fiber))
+        _calorie = State(initialValue: loggedMacro(pendingDrink?.calories, entry.calories))
+        _protein = State(initialValue: loggedMacro(pendingDrink?.protein, entry.protein))
+        _carbs = State(initialValue: loggedMacro(pendingDrink?.carbs, entry.carbs))
+        _fat = State(initialValue: loggedMacro(pendingDrink?.fat, entry.fat))
+        _fiber = State(initialValue: loggedMacro(pendingDrink?.fiber, entry.fiber))
 
         _stickyNote = State(initialValue: entry.logNote ?? "")
         _pinnedNoteText = State(
-            initialValue: entry.originalFoodItem?.stickyNote?.text ?? ""
+            initialValue: food?.stickyNote?.text ?? ""
         )
         _originalPinnedNote = State(
-            initialValue: entry.originalFoodItem?.stickyNote?.text ?? ""
+            initialValue: food?.stickyNote?.text ?? ""
         )
 
         _selectedPhotos = State(
@@ -151,7 +197,7 @@ struct LoggedEntryDetailView: View {
 
         // Without the original item, the logged portion itself is the base
         // (the fallback macros below are the logged values too)
-        let originalFood = entry.originalFoodItem
+        let originalFood = food
         self.baseServingSize =
             originalFood?.servingSize
             ?? (entry.loggedQuantity > 0 ? entry.loggedQuantity : 1.0)
@@ -182,6 +228,97 @@ struct LoggedEntryDetailView: View {
 
     private var isRecipe: Bool { entry.entryType == .recipe }
 
+    private static func caffeineText(for entry: LoggedEntry) -> String {
+        entry.isManualOverride ? EntryHelper.format(entry.caffeineMg.rounded()) : ""
+    }
+
+    private static func abvText(for entry: LoggedEntry) -> String {
+        entry.isManualOverride ? EntryHelper.formatMacroField(entry.drinkAmounts.abv ?? 0) : ""
+    }
+
+    private static func parse(_ text: String) -> Double {
+        Double(text.replacingOccurrences(of: ",", with: ".")) ?? 0
+    }
+
+    private var linkedDrink: FoodItem? {
+        guard entry.entryType == .drink, !isRecipe, let food = linkedFood, food.type == .drink else { return nil }
+        return food
+    }
+
+    private var showsCaffeineRow: Bool {
+        guard entry.entryType == .drink, !isRecipe else { return false }
+        return linkedDrink?.caffeineMg != nil || entry.caffeineMg > 0
+    }
+
+    private var showsAlcoholRow: Bool {
+        guard entry.entryType == .drink, !isRecipe else { return false }
+        return linkedDrink?.abv != nil || entry.alcoholGrams > 0
+    }
+
+    private var clearsDrinkOverride: Bool {
+        entry.isManualOverride && !manualOverrideToggle && linkedDrink != nil
+    }
+
+    private var portionDrinkAmounts: DrinkAmounts {
+        let portion = resolvedPortion
+        if clearsDrinkOverride, let food = linkedDrink {
+            return DrinkAmounts(food: food, quantity: portion.quantity, unit: portion.unit)
+        }
+        return drinkSnapshot.amounts(for: linkedFood, quantity: portion.quantity, unit: portion.unit)
+    }
+
+    private var overriddenDrinkAmounts: (caffeineMg: Double?, abv: Double?) {
+        guard manualOverrideToggle else { return (nil, nil) }
+        return (
+            showsCaffeineRow ? Self.parse(caffeine) : nil,
+            showsAlcoholRow ? Self.parse(abv) : nil
+        )
+    }
+
+    private var computedCaffeineText: String {
+        EntryHelper.format(portionDrinkAmounts.caffeineMg.rounded())
+    }
+
+    private var computedABVText: String {
+        EntryHelper.formatMacroField(portionDrinkAmounts.abv ?? linkedDrink?.abv ?? 0)
+    }
+
+    private var caffeineField: Binding<String> {
+        Binding(
+            get: { manualOverrideToggle ? caffeine : computedCaffeineText },
+            set: { caffeine = $0 }
+        )
+    }
+
+    private var abvField: Binding<String> {
+        Binding(
+            get: { manualOverrideToggle ? abv : computedABVText },
+            set: { abv = $0 }
+        )
+    }
+
+    private var drinkHeaderInfo: DrinkRowInfo? {
+        guard entry.entryType == .drink, !isRecipe else { return nil }
+        let parse = { (text: String) in Double(text.replacingOccurrences(of: ",", with: ".")) ?? 0 }
+        let hasMacros = [calorie, protein, carbs, fat, fiber].contains { parse($0) > 0 }
+        if let food = linkedDrink {
+            let override = overriddenDrinkAmounts
+            return DrinkRowInfo(
+                food: food,
+                amounts: portionDrinkAmounts.overriding(caffeineMg: override.caffeineMg, abv: override.abv),
+                hasMacros: hasMacros
+            )
+        }
+        guard var info = DrinkRowInfo(entry: entry) else { return nil }
+        let override = overriddenDrinkAmounts
+        info.amounts = portionDrinkAmounts.overriding(caffeineMg: override.caffeineMg, abv: override.abv)
+        if !HydrationLogger.isSameVolume(info.amounts.volumeML, entry.volumeML) {
+            info.sizeName = nil
+        }
+        info.hasMacros = hasMacros
+        return info
+    }
+
     private var showsPhotoCard: Bool {
         isEditing || !selectedPhotos.isEmpty
     }
@@ -192,7 +329,7 @@ struct LoggedEntryDetailView: View {
     }
 
     private var canShowOnMap: Bool {
-        showsMapLink && showsActionsAndLinks && entry.originalFoodItem != nil && mappedLocation != nil
+        showsMapLink && showsActionsAndLinks && linkedFood != nil && mappedLocation != nil
     }
 
     private var showsNotesCard: Bool {
@@ -200,7 +337,7 @@ struct LoggedEntryDetailView: View {
     }
 
     private var pinnedNoteUpdated: Date? {
-        guard let note = entry.originalFoodItem?.stickyNote else {
+        guard let note = linkedFood?.stickyNote else {
             return pinnedNoteText.isEmpty ? nil : .now
         }
         return pinnedNoteText == note.text ? note.lastUpdated : .now
@@ -238,15 +375,73 @@ struct LoggedEntryDetailView: View {
     var availableUnits: [String] {
         var units: [String] = [baseUnit]
         if activeServingWeight != nil && baseServingWeightUnit != baseUnit {
-            units.append(baseServingWeightUnit)
+            units.append(portionWeightUnit)
         }
         return units
     }
 
+    private var measuresVolume: Bool {
+        !isRecipe && baseServingWeightUnit == VolumeUnit.milliliters.rawValue
+    }
+
+    private var measuresDrinkVolume: Bool {
+        entry.entryType == .drink && measuresVolume
+    }
+
+    private var showsFluidOunces: Bool {
+        measuresVolume
+            && (volumeUnit == .fluidOunces || portionUnitSelection == VolumeUnit.fluidOunces.rawValue)
+    }
+
+    private var portionWeightUnit: String {
+        showsFluidOunces ? VolumeUnit.fluidOunces.rawValue : baseServingWeightUnit
+    }
+
+    private var portionVolumeUnit: VolumeUnit? {
+        measuresVolume ? VolumeUnit(rawValue: portionUnitSelection) : nil
+    }
+
+    private var resolvedPortion: (quantity: Double, unit: String) {
+        let quantity = Double(portionQuantity.replacingOccurrences(of: ",", with: ".")) ?? 0
+        guard let unit = portionVolumeUnit else {
+            return (quantity, portionUnitSelection)
+        }
+        if let chosenVolumeML, portionQuantity == unit.editableText(fromML: chosenVolumeML) {
+            return (chosenVolumeML, VolumeUnit.milliliters.rawValue)
+        }
+        return (unit.milliliters(from: quantity), VolumeUnit.milliliters.rawValue)
+    }
+
+    private func showPortionInDisplayUnit() {
+        guard measuresVolume else { return }
+        let value = Double(portionQuantity.replacingOccurrences(of: ",", with: ".")) ?? 0
+        let milliliters: Double
+        if portionUnitSelection == VolumeUnit.milliliters.rawValue {
+            milliliters = value
+        } else if measuresDrinkVolume, portionUnitSelection == baseUnit, let servingVolume = activeServingWeight,
+            baseServingSize > 0
+        {
+            milliliters = value / baseServingSize * servingVolume
+        } else {
+            return
+        }
+        let unit: VolumeUnit = volumeUnit == .fluidOunces ? .fluidOunces : .milliliters
+        let text = unit.editableText(fromML: milliliters)
+        guard portionUnitSelection != unit.rawValue || text != portionQuantity else { return }
+        skipsPortionRescale = true
+        chosenVolumeML = milliliters
+        portionUnitSelection = unit.rawValue
+        portionQuantity = text
+        DispatchQueue.main.async {
+            skipsPortionRescale = false
+        }
+    }
+
     private var activeMultiplier: Double {
-        let currentPortion = Double(portionQuantity) ?? 0
+        let portion = resolvedPortion
+        let currentPortion = portion.quantity
         let basePortion: Double
-        if portionUnitSelection == baseServingWeightUnit,
+        if portion.unit == baseServingWeightUnit,
             let weight = activeServingWeight
         {
             basePortion = weight
@@ -267,7 +462,116 @@ struct LoggedEntryDetailView: View {
     private var displayServingWeight: String {
         guard let weight = activeServingWeight else { return "" }
         let scaledWeight = activeMultiplier * weight
+        if baseServingWeightUnit == VolumeUnit.milliliters.rawValue { return EntryHelper.format(scaledWeight) }
         return scaledWeight.formatted(.number.precision(.fractionLength(0...2)))
+    }
+
+    private var sizeChips: [HydrationChip] {
+        guard measuresDrinkVolume, portionVolumeUnit != nil, let food = linkedFood, food.type == .drink
+        else { return [] }
+        return HydrationLogger.menuSizes(for: food)
+    }
+
+    private var visibleRecentAmounts: [Double] {
+        guard !sizeChips.isEmpty else { return [] }
+        let sizes = sizeChips.map(\.volumeML)
+        return recentDrinkAmounts.filter { volume in
+            !sizes.contains { HydrationLogger.isSameVolume($0, volume) }
+        }
+    }
+
+    private var hasNoDrinkAmount: Bool {
+        measuresDrinkVolume && resolvedPortion.quantity <= 0
+    }
+
+    private func isSelectedVolume(_ milliliters: Double) -> Bool {
+        let volume = resolvedPortion.quantity
+        return volume > 0 && HydrationLogger.isSameVolume(volume, milliliters)
+    }
+
+    private func selectVolume(_ milliliters: Double) {
+        guard let unit = portionVolumeUnit else { return }
+        chosenVolumeML = milliliters
+        portionQuantity = unit.editableText(fromML: milliliters)
+    }
+
+    private func sizeLabel(_ size: HydrationChip) -> String {
+        let amount = volumeUnit.formattedAmount(size.volumeML)
+        guard let name = size.sizeName, !name.isEmpty else { return amount }
+        return "\(name) · \(amount)"
+    }
+
+    private func loadRecentDrinkAmounts() {
+        guard measuresDrinkVolume, let food = linkedFood, food.type == .drink else { return }
+        recentDrinkAmounts = HydrationLogger.recentAmounts(
+            for: food,
+            includesEntries: true,
+            excluding: entry,
+            in: modelContext
+        )
+    }
+
+    private var drinkAmountChips: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(sizeChips) { size in
+                    Button(sizeLabel(size)) {
+                        selectVolume(size.volumeML)
+                    }
+                    .buttonStyle(.filterChip(isSelected: isSelectedVolume(size.volumeML)))
+                }
+
+                ForEach(visibleRecentAmounts, id: \.self) { volume in
+                    Button {
+                        selectVolume(volume)
+                    } label: {
+                        Label(volumeUnit.formattedAmount(volume), systemImage: "clock.arrow.circlepath")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.filterChip(isSelected: isSelectedVolume(volume)))
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        .scrollIndicators(.hidden)
+        .chipScrollFade()
+    }
+
+    @ViewBuilder
+    private var portionCard: some View {
+        if measuresDrinkVolume {
+            Card {
+                VStack(spacing: 0) {
+                    portionRow
+
+                    if isEditing && !sizeChips.isEmpty {
+                        drinkAmountChips
+                            .padding(.bottom, 12)
+                    }
+                }
+            }
+        } else {
+            Card {
+                portionRow
+                    .hidden()
+                    .disabled(true)
+            }
+            .overlay(alignment: .top) {
+                portionRow
+            }
+        }
+    }
+
+    private var portionRow: some View {
+        PortionPillRow(
+            title: measuresDrinkVolume ? "Amount" : "Portion",
+            isEnabled: isEditing,
+            showsUnitPicker: !measuresDrinkVolume,
+            quantity: $portionQuantity,
+            unit: $portionUnitSelection,
+            availableUnits: availableUnits,
+            servingUnits: portionUnitOptions
+        )
     }
 
     private var isAvailable: Bool {
@@ -315,7 +619,7 @@ struct LoggedEntryDetailView: View {
                                 selection: $sourceSelection
                             )
 
-                            if entry.entryType == .food || isRecipe {
+                            if entry.entryType == .food || entry.entryType == .drink || isRecipe {
                                 DropdownPillRow(
                                     title: "Category",
                                     options: [""]
@@ -346,7 +650,7 @@ struct LoggedEntryDetailView: View {
 
                             LocationRow(
                                 selection: $locationSelection,
-                                food: entry.originalFoodItem,
+                                food: linkedFood,
                                 photos: selectedPhotos,
                                 logDate: date,
                                 isEnabled: isEditing,
@@ -362,9 +666,9 @@ struct LoggedEntryDetailView: View {
                             pinnedNote: $pinnedNoteText,
                             logNote: $stickyNote,
                             pinnedUpdated: pinnedNoteUpdated,
-                            allowsPinning: entry.originalFoodItem != nil,
+                            allowsPinning: linkedFood != nil,
                             isEditable: isEditing,
-                            onViewAll: entry.originalFoodItem == nil || !showsActionsAndLinks || isEditing
+                            onViewAll: linkedFood == nil || !showsActionsAndLinks || isEditing
                                 ? nil : { showingAllNotes = true }
                         )
                         .padding([.top, .horizontal])
@@ -385,17 +689,8 @@ struct LoggedEntryDetailView: View {
                         )
                     }
 
-                    Card {
-                        PortionPillRow(
-                            title: "Portion",
-                            isEnabled: isEditing,
-                            quantity: $portionQuantity,
-                            unit: $portionUnitSelection,
-                            availableUnits: availableUnits,
-                            servingUnits: portionUnitOptions
-                        )
-                    }
-                    .padding(.horizontal)
+                    portionCard
+                        .padding(.horizontal)
                     .padding(.top, showsPhotoCard ? 0 : nil)
 
                     if isRecipe && (isEditing || !draftIngredients.isEmpty) {
@@ -470,6 +765,28 @@ struct LoggedEntryDetailView: View {
                                 isEnabled: isEditing && manualOverrideToggle
                             )
 
+                            if showsCaffeineRow {
+                                TextInputRow(
+                                    icon: .caffeine,
+                                    title: "Caffeine",
+                                    titleExtension: "(mg)",
+                                    text: caffeineField,
+                                    keyboardType: .decimalPad,
+                                    isEnabled: isEditing && manualOverrideToggle
+                                )
+                            }
+
+                            if showsAlcoholRow {
+                                TextInputRow(
+                                    icon: .alcohol,
+                                    title: "Alcohol",
+                                    titleExtension: "(% ABV)",
+                                    text: abvField,
+                                    keyboardType: .decimalPad,
+                                    isEnabled: isEditing && manualOverrideToggle
+                                )
+                            }
+
                             if isEditing || manualOverrideToggle {
                                 ToggleRow(
                                     title: "Manual Override",
@@ -502,6 +819,7 @@ struct LoggedEntryDetailView: View {
                         fiber: fiber
                     )
                     .nameLineLimit(3)
+                    .drink(drinkHeaderInfo)
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 24)
@@ -512,7 +830,7 @@ struct LoggedEntryDetailView: View {
         .sheet(isPresented: $showIngredientSelectionSheet) {
             IngredientSelectionView(
                 inRecipeIDs: Set(draftIngredients.compactMap(\.ingredientItem?.id)),
-                excludedRecipe: entry.originalFoodItem
+                excludedRecipe: linkedFood
             ) { selectedItems in
                 draftIngredients.append(
                     contentsOf: selectedItems.map { LogRecipeIngredient(item: $0) }
@@ -520,7 +838,7 @@ struct LoggedEntryDetailView: View {
             }
         }
         .navigationDestination(isPresented: $showingAllNotes) {
-            if let food = entry.originalFoodItem {
+            if let food = linkedFood {
                 NotesHistoryView(
                     food: food,
                     currentEntryID: entry.id,
@@ -529,12 +847,12 @@ struct LoggedEntryDetailView: View {
             }
         }
         .navigationDestination(isPresented: $showingMap) {
-            if let food = entry.originalFoodItem, let place = mappedLocation {
+            if let food = linkedFood, let place = mappedLocation {
                 FoodLocationsMapView(food: food, initialPlace: place)
             }
         }
         .navigationDestination(isPresented: $showingAllPhotos) {
-            if let food = entry.originalFoodItem {
+            if let food = linkedFood {
                 PhotoHistoryView(
                     food: food,
                     currentEntryID: entry.id,
@@ -542,8 +860,8 @@ struct LoggedEntryDetailView: View {
                 )
             }
         }
-        .task(id: entry.originalFoodItem?.id) {
-            guard let food = entry.originalFoodItem else {
+        .task(id: linkedFood?.id) {
+            guard let food = linkedFood else {
                 hasPhotoHistory = false
                 return
             }
@@ -624,31 +942,40 @@ struct LoggedEntryDetailView: View {
                     }
                     .accessibilityLabel("Save Changes")
                     .fontWeight(.semibold)
-                    .disabled(isLoadingPhotos)
+                    .disabled(isLoadingPhotos || hasNoDrinkAmount)
                     .savePromptPopover(
                         $savePrompt,
                         dismissesScreen: dismissesAfterEditing && !isPushedView
                     )
                 } else if showsActionsAndLinks {
                     Menu {
-                        if let originalFood = entry.originalFoodItem {
-                            Button {
-                                foodToLogAgain = originalFood
-                            } label: {
-                                Label(
-                                    "Log Again",
-                                    systemImage: "plus.square.on.square"
-                                )
+                        if let originalFood = linkedFood {
+                            if EntryActions.canLogAgain(entry, tracksHydration: tracksHydration) {
+                                Button {
+                                    if EntryActions.opensAsHydrationLog(entry, tracksHydration: tracksHydration) {
+                                        EntryActions.logHydrationAgain(
+                                            entry,
+                                            dayStartMinutes: users.first?.dayStartMinutes ?? 0,
+                                            unit: volumeUnit,
+                                            in: modelContext,
+                                            toastCenter: toastCenter
+                                        )
+                                    } else {
+                                        foodToLogAgain = originalFood
+                                    }
+                                } label: {
+                                    Label(
+                                        "Log Again",
+                                        systemImage: "plus.square.on.square"
+                                    )
+                                }
                             }
 
                             if showsLibraryLink {
                                 Button {
                                     foodToView = originalFood
                                 } label: {
-                                    Label(
-                                        "View in Library",
-                                        systemImage: "book.pages"
-                                    )
+                                    Label(originalFood.viewActionTitle, systemImage: "book.pages")
                                 }
                             }
                         } else {
@@ -704,27 +1031,39 @@ struct LoggedEntryDetailView: View {
             }
         }
         .interactiveDismissDisabled(isEditing)
-        .onChange(of: entry.originalFoodItem?.stickyNote?.text) { _, text in
+        .onChange(of: linkedFood?.stickyNote?.text) { _, text in
             guard pinnedNoteText == originalPinnedNote else { return }
             pinnedNoteText = text ?? ""
             originalPinnedNote = pinnedNoteText
         }
+        .onAppear {
+            showPortionInDisplayUnit()
+            loadRecentDrinkAmounts()
+        }
         .onChange(of: portionUnitSelection) { oldUnit, newUnit in
-            guard oldUnit != newUnit, let weight = activeServingWeight else {
+            guard oldUnit != newUnit, !skipsPortionRescale, let servingWeight = activeServingWeight else {
                 return
             }
+            chosenVolumeML = nil
             let currentQuantity = Double(portionQuantity) ?? 0
+            let weightUnit = portionWeightUnit
+            let weight =
+                weightUnit == VolumeUnit.fluidOunces.rawValue
+                ? VolumeUnit.fluidOunces.value(fromML: servingWeight) : servingWeight
 
-            if oldUnit == baseUnit && newUnit == baseServingWeightUnit {
+            if oldUnit == baseUnit && newUnit == weightUnit {
                 let newQuantity = (currentQuantity / baseServingSize) * weight
                 portionQuantity = EntryHelper.format(newQuantity)
-            } else if oldUnit == baseServingWeightUnit && newUnit == baseUnit {
+            } else if oldUnit == weightUnit && newUnit == baseUnit {
                 let newQuantity = (currentQuantity / weight) * baseServingSize
                 portionQuantity = EntryHelper.format(newQuantity)
             }
         }
-        .onChange(of: portionQuantity) { _, _ in
-            if !manualOverrideToggle { updateMacrosFromMultiplier() }
+        .onChange(of: portionQuantity) { _, text in
+            if let chosenVolumeML, text != portionVolumeUnit?.editableText(fromML: chosenVolumeML) {
+                self.chosenVolumeML = nil
+            }
+            if !manualOverrideToggle && !skipsPortionRescale { updateMacrosFromMultiplier() }
         }
         .onChange(of: draftIngredients) { _, _ in
             // Skipped outside edit mode so discarding keeps the logged macros
@@ -734,6 +1073,10 @@ struct LoggedEntryDetailView: View {
         }
         .onChange(of: manualOverrideToggle) { _, isManual in
             if isManual {
+                if !entry.isManualOverride {
+                    caffeine = computedCaffeineText
+                    abv = computedABVText
+                }
                 calorie = calorieDynamic
                 protein = proteinDynamic
                 carbs = carbsDynamic
@@ -775,15 +1118,11 @@ struct LoggedEntryDetailView: View {
         if isRecipe {
             // Recipes derive their macros from the logged ingredients rather
             // than the (possibly since-edited) recipe item
-            calorie = EntryHelper.format(
-                totalIngredientCalories * activeMultiplier
-            )
-            protein = EntryHelper.format(
-                totalIngredientProtein * activeMultiplier
-            )
-            carbs = EntryHelper.format(totalIngredientCarbs * activeMultiplier)
-            fat = EntryHelper.format(totalIngredientFat * activeMultiplier)
-            fiber = EntryHelper.format(totalIngredientFiber * activeMultiplier)
+            calorie = EntryHelper.formatMacroField(totalIngredientCalories * activeMultiplier)
+            protein = EntryHelper.formatMacroField(totalIngredientProtein * activeMultiplier)
+            carbs = EntryHelper.formatMacroField(totalIngredientCarbs * activeMultiplier)
+            fat = EntryHelper.formatMacroField(totalIngredientFat * activeMultiplier)
+            fiber = EntryHelper.formatMacroField(totalIngredientFiber * activeMultiplier)
         } else {
             calorie = EntryHelper.scale(calorieStatic, by: activeMultiplier)
             protein = EntryHelper.scale(proteinStatic, by: activeMultiplier)
@@ -828,7 +1167,13 @@ struct LoggedEntryDetailView: View {
 
     private func commitChanges() {
         if dismissesAfterEditing {
-            if saveChanges() { dismiss() }
+            if saveChanges() {
+                if let onSaveDismiss {
+                    onSaveDismiss()
+                } else {
+                    dismiss()
+                }
+            }
             return
         }
         withAnimation {
@@ -839,6 +1184,10 @@ struct LoggedEntryDetailView: View {
     }
 
     private func saveChanges() -> Bool {
+        if let pendingDrink {
+            entry.originalFoodItem = pendingDrink
+            entry.typeRawValue = pendingDrink.type.rawValue
+        }
         let calendar = Calendar.current
         let dateComponents = calendar.dateComponents(
             [.year, .month, .day],
@@ -867,7 +1216,7 @@ struct LoggedEntryDetailView: View {
         )
         entry.logNote = trimmedNote.isEmpty ? nil : trimmedNote
 
-        if let food = entry.originalFoodItem, pinnedNoteText != originalPinnedNote {
+        if let food = linkedFood, pinnedNoteText != originalPinnedNote {
             let trimmedPinned = pinnedNoteText.trimmingCharacters(
                 in: .whitespacesAndNewlines
             )
@@ -877,6 +1226,7 @@ struct LoggedEntryDetailView: View {
                 in: modelContext
             )
         }
+        let previousLocation = entry.location
         let newLocation = locationSelection.resolvedLocation
         let awaitsCurrent = locationSelection.isCurrent && newLocation == nil
         if !awaitsCurrent, newLocation != entry.location {
@@ -953,11 +1303,21 @@ struct LoggedEntryDetailView: View {
             entry.foodGroup = nil
         }
 
-        entry.loggedQuantity =
-            Double(portionQuantity.replacingOccurrences(of: ",", with: "."))
-            ?? 0.0
-        entry.loggedUnit = portionUnitSelection
+        let portion = resolvedPortion
+        entry.loggedQuantity = portion.quantity
+        entry.loggedUnit = portion.unit
         entry.isManualOverride = manualOverrideToggle
+        if !isRecipe {
+            let override = overriddenDrinkAmounts
+            let clearsOverride = clearsDrinkOverride
+            let clearedAmounts = portionDrinkAmounts
+            entry.updateDrinkAmounts(from: drinkSnapshot)
+            if clearsOverride {
+                entry.caffeineMg = clearedAmounts.caffeineMg
+                entry.alcoholGrams = clearedAmounts.alcoholGrams
+            }
+            entry.drinkAmounts = entry.drinkAmounts.overriding(caffeineMg: override.caffeineMg, abv: override.abv)
+        }
 
         entry.calories =
             Double(calorie.replacingOccurrences(of: ",", with: ".")) ?? 0.0
@@ -979,7 +1339,16 @@ struct LoggedEntryDetailView: View {
         )
         EntryHelper.linkPhotos(&selectedPhotos, to: entry.photos)
 
+        let changesLocation = awaitsCurrent || entry.location != previousLocation
+        let hasDetails = entry.logNote != nil || changesLocation || !(entry.photos ?? []).isEmpty
+        if tracksHydration || hasDetails {
+            entry.isHydrationLog = false
+        }
+
         if isRecipe {
+            var oldSnapshots = (entry.childEntries ?? [])
+                .sorted { $0.displayOrder < $1.displayOrder }
+                .map { DrinkSnapshot($0) }
             if let oldChildren = entry.childEntries {
                 for child in oldChildren {
                     modelContext.delete(child)
@@ -1014,6 +1383,17 @@ struct LoggedEntryDetailView: View {
                     displayOrder: index
                 )
             }
+            let children = entry.childEntries ?? []
+            for child in children {
+                let foodID = child.originalFoodItem?.id
+                if let index = oldSnapshots.firstIndex(where: { foodID != nil && $0.foodID == foodID }) {
+                    child.updateDrinkAmounts(from: oldSnapshots.remove(at: index))
+                } else {
+                    child.snapshotDrinkAmounts(children: [])
+                }
+            }
+            entry.drinkAmounts = children.reduce(.zero) { $0 + $1.drinkAmounts }
+            entry.sizeName = nil
         }
 
         do {
@@ -1099,17 +1479,20 @@ struct LoggedEntryDetailView: View {
 
         portionQuantity = EntryHelper.format(entry.loggedQuantity)
         portionUnitSelection = entry.loggedUnit
+        showPortionInDisplayUnit()
 
         manualOverrideToggle = entry.isManualOverride
+        caffeine = Self.caffeineText(for: entry)
+        abv = Self.abvText(for: entry)
 
-        calorie = EntryHelper.format(entry.calories)
-        protein = EntryHelper.format(entry.protein)
-        carbs = EntryHelper.format(entry.carbs)
-        fat = EntryHelper.format(entry.fat)
-        fiber = EntryHelper.format(entry.fiber)
+        calorie = EntryHelper.formatLoggedMacro(entry.calories, of: entry, food: entry.originalFoodItem)
+        protein = EntryHelper.formatLoggedMacro(entry.protein, of: entry, food: entry.originalFoodItem)
+        carbs = EntryHelper.formatLoggedMacro(entry.carbs, of: entry, food: entry.originalFoodItem)
+        fat = EntryHelper.formatLoggedMacro(entry.fat, of: entry, food: entry.originalFoodItem)
+        fiber = EntryHelper.formatLoggedMacro(entry.fiber, of: entry, food: entry.originalFoodItem)
 
         stickyNote = entry.logNote ?? ""
-        pinnedNoteText = entry.originalFoodItem?.stickyNote?.text ?? ""
+        pinnedNoteText = linkedFood?.stickyNote?.text ?? ""
         originalPinnedNote = pinnedNoteText
 
         selectedPhotos = EntryHelper.loggedPhotos(from: entry.photos)

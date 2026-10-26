@@ -28,61 +28,63 @@ struct HomeView: View {
     @State private var foodToView: FoodItem? = nil
 
     @State private var clickedEntry: LoggedEntry? = nil
+    @State private var drinkLogToEdit: LoggedEntry? = nil
+    @State private var drinkLogForDetails: LoggedEntry? = nil
     @State private var entryToEdit: LoggedEntry? = nil
 
     @State private var clickedDraft: EntryDraft? = nil
 
-    @State private var swapTargetDate: Date? = nil
-    @State private var swapSubstituteDate: Date? = nil
+    @State private var drinkLogDay: HydrationDayRequest? = nil
+    @State private var hydrationDay: HydrationDayRequest? = nil
+    @State private var showManageDrinks = false
+    @State private var showWaterGoal = false
 
-    @State private var selectedDate: Date = Calendar.current.startOfDay(
-        for: Date()
-    )
+    @State private var pager = DayPagerState(day: Date())
 
-    @State private var displayDate: Date = Calendar.current.startOfDay(
-        for: Date()
-    )
+    private enum HomeSheet: CaseIterable {
+        case settings, logDrink, waterGoal, manageDrinks, hydrationDay, entry, editDrinkLog
+        case drinkLogDetails, editEntry, draft, addToLibrary, food, logAgain
+    }
 
-    @State private var bufferDates: [Date] = {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        return (-500...500).compactMap {
-            calendar.date(byAdding: .day, value: $0, to: today)
+    private var shownSheets: Set<HomeSheet> {
+        Set(HomeSheet.allCases.filter(isShown))
+    }
+
+    private func isShown(_ sheet: HomeSheet) -> Bool {
+        switch sheet {
+        case .settings: showSettingsSheet
+        case .logDrink: drinkLogDay != nil
+        case .waterGoal: showWaterGoal
+        case .manageDrinks: showManageDrinks
+        case .hydrationDay: hydrationDay != nil
+        case .entry: clickedEntry != nil
+        case .editDrinkLog: drinkLogToEdit != nil
+        case .drinkLogDetails: drinkLogForDetails != nil
+        case .editEntry: entryToEdit != nil
+        case .draft: clickedDraft != nil
+        case .addToLibrary: entryToAddToLibrary != nil
+        case .food: foodToView != nil
+        case .logAgain: entryToLogAgain != nil
         }
-    }()
+    }
 
-    @State private var bufferWeeks: [Date] = {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let currentWeekStart =
-            calendar.date(
-                from: calendar.dateComponents(
-                    [.yearForWeekOfYear, .weekOfYear],
-                    from: today
-                )
-            ) ?? today
-
-        return (-50...50).compactMap {
-            calendar.date(
-                byAdding: .weekOfYear,
-                value: $0,
-                to: currentWeekStart
-            )
+    private func clear(_ sheet: HomeSheet) {
+        switch sheet {
+        case .settings: showSettingsSheet = false
+        case .logDrink: drinkLogDay = nil
+        case .waterGoal: showWaterGoal = false
+        case .manageDrinks: showManageDrinks = false
+        case .hydrationDay: hydrationDay = nil
+        case .entry: clickedEntry = nil
+        case .editDrinkLog: drinkLogToEdit = nil
+        case .drinkLogDetails: drinkLogForDetails = nil
+        case .editEntry: entryToEdit = nil
+        case .draft: clickedDraft = nil
+        case .addToLibrary: entryToAddToLibrary = nil
+        case .food: foodToView = nil
+        case .logAgain: entryToLogAgain = nil
         }
-    }()
-
-    @State private var currentWeekStart: Date = {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        return calendar.date(
-            from: calendar.dateComponents(
-                [.yearForWeekOfYear, .weekOfYear],
-                from: today
-            )
-        ) ?? today
-    }()
-
-    @State private var swipeDirection: Edge = .trailing
+    }
     @State private var hasAlignedToday = false
     @State private var now = Date()
 
@@ -119,11 +121,14 @@ struct HomeView: View {
         if dayCircleMode != .off {
             if let score {
                 if score.allHit {
-                    parts.append(
-                        isDraftDay
-                            ? String(localized: "All goals hit, pending drafts")
-                            : String(localized: "All goals hit")
-                    )
+                    let hit: String =
+                        switch (dayCircleMode == .oneGoal, isDraftDay) {
+                        case (true, true): String(localized: "Goal hit, pending drafts")
+                        case (true, false): String(localized: "Goal hit")
+                        case (false, true): String(localized: "All goals hit, pending drafts")
+                        case (false, false): String(localized: "All goals hit")
+                        }
+                    parts.append(hit)
                 } else if !score.isScored {
                     parts.append(String(localized: "Logged"))
                 } else {
@@ -154,19 +159,7 @@ struct HomeView: View {
     }
 
     private func jumpToLogicalToday() {
-        let calendar = Calendar.current
-        let today = logicalToday
-        guard selectedDate != today else { return }
-
-        currentWeekStart =
-            calendar.date(
-                from: calendar.dateComponents(
-                    [.yearForWeekOfYear, .weekOfYear],
-                    from: today
-                )
-            ) ?? currentWeekStart
-        selectedDate = today
-        displayDate = today
+        pager.jump(to: logicalToday)
     }
 
     private func isFavorited(_ entry: LoggedEntry) -> Bool {
@@ -190,12 +183,44 @@ struct HomeView: View {
         EntryActions.toggleFavorite(food, in: modelContext, toastCenter: toastCenter)
     }
 
+    private var tracksHydration: Bool {
+        users.first?.tracksHydration ?? true
+    }
+
+    private func hideHydration() {
+        guard let user = users.first else { return }
+        withAnimation(.snappy) {
+            user.tracksHydration = false
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            toastCenter?.show(.failure(String(localized: "Couldn't Hide Hydration")))
+            return
+        }
+        toastCenter?.show(
+            Toast(
+                group: Toast.goalsGroup,
+                symbol: "eye.slash",
+                title: String(localized: "Hydration Hidden"),
+                message: String(localized: "You can turn it back on in Settings"),
+                action: Toast.Action(title: String(localized: "Undo")) { [modelContext] in
+                    withAnimation(.snappy) {
+                        user.tracksHydration = true
+                    }
+                    try? modelContext.save()
+                }
+            )
+        )
+    }
+
     private func deleteEntry(_ entry: LoggedEntry) {
-        EntryActions.delete(entry, in: modelContext, toastCenter: toastCenter)
+        EntryActions.delete(entry, in: modelContext, toastCenter: toastCenter, fromMenu: true)
     }
 
     private func deleteDraft(_ draft: EntryDraft) {
-        EntryActions.delete(draft, in: modelContext, toastCenter: toastCenter)
+        EntryActions.delete(draft, in: modelContext, toastCenter: toastCenter, fromMenu: true)
     }
 
     private func currDate(for date: Date) -> String {
@@ -206,85 +231,6 @@ struct HomeView: View {
             toGranularity: .year
         )
         return date.formatted(sameYear ? format : format.year())
-    }
-
-    private var currentWeekDates: [Date] {
-        let calendar = Calendar.current
-        return (0..<7).compactMap {
-            calendar.date(byAdding: .day, value: $0, to: currentWeekStart)
-        }
-    }
-
-    private func shiftBufferIfNeeded(for date: Date) {
-        guard let index = bufferDates.firstIndex(of: date) else { return }
-        let threshold = 50
-
-        if index < threshold || index > bufferDates.count - threshold {
-            let calendar = Calendar.current
-            bufferDates = (-500...500).compactMap {
-                calendar.date(byAdding: .day, value: $0, to: date)
-            }
-        }
-    }
-
-    private func shiftBufferWeeksIfNeeded(for week: Date) {
-        guard let index = bufferWeeks.firstIndex(of: week) else { return }
-        let threshold = 10
-
-        if index < threshold || index > bufferWeeks.count - threshold {
-            let calendar = Calendar.current
-            bufferWeeks = (-50...50).compactMap {
-                calendar.date(byAdding: .weekOfYear, value: $0, to: week)
-            }
-        }
-    }
-
-    private func navigateToDate(to newDate: Date) {
-        let calendar = Calendar.current
-
-        guard selectedDate != newDate else { return }
-
-        swipeDirection = newDate > selectedDate ? .trailing : .leading
-
-        withAnimation {
-            displayDate = newDate
-        }
-
-        let dayDifference = abs(
-            calendar.dateComponents([.day], from: selectedDate, to: newDate).day
-                ?? 0
-        )
-
-        if dayDifference <= 1 {
-            withAnimation {
-                selectedDate = newDate
-            }
-        } else {
-            let isTrailing = newDate > selectedDate
-            let adjacentDate = calendar.date(
-                byAdding: .day,
-                value: isTrailing ? -1 : 1,
-                to: newDate
-            )!
-
-            swapTargetDate = adjacentDate
-            swapSubstituteDate = selectedDate
-
-            selectedDate = adjacentDate
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    self.selectedDate = newDate
-                }
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    if self.selectedDate == newDate {
-                        self.swapTargetDate = nil
-                        self.swapSubstituteDate = nil
-                    }
-                }
-            }
-        }
     }
 
     private var draftDays: Set<Date> {
@@ -308,312 +254,297 @@ struct HomeView: View {
         let currentGoals = goalTimeline?.current?.goals
 
         NavigationStack {
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 0) {
-                    ForEach(bufferDates, id: \.self) { date in
+            DayPager(
+                state: pager,
+                stripHeight: dayCircleMode == .off ? 90 - hiddenCirclesInset : 90,
+                bottomMargin: tabBarHeight + 28,
+                indicatorBottomMargin: tabBarHeight
+            ) { effectiveDate in
+                VStack {
+                    if syncMonitor.isInitialRestoreInProgress {
+                        ICloudRestoreCard()
+                            .padding([.horizontal, .bottom])
+                            .padding(.top, 5)
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    }
 
-                        let effectiveDate =
-                            (date == swapTargetDate
-                                && swapSubstituteDate != nil)
-                            ? swapSubstituteDate! : date
+                    if let currentGoals,
+                        let dayGoals = goalTimeline?.goals(for: effectiveDate)
+                    {
+                        ProgressCard(
+                            goals: dayGoals,
+                            date: effectiveDate,
+                            dayStartMinutes: dayStartMinutes,
+                            isPastGoals: !dayGoals.hasSameMacroTargets(as: currentGoals)
+                        )
+                        .padding([.horizontal, .bottom])
+                        .padding(.top, syncMonitor.isInitialRestoreInProgress ? 0 : 5)
+                    }
 
-                        ScrollView {
-                            VStack {
-                                if syncMonitor.isInitialRestoreInProgress {
-                                    ICloudRestoreCard()
-                                        .padding([.horizontal, .bottom])
-                                        .padding(.top, 5)
-                                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                                }
+                    if users.first?.tracksHydration ?? true {
+                        HydrationCard(
+                            date: effectiveDate,
+                            dayStartMinutes: dayStartMinutes,
+                            logicalToday: logicalToday,
+                            goalML: goalTimeline?.goals(for: effectiveDate)?.waterGoalML,
+                            unit: users.first?.volumeUnit ?? .localeDefault,
+                            onLogDrink: { drink in
+                                drinkLogDay = HydrationDayRequest(day: effectiveDate, drink: drink)
+                            },
+                            onViewHydration: {
+                                hydrationDay = HydrationDayRequest(day: effectiveDate)
+                            },
+                            onManageDrinks: {
+                                showManageDrinks = true
+                            },
+                            onEditGoal: currentGoals == nil
+                                ? nil : { showWaterGoal = true },
+                            promptsForGoal: currentGoals != nil && currentGoals?.waterGoalML == nil
+                                && !(users.first?.skipsWaterGoalPrompt ?? false),
+                            hasWaterGoal: currentGoals?.waterGoalML != nil,
+                            onHide: hideHydration
+                        )
+                        .padding([.horizontal, .bottom])
+                        .padding(
+                            .top,
+                            currentGoals == nil && !syncMonitor.isInitialRestoreInProgress ? 5 : 0
+                        )
+                        .transition(.opacity)
+                    }
 
-                                if let currentGoals,
-                                    let dayGoals = goalTimeline?.goals(for: effectiveDate)
+                    TimelineCard(
+                        date: effectiveDate,
+                        dayStartMinutes: dayStartMinutes,
+                        showsAllDrinks: !tracksHydration,
+                        clickedEntry: Binding(
+                            get: { clickedEntry },
+                            set: { entry in
+                                if let entry,
+                                    EntryActions.opensAsHydrationLog(entry, tracksHydration: tracksHydration)
                                 {
-                                    ProgressCard(
-                                        goals: dayGoals,
-                                        date: effectiveDate,
+                                    drinkLogToEdit = entry
+                                } else {
+                                    clickedEntry = entry
+                                }
+                            }
+                        ),
+                        clickedDraft: $clickedDraft,
+                        onDeleteDraft: { draft in
+                            deleteDraft(draft)
+                        }
+                    ) { entry in
+                        let opensAsHydrationLog = EntryActions.opensAsHydrationLog(
+                            entry,
+                            tracksHydration: tracksHydration
+                        )
+                        if opensAsHydrationLog {
+                            Button {
+                                drinkLogForDetails = entry
+                            } label: {
+                                Label("Add Details", systemImage: "square.and.pencil")
+                            }
+
+                            Divider()
+                        }
+
+                        if EntryActions.canLogAgain(entry, tracksHydration: tracksHydration) {
+                            Button {
+                                if opensAsHydrationLog {
+                                    EntryActions.logHydrationAgain(
+                                        entry,
                                         dayStartMinutes: dayStartMinutes,
-                                        isPastGoals: !dayGoals.hasSameTargets(as: currentGoals)
+                                        unit: users.first?.volumeUnit ?? .localeDefault,
+                                        in: modelContext,
+                                        toastCenter: toastCenter
                                     )
-                                    .padding([.horizontal, .bottom])
-                                    .padding(.top, syncMonitor.isInitialRestoreInProgress ? 0 : 5)
+                                } else {
+                                    entryToLogAgain = entry
                                 }
-
-                                TimelineCard(
-                                    date: effectiveDate,
-                                    dayStartMinutes: dayStartMinutes,
-                                    clickedEntry: $clickedEntry,
-                                    clickedDraft: $clickedDraft,
-                                    onDeleteDraft: { draft in
-                                        deleteDraft(draft)
-                                    }
-                                ) { entry in
-                                    if entry.originalFoodItem != nil {
-                                        Button {
-                                            entryToLogAgain = entry
-                                        } label: {
-                                            Label(
-                                                "Log Again",
-                                                systemImage: "plus.square.on.square"
-                                            )
-                                        }
-                                    } else {
-                                        Button {
-                                            entryToAddToLibrary = entry
-                                        } label: {
-                                            Label(
-                                                "Add to Library",
-                                                systemImage: "plus.square.dashed"
-                                            )
-                                        }
-                                    }
-
-                                    Button {
-                                        entryToEdit = entry
-                                    } label: {
-                                        Label(
-                                            "Edit Entry",
-                                            systemImage: "pencil"
-                                        )
-                                    }
-
-                                    if let food = entry.originalFoodItem {
-                                        Button {
-                                            foodToView = food
-                                        } label: {
-                                            Label(
-                                                "View in Library",
-                                                systemImage: "book.pages"
-                                            )
-                                        }
-
-                                        Button {
-                                            toggleFavorite(for: entry)
-                                        } label: {
-                                            Label(
-                                                isFavorited(entry)
-                                                    ? "Unfavorite Entry"
-                                                    : "Favorite Entry",
-                                                systemImage: isFavorited(entry)
-                                                    ? "star.slash" : "star"
-                                            )
-                                        }
-                                    }
-
-                                    Divider()
-
-                                    Button(role: .destructive) {
-                                        deleteEntry(entry)
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
-                                .padding(.horizontal)
-                                .padding(
-                                    .top,
-                                    currentGoals == nil && !syncMonitor.isInitialRestoreInProgress ? nil : 0
+                            } label: {
+                                Label(
+                                    "Log Again",
+                                    systemImage: "plus.square.on.square"
                                 )
                             }
-                            .animation(.snappy, value: syncMonitor.isInitialRestoreInProgress)
-                            .background(
-                                GeometryReader { geo in
-                                    Color.clear
-                                        .onChange(
-                                            of: geo.frame(
-                                                in: .named("MainTabView")
-                                            ).minX
-                                        ) { oldX, newX in
-                                            if abs(newX) < 1.0
-                                                && selectedDate == date
-                                            {
-                                                if displayDate != date
-                                                    && swapTargetDate == nil
-                                                {
-                                                    withAnimation {
-                                                        displayDate = date
-                                                    }
-                                                }
-                                            }
-                                        }
-                                }
+                        } else if entry.originalFoodItem == nil {
+                            Button {
+                                entryToAddToLibrary = entry
+                            } label: {
+                                Label(
+                                    "Add to Library",
+                                    systemImage: "plus.square.dashed"
+                                )
+                            }
+                        }
+
+                        Button {
+                            if opensAsHydrationLog {
+                                drinkLogToEdit = entry
+                            } else {
+                                entryToEdit = entry
+                            }
+                        } label: {
+                            Label(
+                                opensAsHydrationLog ? "Edit Drink" : "Edit Entry",
+                                systemImage: "pencil"
                             )
                         }
-                        .contentMargins(
-                            .bottom,
-                            tabBarHeight + 28,
-                            for: .scrollContent
-                        )
-                        .contentMargins(
-                            .bottom,
-                            tabBarHeight,
-                            for: .scrollIndicators
-                        )
-                        .scrollEdgeEffectStyle(.hard, for: .top)
-                        .modifier(ScrolledTopEdgeEffect())
-                        .safeAreaBar(edge: .top) {
-                            Color.primary.opacity(0.001).frame(
-                                height: dayCircleMode == .off
-                                    ? 97.5 - hiddenCirclesInset : 97.5
-                            )
+
+                        if let food = entry.originalFoodItem {
+                            Button {
+                                foodToView = food
+                            } label: {
+                                Label(food.viewActionTitle, systemImage: "book.pages")
+                            }
+
+                            Button {
+                                toggleFavorite(for: entry)
+                            } label: {
+                                Label(
+                                    isFavorited(entry)
+                                        ? "Unfavorite Entry"
+                                        : "Favorite Entry",
+                                    systemImage: isFavorited(entry)
+                                        ? "star.slash" : "star"
+                                )
+                            }
                         }
-                        .containerRelativeFrame(.horizontal)
-                        .id(date)
+
+                        Divider()
+
+                        Button(role: .destructive) {
+                            deleteEntry(entry)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
+                    .padding(.horizontal)
+                    .padding(
+                        .top,
+                        currentGoals == nil && !(users.first?.tracksHydration ?? true)
+                            && !syncMonitor.isInitialRestoreInProgress ? 5 : 0
+                    )
                 }
-                .scrollTargetLayout()
-            }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(
-                id: Binding<Date?>(
-                    get: { selectedDate },
-                    set: { newDate in
-                        if let newDate {
-                            selectedDate = newDate
-                        }
-                    }
-                )
-            )
-            .scrollIndicators(.hidden, axes: .horizontal)
-            .scrollEdgeEffectHidden(true, for: .top)
-            .coordinateSpace(name: "MainTabView")
-            .ignoresSafeArea(edges: .bottom)
-            .overlay(alignment: .top) {
-                TabView(selection: $currentWeekStart) {
-                    ForEach(bufferWeeks, id: \.self) { weekStart in
-
-                        let weekDates = (0..<7).compactMap {
-                            Calendar.current.date(
-                                byAdding: .day,
-                                value: $0,
-                                to: weekStart
+                .animation(.snappy, value: syncMonitor.isInitialRestoreInProgress)
+            } week: { weekDates in
+                WeekGoalScores(
+                    weekDates: weekDates,
+                    goalTimeline: goalTimeline
+                        ?? GoalTimeline([], dayStartMinutes: dayStartMinutes),
+                    mode: dayCircleMode,
+                    goals: users.first?.scoredDayCircleGoals ?? [],
+                    showsAllDrinks: !tracksHydration,
+                    countsDrinkOnlyDays: users.first?.dayCirclesIncludeWater ?? true,
+                    dayStartMinutes: dayStartMinutes,
+                    logicalToday: logicalToday
+                ) { scores in
+                    HStack {
+                        ForEach(weekDates, id: \.self) { date in
+                            let isSelected = Calendar.current.isDate(
+                                date,
+                                inSameDayAs: pager.displayDate
                             )
-                        }
+                            let isToday = Calendar.current.isDate(
+                                date,
+                                inSameDayAs: logicalToday
+                            )
 
-                        WeekGoalScores(
-                            weekDates: weekDates,
-                            goalTimeline: goalTimeline
-                                ?? GoalTimeline([], dayStartMinutes: dayStartMinutes),
-                            mode: dayCircleMode,
-                            goal: users.first?.resolvedDayCircleGoal ?? .calories,
-                            dayStartMinutes: dayStartMinutes,
-                            logicalToday: logicalToday
-                        ) { scores in
-                            HStack {
-                                ForEach(weekDates, id: \.self) { date in
-                                    let isSelected = Calendar.current.isDate(
-                                        date,
-                                        inSameDayAs: displayDate
-                                    )
-                                    let isToday = Calendar.current.isDate(
-                                        date,
-                                        inSameDayAs: logicalToday
-                                    )
+                            let isDraftDay = draftDays.contains(
+                                Calendar.current.startOfDay(for: date)
+                            )
 
-                                    let isDraftDay = draftDays.contains(
-                                        Calendar.current.startOfDay(for: date)
-                                    )
+                            Group {
+                                if dayCircleMode == .off {
+                                    VStack(spacing: 4) {
+                                        Text(
+                                            date.formatted(
+                                                .dateTime.weekday(.narrow)
+                                            )
+                                        )
+                                        .font(.detailEmphasis)
+                                        .foregroundStyle(
+                                            isToday ? Color.accentColor : .secondary
+                                        )
 
-                                    Group {
-                                        if dayCircleMode == .off {
-                                            VStack(spacing: 4) {
-                                                Text(
-                                                    date.formatted(
-                                                        .dateTime.weekday(.narrow)
-                                                    )
-                                                )
-                                                .font(.detailEmphasis)
-                                                .foregroundStyle(
-                                                    isToday ? Color.accentColor : .secondary
-                                                )
-
-                                                Text(
-                                                    date.formatted(.dateTime.day())
-                                                )
-                                                .font(.sectionTitle)
-                                                .foregroundColor(
-                                                    isSelected
-                                                        ? .white
-                                                        : (isToday ? .accentColor : .primary)
-                                                )
-                                                .frame(width: 30, height: 30)
-                                                .background(
-                                                    Circle().fill(
-                                                        isSelected
-                                                            ? Color.accentColor : Color.clear
-                                                    )
-                                                )
-                                                .overlay(alignment: .bottom) {
-                                                    DraftDot(isVisible: isDraftDay)
-                                                }
-                                            }
-                                            .frame(minWidth: 44)
-                                            .contentShape(Rectangle())
-                                        } else {
-                                            VStack(spacing: 12) {
-                                                Text(
-                                                    date.formatted(
-                                                        .dateTime.weekday(.narrow)
-                                                    )
-                                                )
-                                                .font(.sectionTitle)
-                                                .foregroundColor(
-                                                    isSelected
-                                                        ? .white
-                                                        : (isToday ? .accentColor : .primary)
-                                                )
-                                                .frame(width: 30, height: 30)
-                                                .background(
-                                                    Circle().fill(
-                                                        isSelected
-                                                            ? Color.accentColor : Color.clear
-                                                    )
-                                                )
-
-                                                DayProgressCircle(
-                                                    score: scores[date],
-                                                    hasDrafts: isDraftDay
-                                                )
-                                            }
+                                        Text(
+                                            date.formatted(.dateTime.day())
+                                        )
+                                        .font(.sectionTitle)
+                                        .foregroundColor(
+                                            isSelected
+                                                ? .white
+                                                : (isToday ? .accentColor : .primary)
+                                        )
+                                        .frame(width: 30, height: 30)
+                                        .background(
+                                            Circle().fill(
+                                                isSelected
+                                                    ? Color.accentColor : Color.clear
+                                            )
+                                        )
+                                        .overlay(alignment: .bottom) {
+                                            DraftDot(isVisible: isDraftDay)
                                         }
                                     }
-                                    .animation(
-                                        .easeInOut(duration: 0.25),
-                                        value: draftDays
-                                    )
-                                    .onTapGesture {
-                                        navigateToDate(to: date)
-                                    }
-                                    .accessibilityElement(children: .ignore)
-                                    .accessibilityLabel(currDate(for: date))
-                                    .accessibilityValue(
-                                        dayAccessibilityValue(
-                                            score: scores[date],
-                                            isToday: isToday,
-                                            isDraftDay: isDraftDay
+                                    .frame(minWidth: 44)
+                                    .contentShape(Rectangle())
+                                } else {
+                                    VStack(spacing: 12) {
+                                        Text(
+                                            date.formatted(
+                                                .dateTime.weekday(.narrow)
+                                            )
                                         )
-                                    )
-                                    .accessibilityAddTraits(
-                                        isSelected ? [.isButton, .isSelected] : .isButton
-                                    )
-                                    .accessibilityAction {
-                                        navigateToDate(to: date)
-                                    }
+                                        .font(.sectionTitle)
+                                        .foregroundColor(
+                                            isSelected
+                                                ? .white
+                                                : (isToday ? .accentColor : .primary)
+                                        )
+                                        .frame(width: 30, height: 30)
+                                        .background(
+                                            Circle().fill(
+                                                isSelected
+                                                    ? Color.accentColor : Color.clear
+                                            )
+                                        )
 
-                                    if date != weekDates.last {
-                                        Spacer()
+                                        DayProgressCircle(
+                                            score: scores[date],
+                                            hasDrafts: isDraftDay
+                                        )
                                     }
                                 }
                             }
+                            .onTapGesture {
+                                pager.navigate(to: date)
+                            }
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(currDate(for: date))
+                            .accessibilityValue(
+                                dayAccessibilityValue(
+                                    score: scores[date],
+                                    isToday: isToday,
+                                    isDraftDay: isDraftDay
+                                )
+                            )
+                            .accessibilityAddTraits(
+                                isSelected ? [.isButton, .isSelected] : .isButton
+                            )
+                            .accessibilityAction {
+                                pager.navigate(to: date)
+                            }
+
+                            if date != weekDates.last {
+                                Spacer()
+                            }
                         }
-                        .padding(.horizontal, 20)
-                        .tag(weekStart)
                     }
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .frame(height: dayCircleMode == .off ? 90 - hiddenCirclesInset : 90)
             }
+            .ignoresSafeArea(edges: .bottom)
             .navigationTitle("Home")
-            .navigationSubtitle(currDate(for: displayDate))
+            .navigationSubtitle(currDate(for: pager.displayDate))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 alignToLogicalToday()
@@ -636,60 +567,8 @@ struct HomeView: View {
                     for: Date(),
                     dayStartMinutes: oldMinutes
                 )
-                guard selectedDate == previousToday else { return }
+                guard pager.selectedDate == previousToday else { return }
                 jumpToLogicalToday()
-            }
-            .onChange(of: selectedDate) { oldDate, newDate in
-                swipeDirection = newDate > oldDate ? .trailing : .leading
-
-                let calendar = Calendar.current
-                guard
-                    let newWeekStart = calendar.date(
-                        from: calendar.dateComponents(
-                            [.yearForWeekOfYear, .weekOfYear],
-                            from: newDate
-                        )
-                    )
-                else { return }
-
-                if newWeekStart != currentWeekStart {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        currentWeekStart = newWeekStart
-                    }
-                }
-
-                shiftBufferIfNeeded(for: newDate)
-            }
-            .onChange(of: currentWeekStart) { oldWeek, newWeek in
-                let calendar = Calendar.current
-
-                if !calendar.isDate(
-                    selectedDate,
-                    equalTo: newWeek,
-                    toGranularity: .weekOfYear
-                ) {
-
-                    let daysToShift =
-                        calendar.dateComponents(
-                            [.day],
-                            from: oldWeek,
-                            to: newWeek
-                        ).day ?? 0
-                    if let syncedDate = calendar.date(
-                        byAdding: .day,
-                        value: daysToShift,
-                        to: selectedDate
-                    ) {
-
-                        swipeDirection =
-                            newWeek > oldWeek ? .trailing : .leading
-                        withAnimation {
-                            selectedDate = syncedDate
-                        }
-                    }
-                }
-
-                shiftBufferWeeksIfNeeded(for: newWeek)
             }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -720,10 +599,10 @@ struct HomeView: View {
                                             DatePicker(
                                                 "Select Date",
                                                 selection: Binding(
-                                                    get: { selectedDate },
+                                                    get: { pager.selectedDate },
                                                     set: { newDate in
                                                         showDatePicker = false
-                                                        navigateToDate(
+                                                        pager.navigate(
                                                             to: newDate
                                                         )
                                                     }
@@ -734,7 +613,7 @@ struct HomeView: View {
 
                                             Button("Today") {
                                                 showDatePicker = false
-                                                navigateToDate(to: logicalToday)
+                                                pager.navigate(to: logicalToday)
                                             }
                                             .padding(.top, 8)
                                             .padding(.bottom, 24)
@@ -742,7 +621,7 @@ struct HomeView: View {
                                         .padding(.horizontal)
                                         .frame(width: 320)
                                         .presentationCompactAdaptation(.popover)
-                                        .onChange(of: selectedDate) {
+                                        .onChange(of: pager.selectedDate) {
                                             oldDate,
                                             newDate in
                                             showDatePicker = false
@@ -758,12 +637,49 @@ struct HomeView: View {
                     }
                 }
             }
+            .onChange(of: shownSheets) { old, new in
+                let opened = new.subtracting(old)
+                guard !opened.isEmpty else { return }
+                for sheet in new.subtracting(opened) {
+                    clear(sheet)
+                }
+            }
             .sheet(isPresented: $showSettingsSheet) {
                 SettingsView()
             }
+            .sheet(item: $drinkLogDay) { request in
+                LogDrinkSheet(
+                    day: request.day,
+                    dayStartMinutes: dayStartMinutes,
+                    logicalToday: logicalToday,
+                    drink: request.drink
+                )
+            }
+            .sheet(isPresented: $showWaterGoal) {
+                WaterGoalSheet()
+            }
+            .sheet(isPresented: $showManageDrinks) {
+                DrinkListView(mode: .manage)
+                    .environment(\.tabBarHeight, 0)
+            }
+            .hydrationDaySheet(item: $hydrationDay, dayStartMinutes: dayStartMinutes)
             .sheet(item: $clickedEntry) { entry in
                 NavigationStack {
                     LoggedEntryDetailView(entry: entry, isPushedView: false)
+                }
+                .environment(\.tabBarHeight, 0)
+            }
+            .sheet(item: $drinkLogToEdit) { entry in
+                LogDrinkSheet(editing: entry)
+                    .environment(\.tabBarHeight, 0)
+            }
+            .sheet(item: $drinkLogForDetails) { entry in
+                NavigationStack {
+                    LoggedEntryDetailView(
+                        entry: entry,
+                        isPushedView: false,
+                        startsEditing: true
+                    )
                 }
                 .environment(\.tabBarHeight, 0)
             }
@@ -832,20 +748,6 @@ struct HomeView: View {
                 }
             }
         }
-    }
-}
-
-private struct ScrolledTopEdgeEffect: ViewModifier {
-    @State private var isScrolled = false
-
-    func body(content: Content) -> some View {
-        content
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top > 1
-            } action: { _, newValue in
-                isScrolled = newValue
-            }
-            .scrollEdgeEffectHidden(!isScrolled, for: .top)
     }
 }
 

@@ -19,6 +19,10 @@ enum AppSymbols: String {
     case fatfiber = "f.circle.fill"
     case location = "mappin"
 
+    static let caffeineSymbol = "coffeebean.circle.fill"
+    static let alcoholSymbol = "percentsign.circle.fill"
+    static let assetSymbols: Set<String> = [caffeineSymbol, alcoholSymbol]
+
     var image: Image {
         Image(systemName: self.rawValue)
     }
@@ -52,6 +56,8 @@ extension RowIcon {
     static let carbs = RowIcon.appSymbol(.carbs, tint: .carbs)
     static let fat = RowIcon.appSymbol(.fatfiber, tint: .fat)
     static let fiber = RowIcon.appSymbol(.fatfiber, tint: .fiber)
+    static let caffeine = RowIcon.customSymbol(AppSymbols.caffeineSymbol, tint: DrinkTint.brown.color)
+    static let alcohol = RowIcon.customSymbol(AppSymbols.alcoholSymbol, tint: DrinkTint.wine.color)
 
     func macroText(
         _ value: String,

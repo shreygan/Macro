@@ -57,6 +57,7 @@ struct DateTimePillRow: View {
                     .accessibilityHidden(!isEnabled)
 
                     Text(formattedDateTime)
+                        .lineLimit(1)
                         .font(.rowValue)
                         .foregroundColor(.secondary)
                         .padding(.trailing, 8)

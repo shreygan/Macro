@@ -373,10 +373,11 @@ struct ImportReviewView: View {
             carbs: formatDropZero(item.carbs * activeMultiplier),
             fat: formatDropZero(item.fat * activeMultiplier),
             fiber: formatDropZero(item.fiber * activeMultiplier),
-            icon: item.type == .food ? nil : item.type.appSymbol
+            icon: item.type.appSymbol
         ) {
             beginEditing(item)
         }
+        .drink(item.drinkRowInfo(multiplier: activeMultiplier))
         .nameTag(item.hasMacroIssue ? "Check Macros" : nil)
     }
 
@@ -400,6 +401,7 @@ struct ImportReviewView: View {
 
         result.isFavorite = original.isFavorite
         result.favoriteOrder = original.favoriteOrder
+        result.isInLibrary = original.isInLibrary
         result.importID = original.importID
         result.duplicateOf = original.duplicateOf
         result.servingUnitPlural =
@@ -460,6 +462,9 @@ struct ImportReviewView: View {
                 )
 
                 modelContext.insert(newFood)
+                if let drink = draft.drink {
+                    MacroBackup.applyDrink(drink, to: newFood, in: modelContext)
+                }
                 itemsByID[newFood.id] = newFood
                 library.append(newFood)
                 saved.append((draft, newFood))
@@ -508,6 +513,7 @@ struct ImportReviewView: View {
             }
 
         for favorite in importedFavorites {
+            favorite.item.isInLibrary = true
             modelContext.insert(
                 FavoriteEntry(
                     orderIndex: nextFavoriteOrder,
@@ -580,6 +586,14 @@ struct ImportReviewView: View {
         food.customServingSize = draft.customServingSize
         if let location = linkedLocation(draft.defaultLocation, in: savedLocations) {
             food.defaultLocation = location
+        }
+        if var drink = draft.drink {
+            drink.seedKey = drink.seedKey ?? food.seedKey
+            drink.hydrationOrder = drink.hydrationOrder ?? food.hydrationOrder
+            MacroBackup.applyDrink(drink, to: food, in: modelContext)
+        }
+        if food.seedKey != nil {
+            food.isInLibrary = draft.isInLibrary ?? true
         }
 
         if noteText.isEmpty {

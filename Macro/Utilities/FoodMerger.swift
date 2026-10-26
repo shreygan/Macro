@@ -80,6 +80,50 @@ struct FoodMergePlan {
         return weight / keptUnits * servingSize
     }
 
+    var servingCaffeine: Double? {
+        guard let caffeine = kept.caffeineMg, let keptUnits else { return kept.caffeineMg }
+        return caffeine / keptUnits * servingSize
+    }
+
+    struct SizeChange {
+        var name: String?
+        var volumeML: Double
+        var from: FoodItem
+    }
+
+    private static func sizes(of food: FoodItem) -> [(name: String?, volumeML: Double)] {
+        let sizes = food.sortedDrinkSizes.map { (name: $0.name, volumeML: $0.volumeML) }
+        guard sizes.isEmpty, let serving = food.servingVolumeML else { return sizes }
+        return [(nil, serving)]
+    }
+
+    private var sizeChanges: (added: [SizeChange], duplicates: [SizeChange]) {
+        guard kept.type == .drink else { return ([], []) }
+        var volumes = kept.sortedDrinkSizes.map(\.volumeML) + [kept.servingVolumeML].compactMap(\.self)
+        var added: [SizeChange] = []
+        var duplicates: [SizeChange] = []
+        for food in removed {
+            for size in Self.sizes(of: food) {
+                let change = SizeChange(name: size.name, volumeML: size.volumeML, from: food)
+                if volumes.contains(where: { HydrationLogger.isSameVolume($0, size.volumeML) }) {
+                    duplicates.append(change)
+                } else {
+                    volumes.append(size.volumeML)
+                    added.append(change)
+                }
+            }
+        }
+        return (added, duplicates)
+    }
+
+    var addedSizes: [SizeChange] {
+        sizeChanges.added
+    }
+
+    var duplicateSizes: [SizeChange] {
+        sizeChanges.duplicates
+    }
+
     var keptDefaultPortion: Double? {
         guard let keptUnits, kept.servingSize > 0 else { return nil }
         return EntryHelper.defaultPortion(for: kept) / kept.servingSize * keptUnits
@@ -161,6 +205,8 @@ struct FoodMergeRecord {
         let carbs: Double
         let fat: Double
         let fiber: Double
+        let drinkAmounts: DrinkAmounts
+        let sizeName: String?
     }
 
     struct IngredientState {
@@ -216,6 +262,7 @@ enum FoodMerger {
         var logStates: [FoodMergeRecord.LogState] = []
         var ingredientStates: [FoodMergeRecord.IngredientState] = []
         var draftStates: [FoodMergeRecord.DraftState] = []
+        var recalculatedDrinkLogs: [LoggedEntry] = []
 
         let logsByFood = Dictionary(
             uniqueKeysWithValues: plan.foods.map {
@@ -244,7 +291,9 @@ enum FoodMerger {
                         protein: log.protein,
                         carbs: log.carbs,
                         fat: log.fat,
-                        fiber: log.fiber
+                        fiber: log.fiber,
+                        drinkAmounts: log.drinkAmounts,
+                        sizeName: log.sizeName
                     )
                 )
                 if let portion = plan.convertedPortion(
@@ -262,6 +311,9 @@ enum FoodMerger {
                         log.carbs = macros.carbs
                         log.fat = macros.fat
                         log.fiber = macros.fiber
+                        if kept.type == .drink {
+                            recalculatedDrinkLogs.append(log)
+                        }
                     }
                 }
                 log.name = plan.trimmedName
@@ -369,11 +421,11 @@ enum FoodMerger {
         kept.name = plan.trimmedName
         kept.source = relationships.source(plan.source)
         switch kept.type {
-        case .food:
+        case .food, .drink:
             kept.category = relationships.category(plan.category)
         case .ingredient:
             kept.foodGroup = relationships.foodGroup(plan.foodGroup)
-        case .drink, .recipe:
+        case .recipe:
             break
         }
         kept.defaultLocation = plan.defaultLocation
@@ -402,6 +454,44 @@ enum FoodMerger {
         kept.fat = servingMacros.fat
         kept.fiber = servingMacros.fiber
         kept.dateAdded = plan.foods.map(\.dateAdded).min() ?? kept.dateAdded
+        if kept.type == .drink {
+            kept.caffeineMg = plan.servingCaffeine
+            var sizes = kept.sortedDrinkSizes
+            for added in plan.addedSizes {
+                let size = DrinkSize(name: added.name, volumeML: added.volumeML, displayOrder: sizes.count)
+                context.insert(size)
+                size.food = kept
+                sizes.append(size)
+            }
+            if let servingVolume = kept.servingVolumeML,
+                let currentServing = sizes.first(where: \.isDefault) ?? sizes.first,
+                !HydrationLogger.isSameVolume(currentServing.volumeML, servingVolume)
+            {
+                currentServing.isDefault = false
+                let serving: DrinkSize
+                if let match = sizes.first(where: { HydrationLogger.isSameVolume($0.volumeML, servingVolume) }) {
+                    serving = match
+                    sizes.removeAll { $0 === match }
+                } else {
+                    serving = DrinkSize(volumeML: servingVolume, displayOrder: 0)
+                    context.insert(serving)
+                    serving.food = kept
+                }
+                serving.isDefault = true
+                sizes.insert(serving, at: 0)
+                for (index, size) in sizes.enumerated() {
+                    size.displayOrder = index
+                }
+            }
+            kept.drinkSizes = sizes
+            if kept.hydrationOrder == nil {
+                kept.hydrationOrder = plan.removed.compactMap(\.hydrationOrder).min()
+            }
+            for log in recalculatedDrinkLogs {
+                log.drinkAmounts = DrinkAmounts(food: kept, quantity: log.loggedQuantity, unit: log.loggedUnit)
+                log.sizeName = HydrationLogger.sizeName(for: kept, volumeML: log.volumeML)
+            }
+        }
 
         for food in plan.removed {
             context.delete(food)
@@ -469,6 +559,8 @@ enum FoodMerger {
             log.carbs = state.carbs
             log.fat = state.fat
             log.fiber = state.fiber
+            log.drinkAmounts = state.drinkAmounts
+            log.sizeName = state.sizeName
             log.originalFoodItem = foodsByID[state.foodID]
         }
 

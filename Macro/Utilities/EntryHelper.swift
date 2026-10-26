@@ -100,8 +100,12 @@ enum EntryHelper {
     static func portionText(
         quantity: Double,
         unit: String,
-        servingUnits: [ServingSizeUnit]
+        servingUnits: [ServingSizeUnit],
+        volumeUnit: VolumeUnit? = nil
     ) -> String {
+        if let volumeUnit, unit == VolumeUnit.milliliters.rawValue {
+            return volumeUnit.formattedAmount(quantity)
+        }
         let quantityText = format(quantity)
         let unitText =
             servingUnits.first { $0.unit == unit }?
@@ -138,7 +142,30 @@ enum EntryHelper {
         guard !valueString.isEmpty, let value = Double(valueString) else {
             return valueString
         }
-        return format(value * multiplier)
+        guard !isUnscaled(multiplier) else { return valueString }
+        return formatMacroField(value * multiplier)
+    }
+
+    static func formatMacroField(_ value: Double) -> String {
+        format((value * 100).rounded() / 100)
+    }
+
+    static func isUnscaled(_ multiplier: Double) -> Bool {
+        abs(multiplier - 1) < 1e-9
+    }
+
+    static func formatLoggedMacro(_ value: Double, of entry: LoggedEntry, food: FoodItem?) -> String {
+        guard !entry.isManualOverride, let food,
+            let multiplier = portionMultiplier(
+                quantity: entry.loggedQuantity,
+                unit: entry.loggedUnit,
+                servingSize: food.servingSize,
+                servingWeight: food.servingWeight,
+                servingWeightUnit: food.servingWeightUnit
+            ),
+            !isUnscaled(multiplier)
+        else { return format(value) }
+        return formatMacroField(value)
     }
 
     /// Converts a logged entry's saved photos into editable draft photos

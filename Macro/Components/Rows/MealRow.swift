@@ -10,8 +10,11 @@ import SwiftUI
 struct MealRow<Content: View>: View {
     var name: String
     var subtitle: String
+    var servingVolumeML: Double?
 
     var icon: AppSymbols?
+    var source = ""
+    var drink: DrinkRowInfo?
 
     var calorie: String
     var protein: String?
@@ -26,8 +29,12 @@ struct MealRow<Content: View>: View {
     var location: String?
     var hasNote = false
     var hasPhotos = false
+    var alias: String?
 
     let content: Content
+
+    @Environment(\.volumeUnit) private var volumeUnit
+    @Environment(\.tracksHydration) private var tracksHydration
 
     init(
         name: String,
@@ -49,6 +56,7 @@ struct MealRow<Content: View>: View {
         @ViewBuilder content: () -> Content
     ) {
         self.name = name
+        self.source = source
         self.calorie = calorie
         self.protein = protein
         self.carbs = carbs
@@ -67,7 +75,7 @@ struct MealRow<Content: View>: View {
         let displayUnit =
             matchedUnitObject?.displayString(for: activeSize) ?? servingSizeUnit
 
-        self.subtitle = Self.buildSubtitle(
+        (self.subtitle, self.servingVolumeML) = Self.buildSubtitle(
             source: source,
             activeSize: activeSize,
             displayUnit: displayUnit,
@@ -91,6 +99,8 @@ struct MealRow<Content: View>: View {
         self.fat = String(item.fat)
         self.fiber = String(item.fiber)
         self.icon = icon
+        self.source = item.source?.source ?? ""
+        self.drink = DrinkRowInfo(food: item)
         self.action = action
         self.content = content()
 
@@ -102,7 +112,7 @@ struct MealRow<Content: View>: View {
         let displayUnit =
             item.servingUnit?.displayString(for: activeSizeStr) ?? ""
 
-        self.subtitle = Self.buildSubtitle(
+        (self.subtitle, self.servingVolumeML) = Self.buildSubtitle(
             source: item.source?.source ?? "",
             activeSize: activeSizeStr,
             displayUnit: displayUnit,
@@ -121,7 +131,7 @@ struct MealRow<Content: View>: View {
         servingWeightUnit: String,
         isCustomDefaultServing: Bool,
         originalServingSize: String
-    ) -> String {
+    ) -> (String, Double?) {
         var text =
             source.isEmpty
             ? "\(activeSize) \(displayUnit)"
@@ -141,15 +151,28 @@ struct MealRow<Content: View>: View {
                 activeWeightText = String(format: "%g", scaledWeight)
             }
 
+            if servingWeightUnit == VolumeUnit.milliliters.rawValue,
+                let milliliters = Double(activeWeightText)
+            {
+                return (text, milliliters)
+            }
             text += " (\(activeWeightText) \(servingWeightUnit))"
         }
-        return text
+        return (text, nil)
     }
 
     var body: some View {
-        let parts = subtitle.components(separatedBy: ", ")
+        let drinkAmount = drink?.amountText(unit: volumeUnit)
+        let servingSubtitle = servingVolumeML.map {
+            "\(self.subtitle) (\(volumeUnit.formattedAmount($0)))"
+        } ?? self.subtitle
+        let parts: [String] =
+            drinkAmount.map { [source, $0].filter { !$0.isEmpty } }
+            ?? servingSubtitle.components(separatedBy: ", ")
+        let separator = drinkAmount == nil ? ", " : " · "
+        let subtitle = drinkAmount == nil ? servingSubtitle : parts.joined(separator: separator)
         let topText =
-            parts.count > 1 ? parts.dropLast().joined(separator: ", ") : ""
+            parts.count > 1 ? parts.dropLast().joined(separator: separator) : ""
         let bottomText = parts.last ?? subtitle
 
         let rowContent = HStack(alignment: .center, spacing: 12) {
@@ -164,7 +187,9 @@ struct MealRow<Content: View>: View {
                             .lineLimit(nameLineLimit)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        if let icon = icon {
+                        if let drink {
+                            DrinkBadge(symbol: drink.symbol, tint: drink.tint)
+                        } else if let icon = icon {
                             icon.image
                                 .font(.smallIcon)
                                 .foregroundColor(.tertiaryText)
@@ -200,11 +225,21 @@ struct MealRow<Content: View>: View {
                                 .truncationMode(.tail)
                         }
                     }
+
+                    if let facts = drink?.factsText(unit: volumeUnit, includesHydration: tracksHydration) {
+                        Text(facts)
+                            .font(.subtitle)
+                            .foregroundColor(.tertiaryText)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
 
-                buildAllMacrosText()
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
+                if drink?.hasMacros ?? true {
+                    buildAllMacrosText()
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer(minLength: 0)
@@ -212,6 +247,10 @@ struct MealRow<Content: View>: View {
             content
                 .layoutPriority(1)
                 .padding(.leading, -10)
+
+            if let alias {
+                AliasNote(alias: alias)
+            }
 
             AttachmentHints(hasNote: hasNote, hasPhotos: hasPhotos)
 
@@ -344,6 +383,18 @@ struct MealRow<Content: View>: View {
         return row
     }
 
+    func drink(_ info: DrinkRowInfo?) -> Self {
+        var row = self
+        row.drink = info
+        return row
+    }
+
+    func aliasNote(_ alias: String?) -> Self {
+        var row = self
+        row.alias = alias
+        return row
+    }
+
     func attachmentHints(hasNote: Bool, hasPhotos: Bool) -> Self {
         var row = self
         row.hasNote = hasNote
@@ -433,6 +484,7 @@ extension MealRow where Content == EmptyView {
             icon: icon,
             action: action
         )
+        self.drink = DrinkRowInfo(food: food)
     }
 }
 

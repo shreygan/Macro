@@ -36,6 +36,12 @@ enum LogCSV {
         case isManualOverride = "Manual Override"
         case note = "Note"
         case order = "Order"
+        case isHydrationLog = "Hydration Log"
+        case volume = "Volume (ml)"
+        case hydration = "Hydration (ml)"
+        case caffeine = "Caffeine (mg)"
+        case alcohol = "Alcohol (g)"
+        case sizeName = "Size"
 
         var aliases: [String] {
             switch self {
@@ -123,7 +129,7 @@ enum LogCSV {
     private static func fields(for entry: LoggedEntry, parent: LoggedEntry?)
         -> [Column: String]
     {
-        [
+        var fields: [Column: String] = [
             .record: parent == nil
                 ? Record.log.rawValue : Record.ingredient.rawValue,
             .id: entry.id.uuidString,
@@ -152,6 +158,31 @@ enum LogCSV {
             .note: entry.logNote ?? "",
             .order: String(entry.displayOrder),
         ]
+        if let hydration = MacroBackup.hydrationRecord(entry) {
+            fields[.isHydrationLog] = LibraryCSV.format(hydration.isHydrationLog)
+            fields[.volume] = LibraryCSV.format(hydration.volumeML)
+            fields[.hydration] = LibraryCSV.format(hydration.hydrationML)
+            fields[.caffeine] = LibraryCSV.format(hydration.caffeineMg)
+            fields[.alcohol] = LibraryCSV.format(hydration.alcoholGrams)
+            fields[.sizeName] = hydration.sizeName ?? ""
+        }
+        return fields
+    }
+
+    private static func hydration(_ field: (Column) -> String) -> MacroBackup.HydrationRecord? {
+        let columns: [Column] = [.isHydrationLog, .volume, .hydration, .caffeine, .alcohol, .sizeName]
+        guard columns.contains(where: { !field($0).isEmpty }) else { return nil }
+        func amount(_ column: Column) -> Double { max(Double(field(column)) ?? 0, 0) }
+        let volume = amount(.volume)
+        let sizeName = field(.sizeName)
+        return MacroBackup.HydrationRecord(
+            isHydrationLog: LibraryCSV.bool(field(.isHydrationLog)),
+            volumeML: volume,
+            hydrationML: field(.hydration).isEmpty ? volume : amount(.hydration),
+            caffeineMg: amount(.caffeine),
+            alcoholGrams: amount(.alcohol),
+            sizeName: sizeName.isEmpty ? nil : sizeName
+        )
     }
 
     static let requiredColumns: [Column] = [.name, .date, .calories]
@@ -457,10 +488,15 @@ enum LogCSV {
         isComponent: Bool
     ) -> DraftLogEntry? {
         let type = LibraryCSV.normalized(field(.type))
-        let unit = field(.unit)
+        var unit = field(.unit)
+        var quantity = Double(field(.quantity)) ?? 1
+        if let canonical = LibraryCSV.canonicalUnit(for: unit, includesMass: false) {
+            quantity *= canonical.factor
+            unit = canonical.unit
+        }
         let note = field(.note)
 
-        return DraftLogEntry(
+        var draft = DraftLogEntry(
             importID: UUID(uuidString: field(.id)),
             foodID: UUID(uuidString: field(.foodID)),
             typeRawValue: EntryType(rawValue: type)?.rawValue
@@ -472,7 +508,7 @@ enum LogCSV {
             foodGroup: field(.foodGroup),
             timestamp: timestamp(field) ?? Date(),
             location: location(field),
-            quantity: Double(field(.quantity)) ?? 1,
+            quantity: quantity,
             unit: unit.isEmpty ? "serving" : unit,
             calories: LibraryCSV.macro(field(.calories)) ?? 0,
             protein: LibraryCSV.macro(field(.protein)) ?? 0,
@@ -483,5 +519,7 @@ enum LogCSV {
             note: note.isEmpty ? nil : note,
             displayOrder: Int(field(.order)) ?? 0
         )
+        draft.hydration = hydration(field)
+        return draft
     }
 }
