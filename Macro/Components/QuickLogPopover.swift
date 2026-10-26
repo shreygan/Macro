@@ -25,7 +25,7 @@ struct QuickLogPopover: View {
             predicate: #Predicate { $0.parentEntry == nil },
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
         )
-        descriptor.fetchLimit = 50
+        descriptor.fetchLimit = 150
         return descriptor
     }
 

@@ -66,6 +66,7 @@ struct MainView: View {
 
     @State private var selection: TabSelection = .home
     @State private var isErasingData = false
+    @State private var isCoveringTabs = false
     @State private var isReplacingData = false
     @State private var restoreAlert: DataTransferAlert?
     @State private var unrecoveredRestore: BackupRestoreError?
@@ -95,7 +96,9 @@ struct MainView: View {
                     .transition(.opacity)
             }
 
-            if (!isOnboardingComplete && !syncMonitor.isInitialRestoreInProgress) || isErasingData {
+            if (!isOnboardingComplete && !syncMonitor.isInitialRestoreInProgress) || isErasingData
+                || isCoveringTabs
+            {
                 WelcomeView(
                     isRestoring: isReplacingData,
                     restoringMessage: "Restoring Backup…"
@@ -114,6 +117,7 @@ struct MainView: View {
         )
         .environment(\.eraseAllData, eraseAllData)
         .environment(\.replaceAllData, replaceAllData)
+        .userSettingsEnvironment()
         .dataTransferAlert($restoreAlert)
         .alert(
             "Restore Failed",
@@ -221,6 +225,12 @@ struct MainView: View {
     }
 
     private func quickLog(_ food: FoodItem) {
+        if users.first?.tracksHydration ?? true, food.isLoggableDrink,
+            let volume = food.defaultDrinkSize?.volumeML ?? food.servingVolumeML
+        {
+            quickLogDrink(food, volumeML: volume)
+            return
+        }
         do {
             let location = QuickLogger.readyLocation(for: food, in: modelContext)
             let entry = try withAnimation {
@@ -245,6 +255,35 @@ struct MainView: View {
             toastCenter?.show(
                 .failure(String(localized: "Couldn't Log Entry"), message: food.name)
             )
+        }
+    }
+
+    private func quickLogDrink(_ drink: FoodItem, volumeML: Double) {
+        let goalFeedback = WaterGoalFeedback(at: .now, in: modelContext)
+        do {
+            let entry = try withAnimation {
+                try HydrationLogger.log(
+                    drink,
+                    volumeML: volumeML,
+                    sizeName: HydrationLogger.sizeName(for: drink, volumeML: volumeML),
+                    at: .now,
+                    in: modelContext
+                )
+            }
+            goalFeedback.playIfReached()
+            if let toastCenter {
+                toastCenter.show(
+                    .hydrationLogged(
+                        entry,
+                        title: String(localized: "Logged for Today"),
+                        unit: users.first?.volumeUnit ?? .localeDefault,
+                        in: modelContext,
+                        presenter: toastCenter
+                    )
+                )
+            }
+        } catch {
+            toastCenter?.show(.failure(String(localized: "Couldn't Log Drink"), message: drink.name))
         }
     }
 
@@ -291,7 +330,8 @@ struct MainView: View {
     }
 
     private var libraryEntryCount: Int {
-        (try? modelContext.fetchCount(FetchDescriptor<FoodItem>())) ?? 0
+        let descriptor = FetchDescriptor<FoodItem>(predicate: #Predicate { $0.isInLibrary })
+        return (try? modelContext.fetchCount(descriptor)) ?? 0
     }
 
     private var topLevelLogCount: Int {
@@ -301,12 +341,7 @@ struct MainView: View {
 
     private func eraseAllData() {
         AutomaticBackup.isDataChangeInProgress = true
-        withAnimation(
-            .spring(response: 0.6, dampingFraction: 0.8),
-            completionCriteria: .removed
-        ) {
-            isErasingData = true
-        } completion: {
+        coverTabs {
             do {
                 try modelContext.eraseAllData()
                 try modelContext.save()
@@ -317,19 +352,28 @@ struct MainView: View {
                 toastCenter?.show(.failure(String(localized: "Couldn't Erase Data")))
             }
             isErasingData = false
+            isCoveringTabs = false
             AutomaticBackup.isDataChangeInProgress = false
+        }
+    }
+
+    private func coverTabs(then work: @escaping () -> Void) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            isCoveringTabs = true
+        }
+        withAnimation(.linear(duration: 0.01), completionCriteria: .removed) {
+            isErasingData = true
+        } completion: {
+            work()
         }
     }
 
     private func replaceAllData(with backup: MacroBackupFile) {
         AutomaticBackup.isDataChangeInProgress = true
-        withAnimation(
-            .spring(response: 0.6, dampingFraction: 0.8),
-            completionCriteria: .removed
-        ) {
-            isReplacingData = true
-            isErasingData = true
-        } completion: {
+        isReplacingData = true
+        coverTabs {
             Task {
                 var restored: BackupRestoreSummary?
                 do {
@@ -358,6 +402,7 @@ struct MainView: View {
                 withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                     isErasingData = false
                     isReplacingData = false
+                    isCoveringTabs = false
                 }
                 AutomaticBackup.isDataChangeInProgress = false
 

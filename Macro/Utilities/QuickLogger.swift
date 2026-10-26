@@ -181,6 +181,7 @@ enum QuickLogger {
             fiber: food.fiber * multiplier
         )
         context.insert(entry)
+        entry.snapshotDrinkAmounts(children: [])
         return entry
     }
 
@@ -215,6 +216,7 @@ enum QuickLogger {
         )
         context.insert(entry)
 
+        var children: [LoggedEntry] = []
         for (index, ingredient) in ingredients.enumerated() {
             let child = LoggedEntry(
                 name: ingredient.name,
@@ -234,7 +236,9 @@ enum QuickLogger {
                 displayOrder: index
             )
             context.insert(child)
+            children.append(child)
         }
+        entry.snapshotDrinkAmounts(children: children)
 
         return entry
     }
