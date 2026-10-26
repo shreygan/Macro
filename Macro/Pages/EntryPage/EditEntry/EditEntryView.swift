@@ -17,6 +17,7 @@ enum EditSaveMode: String, CaseIterable {
 struct EditEntryView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.tracksHydration) private var tracksHydration
     @Environment(\.toastCenter) private var toastCenter
 
     let foodItem: FoodItem
@@ -35,8 +36,12 @@ struct EditEntryView: View {
         [FoodGroupSource]
     @Query(sort: \ServingSizeUnit.displayOrder) var servingUnits:
         [ServingSizeUnit]
+    @Query private var users: [User]
 
     @State private var type: EntryType
+    @State private var drinkForm: DrinkFormState
+    @State private var showsDrinkIcon = false
+    @State private var focusManager = SwipeFocusManager()
 
     @State private var name: String
     @State private var source: String
@@ -66,6 +71,9 @@ struct EditEntryView: View {
     @State private var saveMode: EditSaveMode = .updateWithLogs
     @State private var savePrompt: SavePromptStep?
     private let initialMacroValues: MacroSanityCheck.Values
+    private let initialAlcoholCalories: Double?
+    private let initialHasNutrition: Bool
+    private let draftItem: DraftFoodItem?
 
     init(
         foodItem: FoodItem,
@@ -80,8 +88,13 @@ struct EditEntryView: View {
         self.isImportMode = isImportMode
         self.onSaveInstantly = onSaveInstantly
         self.onImportSave = onImportSave
+        self.draftItem = draftItem
 
         _type = State(initialValue: draftItem?.type ?? foodItem.type)
+        let initialDrinkForm = Self.drinkForm(for: foodItem, draftItem: draftItem, unit: .localeDefault)
+        _drinkForm = State(initialValue: initialDrinkForm)
+        self.initialAlcoholCalories = initialDrinkForm.alcoholCaloriesPerServing?.rounded()
+        self.initialHasNutrition = initialDrinkForm.isOn(.nutrition)
         _name = State(initialValue: draftItem?.name ?? foodItem.name)
         _source = State(
             initialValue: draftItem?.source ?? foodItem.source?.source ?? ""
@@ -189,16 +202,131 @@ struct EditEntryView: View {
         )
     }
 
+    private var isDrink: Bool {
+        type == .drink
+    }
+
+    private static func drinkForm(
+        for food: FoodItem,
+        draftItem: DraftFoodItem?,
+        unit: VolumeUnit
+    ) -> DrinkFormState {
+        guard let draftItem else { return DrinkFormState(food: food, unit: unit) }
+        return DrinkFormState(
+            record: draftItem.drink,
+            servingVolumeML: draftItem.servingWeightUnit == VolumeUnit.milliliters.rawValue
+                ? draftItem.servingWeight : nil,
+            unit: unit
+        )
+    }
+
+    private func convert(to newType: EntryType) {
+        if newType == .drink {
+            let macros = [calorieValue, proteinValue, carbsValue, fatValue, fiberValue]
+            if macros.contains(where: { parseDouble($0) > 0 }) {
+                drinkForm.add(.nutrition)
+            }
+            if !drinkForm.hasValidVolume, servingWeightUnit == VolumeUnit.milliliters.rawValue,
+                let volume = parseOptionalDouble(servingWeight), volume > 0
+            {
+                drinkForm.volume = DrinkFormState.text(forML: volume, unit: drinkForm.unit)
+                drinkForm.exactVolumeML = volume
+            }
+        } else if type == .drink, let volume = drinkForm.servingVolumeML {
+            servingWeight = Self.exactString(for: volume)
+            servingWeightUnit = VolumeUnit.milliliters.rawValue
+        }
+        type = newType
+    }
+
+    private var conversionTargets: [EntryType] {
+        return [.food, .ingredient, .drink].filter { $0 != type }
+    }
+
+    private var builtInBase: FoodItem? {
+        guard !isImportMode, let key = foodItem.seedKey else { return nil }
+        return BuiltInCatalog.preview(for: key)
+    }
+
+    private func builtInForm(_ base: FoodItem) -> DrinkFormState {
+        var form = DrinkFormState(food: base, unit: drinkForm.unit)
+        form.isPinned = drinkForm.isPinned
+        form.servingSizeID = drinkForm.servingSizeID
+        form.sizes = form.sizes.map { DrinkSizeDraft(name: $0.name, volume: $0.volume, exactML: $0.exactML) }
+        return form
+    }
+
+    private static func sameDrink(_ lhs: DrinkFormState, _ rhs: DrinkFormState) -> Bool {
+        let sizes: (DrinkFormState) -> [[String]] = { $0.sizes.map { [$0.name, $0.volume] } }
+        guard sizes(lhs) == sizes(rhs) else { return false }
+        var lhs = lhs
+        var rhs = rhs
+        lhs.sizes = []
+        rhs.sizes = []
+        lhs.servingSizeID = nil
+        rhs.servingSizeID = nil
+        return lhs == rhs
+    }
+
+    private var matchesBuiltIn: Bool {
+        guard let base = builtInBase else { return true }
+        return type == base.type && name == base.name && isAIEstimated == base.isAIEstimated
+            && parseDouble(calorieValue) == base.calories && parseDouble(proteinValue) == base.protein
+            && parseDouble(carbsValue) == base.carbs && parseDouble(fatValue) == base.fat
+            && parseDouble(fiberValue) == base.fiber
+            && Self.sameDrink(drinkForm, builtInForm(base))
+    }
+
+    private func resetToBuiltIn() {
+        guard let base = builtInBase else { return }
+        type = base.type
+        name = base.name
+        isAIEstimated = base.isAIEstimated
+        calorieValue = Self.exactString(for: base.calories)
+        proteinValue = Self.exactString(for: base.protein)
+        carbsValue = Self.exactString(for: base.carbs)
+        fatValue = Self.exactString(for: base.fat)
+        fiberValue = Self.exactString(for: base.fiber)
+        drinkForm = builtInForm(base)
+    }
+
     private func attemptSave() {
-        let values = macroValues
+        let values = isDrink
+            ? MacroSanityCheck.Values(
+                calories: calorieValue,
+                protein: proteinValue,
+                carbs: carbsValue,
+                fat: fatValue,
+                fiber: fiberValue,
+                weight: drinkForm.servingVolumeML,
+                weightUnit: VolumeUnit.milliliters.rawValue
+            )
+            : macroValues
+        let skipsCheck = isDrink && !drinkForm.details.contains(.nutrition)
+        let alcoholCalories = isDrink ? drinkForm.alcoholCaloriesPerServing?.rounded() : nil
+        let alcoholIssue = skipsCheck
+            ? nil : MacroSanityCheck.alcoholIssue(calories: values.calories, alcoholCalories: alcoholCalories)
         let issue =
-            !isImportMode && values == initialMacroValues
-            ? nil : MacroSanityCheck.issue(for: values)
+            skipsCheck
+                || (!isImportMode && values == initialMacroValues && alcoholCalories == initialAlcoholCalories
+                    && drinkForm.isOn(.nutrition) == initialHasNutrition)
+            ? nil : MacroSanityCheck.issue(for: values, alcoholCalories: alcoholCalories)
         let recipeCount =
             isImportMode || saveMode == .copy ? 0 : recipeUsageCount()
         let recipesStep = recipeCount > 0 ? updateRecipesStep(recipeCount: recipeCount) : nil
 
-        if let issue {
+        if let issue, issue == alcoholIssue, let alcoholCalories {
+            savePrompt = .alcoholCheck(
+                issue,
+                alcoholCalories: alcoholCalories,
+                next: recipesStep,
+                onUse: {
+                    calorieValue = EntryHelper.format(alcoholCalories)
+                    if recipesStep == nil { confirmSave() }
+                },
+                onSaveAnyway: recipesStep == nil ? confirmSave : {}
+            )
+        } else if let issue {
             savePrompt = SavePromptStep(
                 title: String(localized: "Check Macros?"),
                 message: issue,
@@ -265,7 +393,7 @@ struct EditEntryView: View {
             in: .whitespacesAndNewlines
         )
 
-        let updatedDraft = DraftFoodItem(
+        var updatedDraft = DraftFoodItem(
             type: type,
             name: name,
             source: source,
@@ -285,6 +413,19 @@ struct EditEntryView: View {
             customServingSize: parseOptionalDouble(customServingSize),
             stickyNote: trimmedNote
         )
+        if isDrink {
+            let drink = drinkForm.record(keeping: draftItem?.drink)
+            updatedDraft.servingWeight = drinkForm.servingVolumeML
+            updatedDraft.servingWeightUnit = VolumeUnit.milliliters.rawValue
+            updatedDraft.drink = drink
+            if !drink.hasNutrition {
+                updatedDraft.calories = 0
+                updatedDraft.protein = 0
+                updatedDraft.carbs = 0
+                updatedDraft.fat = 0
+                updatedDraft.fiber = 0
+            }
+        }
         onImportSave?(updatedDraft)
         dismiss()
     }
@@ -327,6 +468,7 @@ struct EditEntryView: View {
     private var isSaveDisabled: Bool {
         name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || parseDouble(servingSize) <= 0
+            || (isDrink && (!drinkForm.hasValidVolume || drinkForm.hasIncompleteSizes))
     }
 
     private func performSave(cascade: Bool) {
@@ -354,7 +496,7 @@ struct EditEntryView: View {
 
         // CATEGORY
         var resolvedCategory: CategorySource? = nil
-        if type == .food {
+        if type == .food || isDrink {
             let trimmedCategory = category.trimmingCharacters(
                 in: .whitespacesAndNewlines
             )
@@ -458,6 +600,11 @@ struct EditEntryView: View {
                     foodItem.stickyNote = Note(text: trimmedNote)
                 }
             }
+            if isDrink {
+                drinkForm.apply(to: foodItem, in: modelContext)
+            } else {
+                foodItem.hydrationOrder = nil
+            }
 
             if cascade {
                 LoggedEntryUpdater.updateRecipeIngredients(
@@ -514,6 +661,9 @@ struct EditEntryView: View {
             )
 
             modelContext.insert(copiedEntry)
+            if isDrink {
+                drinkForm.apply(to: copiedEntry, in: modelContext, asCopy: true)
+            }
             do {
                 try modelContext.save()
                 onSaveInstantly?(copiedEntry)
@@ -538,6 +688,53 @@ struct EditEntryView: View {
         }
     }
 
+    @ViewBuilder
+    private var libraryRows: some View {
+        FullWidthDropdownRow(
+            placeholder: "Source",
+            options: savedSources.visibleNames(keeping: source),
+            selection: $source
+        )
+
+        if !isImportMode {
+            DefaultLocationRow(
+                location: $defaultLocation,
+                sourceName: source,
+                foodIDs: [foodItem.id]
+            )
+        }
+
+        if type == .food || isDrink {
+            FullWidthDropdownRow(
+                placeholder: "Category",
+                options: savedCategories.visibleNames(
+                    keeping: category
+                ),
+                selection: $category
+            )
+        } else {
+            FullWidthDropdownRow(
+                placeholder: "Food Group",
+                options: savedFoodGroups.visibleNames(
+                    keeping: foodGroup
+                ),
+                selection: $foodGroup
+            )
+        }
+    }
+
+    private var pinnedNoteCard: some View {
+        Card {
+            WrappedInputRow(
+                placeholder: "Pinned Note",
+                text: $stickyNote,
+                isEditable: true,
+                characterLimit: 2000
+            )
+        }
+        .padding([.top, .leading, .trailing])
+    }
+
     var content: some View {
         ZStack {
             Color.background.ignoresSafeArea()
@@ -547,7 +744,7 @@ struct EditEntryView: View {
                     Text(
                         type == .ingredient
                             ? "ingredient_description"
-                            : "food_description"
+                            : isDrink ? "drink_description" : "food_description"
                     )
                     .font(.subtitle)
                     .foregroundColor(.secondary)
@@ -557,55 +754,51 @@ struct EditEntryView: View {
 
                     Card {
                         RowGroup(.divider) {
-                            FullWidthInputRow(
-                                placeholder: "Name",
-                                text: $name
-                            )
-                            FullWidthDropdownRow(
-                                placeholder: "Source",
-                                options: savedSources.visibleNames(keeping: source),
-                                selection: $source
-                            )
-
-                            if !isImportMode {
-                                DefaultLocationRow(
-                                    location: $defaultLocation,
-                                    sourceName: source,
-                                    foodIDs: [foodItem.id]
-                                )
-                            }
-
-                            if type == .food {
-                                FullWidthDropdownRow(
-                                    placeholder: "Category",
-                                    options: savedCategories.visibleNames(
-                                        keeping: category
-                                    ),
-                                    selection: $category
-                                )
+                            if isDrink {
+                                FullWidthInputRow(placeholder: "Drink Name", text: $name) {
+                                    DrinkIconButton(form: drinkForm, isPicking: $showsDrinkIcon)
+                                }
+                                if !isImportMode, tracksHydration {
+                                    DrinkPinRow(form: $drinkForm)
+                                }
+                                if tracksHydration {
+                                    DrinkWaterGoalRow(form: $drinkForm)
+                                }
                             } else {
-                                FullWidthDropdownRow(
-                                    placeholder: "Food Group",
-                                    options: savedFoodGroups.visibleNames(
-                                        keeping: foodGroup
-                                    ),
-                                    selection: $foodGroup
+                                FullWidthInputRow(
+                                    placeholder: "Name",
+                                    text: $name
                                 )
+                                libraryRows
                             }
                         }
                     }
                     .padding([.leading, .trailing])
 
-                    Card {
-                        WrappedInputRow(
-                            placeholder: "Pinned Note",
-                            text: $stickyNote,
-                            isEditable: true,
-                            characterLimit: 2000
-                        )
+                    if !isDrink {
+                        pinnedNoteCard
                     }
-                    .padding([.top, .leading, .trailing])
 
+                    if isDrink {
+                        DrinkFormCards(
+                            form: $drinkForm,
+                            calories: $calorieValue,
+                            protein: $proteinValue,
+                            carbs: $carbsValue,
+                            fat: $fatValue,
+                            fiber: $fiberValue,
+                            isAIEstimated: $isAIEstimated
+                        )
+
+                        Card {
+                            RowGroup(.divider) {
+                                libraryRows
+                            }
+                        }
+                        .padding([.top, .leading, .trailing])
+
+                        pinnedNoteCard
+                    } else {
                     Card {
                         RowGroup(.divider) {
                             BaseRowLayout(title: "Serving Size") {
@@ -620,15 +813,9 @@ struct EditEntryView: View {
                             }
 
                             BaseRowLayout(title: "Serving Weight") {
-                                InputPill(
-                                    text: $servingWeight,
-                                    keyboardType: .decimalPad,
-                                    placeholder: "-"
-                                )
-                                DropdownPill(
-                                    options: ["g", "ml"],
-                                    displayCustomOption: false,
-                                    selection: $servingWeightUnit
+                                AmountUnitPills(
+                                    amount: $servingWeight,
+                                    unit: $servingWeightUnit
                                 )
                             }
                         }
@@ -707,13 +894,23 @@ struct EditEntryView: View {
                         }
                     }
                     .padding([.top, .leading, .trailing])
+                    }
 
                     Spacer()
                 }
-            }
+                .animation(.snappy, value: drinkForm.details)
+                .animation(.snappy, value: drinkForm.optionalLines)            }
             .withCustomKeyboardToolbar()
             .navigationTitle("Edit \(type.rawValue.capitalized)")
             .navigationBarTitleDisplayMode(.inline)
+            .titleMenu(isShown: builtInBase != nil) {
+                Button("Reset to Built-In", systemImage: "arrow.counterclockwise") {
+                    withAnimation(.snappy) {
+                        resetToBuiltIn()
+                    }
+                }
+                .disabled(matchesBuiltIn)
+            }
             .toolbar {
                 if !isPushedView {
                     ToolbarItem(placement: .topBarLeading) {
@@ -768,15 +965,16 @@ struct EditEntryView: View {
 
                             Divider()
 
-                            Button {
-                                type =
-                                    type == .food ? .ingredient : .food
-                            } label: {
-                                Text(
-                                    type == .food
-                                        ? "Convert to Ingredient"
-                                        : "Convert to Food"
-                                )
+                            ForEach(conversionTargets, id: \.self) { target in
+                                Button {
+                                    convert(to: target)
+                                } label: {
+                                    switch target {
+                                    case .ingredient: Text("Convert to Ingredient")
+                                    case .drink: Text("Convert to Drink")
+                                    default: Text("Convert to Food")
+                                    }
+                                }
                             }
                         } label: {
                             Image(systemName: "ellipsis.circle")
@@ -810,11 +1008,11 @@ struct EditEntryView: View {
                         customServingSize: customServingSize,
                         servingSize: servingSize,
                         servingSizeUnit: servingSizeUnit,
-                        servingWeight: servingWeight,
-                        servingWeightUnit: servingWeightUnit,
+                        servingWeight: isDrink ? drinkForm.volume : servingWeight,
+                        servingWeightUnit: isDrink ? drinkForm.unit.rawValue : servingWeightUnit,
                         servingUnits: servingUnits,
                         calorie: EntryHelper.scale(
-                            calorieValue,
+                            isDrink && !drinkForm.details.contains(.nutrition) ? "0" : calorieValue,
                             by: activeMultiplier
                         ),
                         protein: EntryHelper.scale(
@@ -835,9 +1033,29 @@ struct EditEntryView: View {
                         )
                     )
                     .nameLineLimit(3)
+                    .drink(
+                        isDrink
+                            ? drinkForm.rowInfo(
+                                multiplier: activeMultiplier,
+                                calories: calorieValue,
+                                protein: proteinValue,
+                                carbs: carbsValue,
+                                fat: fatValue,
+                                fiber: fiberValue
+                            ) : nil
+                    )
                 }
                 .padding([.leading, .trailing])
                 .padding(.bottom, 24)
+            }
+        }
+        .environment(focusManager)
+        .drinkIconSheet(isPresented: $showsDrinkIcon, form: $drinkForm)
+        .onAppear {
+            if let unit = users.first?.volumeUnit, drinkForm.unit != unit,
+                drinkForm == Self.drinkForm(for: foodItem, draftItem: draftItem, unit: drinkForm.unit)
+            {
+                drinkForm = Self.drinkForm(for: foodItem, draftItem: draftItem, unit: unit)
             }
         }
     }

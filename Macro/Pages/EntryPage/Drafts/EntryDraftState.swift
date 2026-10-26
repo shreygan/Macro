@@ -112,6 +112,9 @@ struct LogEntryDraftState: Codable, Equatable {
     var macros: DraftMacroValues
     var dynamicMacros: DraftMacroValues
     var manualOverrideToggle: Bool
+    var caffeine: String? = nil
+    var abv: String? = nil
+    var pendingSizes: [PendingDrinkSize]? = nil
 
     var notes: DraftNoteState
 
@@ -160,6 +163,8 @@ struct AddEntryDraftState: Codable, Equatable {
     var stickyNote: String
 
     var defaultLocation: EntryLocation? = nil
+
+    var drink: DrinkFormState? = nil
 
     static let empty = AddEntryDraftState(
         name: "",
