@@ -92,7 +92,7 @@ struct DoubleButtonRow: View {
                 .frame(width: 15)
 
         case .customSymbol(let systemName, let iconTint):
-            Image(systemName: systemName)
+            Image(symbol: systemName)
                 .font(.buttonIcon)
                 .foregroundColor(iconTint == .primary ? textColor : iconTint)
                 .frame(width: 15)
