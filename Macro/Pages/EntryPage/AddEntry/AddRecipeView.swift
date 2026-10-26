@@ -14,9 +14,11 @@ struct AddRecipeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.toastCenter) private var toastCenter
+    @Environment(\.volumeUnit) private var volumeUnit
 
     var offersLogNow: Bool
     var isPushedView: Bool = false
+    var isDuplicate: Bool
     var onCreate: ((FoodItem) -> Void)?
 
     @Query(sort: \EntrySource.displayOrder) var savedSources: [EntrySource]
@@ -51,25 +53,49 @@ struct AddRecipeView: View {
     @State private var didFinishAdding = false
     @State private var initialDraftState: AddRecipeDraftState?
     @State private var savePrompt: SavePromptStep?
+    @State private var hasStartFromItems = false
+    @State private var showsStartFrom = false
+    @State private var filledDetails: AddRecipeDraftState
+    @State private var copiedItem: AddRecipeDraftState?
+    @State private var selectsNameAfterPick = false
+    @State private var nameSelectRequest = 0
+    @State private var filledFromID: UUID?
+    @State private var pendingSuggestion: NameSuggestions.Match?
+    @State private var nameCursorRequest = 0
+    @State private var filledName: String?
+    @State private var isNameFocused = false
+    @State private var confirmsClear = false
+    @State private var dismissedSuggestionName: String?
+    @State private var nameMatches: [NameSuggestions.Match] = []
 
     init(
         offersLogNow: Bool = false,
         isPushedView: Bool = false,
         draft: EntryDraft? = nil,
         prefill: AddRecipePrefill? = nil,
+        duplicateOf: UUID? = nil,
         onCreate: ((FoodItem) -> Void)? = nil
     ) {
         self.offersLogNow = offersLogNow
         self.isPushedView = isPushedView
+        self.isDuplicate = duplicateOf != nil
+        _filledFromID = State(initialValue: duplicateOf)
+        _filledName = State(initialValue: duplicateOf != nil ? prefill?.state.name : nil)
+        _dismissedSuggestionName = State(initialValue: duplicateOf != nil ? prefill?.state.name : nil)
         self.onCreate = onCreate
 
         _draftID = State(initialValue: draft?.id ?? UUID())
         self.isResumedDraft = draft != nil
+        var filled = Self.details(of: prefill)
+        if duplicateOf == nil { filled.source = "" }
+        _filledDetails = State(initialValue: filled)
+        _copiedItem = State(initialValue: duplicateOf != nil ? prefill.map(Self.fullState) : nil)
 
         if let prefill {
             let state = prefill.state
             _name = State(initialValue: state.name)
             _source = State(initialValue: state.source)
+            _defaultLocation = State(initialValue: state.defaultLocation)
             _category = State(initialValue: state.category)
             _servingSize = State(initialValue: state.servingSize)
             _servingSizeUnit = State(initialValue: state.servingSizeUnit)
@@ -113,6 +139,125 @@ struct AddRecipeView: View {
 
     private var isDraftEnabled: Bool {
         onCreate == nil
+    }
+
+    private static func details(of state: AddRecipeDraftState) -> AddRecipeDraftState {
+        var details = state
+        details.name = ""
+        details.stickyNote = ""
+        return details
+    }
+
+    private static func fullState(of prefill: AddRecipePrefill) -> AddRecipeDraftState {
+        var state = prefill.state
+        state.ingredients = prefill.ingredients.map { DraftIngredientSnapshot($0) }
+        return state
+    }
+
+    private static func details(of prefill: AddRecipePrefill?) -> AddRecipeDraftState {
+        guard let prefill else { return details(of: .empty) }
+        return details(of: fullState(of: prefill))
+    }
+
+    private var canClearForm: Bool {
+        draftState != .empty
+    }
+
+    private func clearForm() {
+        let empty = AddRecipeDraftState.empty
+        name = empty.name
+        source = empty.source
+        defaultLocation = nil
+        category = empty.category
+        servingSize = empty.servingSize
+        servingSizeUnit = empty.servingSizeUnit
+        servingWeight = empty.servingWeight
+        servingWeightUnit = empty.servingWeightUnit
+        isCustomDefaultServing = empty.isCustomDefaultServing
+        customServingSize = empty.customServingSize
+        draftIngredients = []
+        stickyNote = empty.stickyNote
+        filledDetails = Self.details(of: empty)
+        copiedItem = nil
+        filledFromID = nil
+        filledName = nil
+        dismissedSuggestionName = nil
+    }
+
+    private func selectNameAfterPick() {
+        guard selectsNameAfterPick else { return }
+        selectsNameAfterPick = false
+        nameSelectRequest += 1
+    }
+
+    private var hasTypedDetails: Bool {
+        Self.details(of: draftState) != filledDetails
+    }
+
+    private func refreshNameMatches() {
+        guard NameSuggestions.hasEnoughText(name) else {
+            if !nameMatches.isEmpty { nameMatches = [] }
+            return
+        }
+        let foods = (try? modelContext.fetch(FoodItem.descriptor(for: .recipe))) ?? []
+        nameMatches = NameSuggestions.suggestions(for: name, type: .recipe, in: foods, excluding: filledFromID)
+    }
+
+    private var panelMatches: [NameSuggestions.Match] {
+        guard isNameFocused, name != dismissedSuggestionName else { return [] }
+        return nameMatches
+    }
+
+    private func applySuggestion(_ match: NameSuggestions.Match) {
+        if hasTypedDetails {
+            pendingSuggestion = match
+        } else {
+            fillFromSuggestion(match)
+        }
+    }
+
+    private var keepsName: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && name != filledName
+    }
+
+    private var typedSource: String? {
+        let isTyped = !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && source != filledDetails.source
+        return isTyped ? source : nil
+    }
+
+    private func fillFromSuggestion(_ match: NameSuggestions.Match) {
+        startFrom(match.food)
+        selectsNameAfterPick = false
+        if match.fillsName {
+            name = match.food.name
+            filledName = match.food.name
+            nameCursorRequest += 1
+        }
+        dismissedSuggestionName = name
+    }
+
+    private func startFrom(_ recipe: FoodItem) {
+        let prefill = recipe.duplicateRecipePrefill
+        let state = prefill.state
+        if !keepsName {
+            name = state.name
+            filledName = state.name
+            selectsNameAfterPick = true
+        }
+        source = state.source
+        defaultLocation = state.defaultLocation
+        category = state.category
+        servingSize = state.servingSize
+        servingSizeUnit = state.servingSizeUnit
+        servingWeight = state.servingWeight
+        servingWeightUnit = state.servingWeightUnit
+        isCustomDefaultServing = state.isCustomDefaultServing
+        customServingSize = state.customServingSize
+        draftIngredients = prefill.ingredients
+        filledDetails = Self.details(of: prefill)
+        copiedItem = Self.fullState(of: prefill)
+        filledFromID = recipe.id
+        dismissedSuggestionName = name
     }
 
     private var draftState: AddRecipeDraftState {
@@ -453,8 +598,13 @@ struct AddRecipeView: View {
                         RowGroup(.divider) {
                             FullWidthInputRow(
                                 placeholder: "Name",
-                                text: $name
+                                text: $name,
+                                focusOnAppear: isDuplicate,
+                                selectRequest: nameSelectRequest,
+                                cursorToEndRequest: nameCursorRequest,
+                                onFocusChange: { isNameFocused = $0 }
                             )
+                            .nameSuggestionAnchor()
                             FullWidthDropdownRow(
                                 placeholder: "Source",
                                 options: [""]
@@ -516,21 +666,12 @@ struct AddRecipeView: View {
                             }
 
                             BaseRowLayout(title: "Total Weight") {
-                                InputPill(
-                                    text: $servingWeight,
-                                    keyboardType: .decimalPad,
-                                    placeholder: calculatedTotalWeight > 0
-                                        && allIngredientsHaveWeight
-                                        ? String(
-                                            format: "%g",
-                                            calculatedTotalWeight
-                                        )
-                                        : "-"
-                                )
-                                DropdownPill(
+                                AmountUnitPills(
+                                    amount: $servingWeight,
+                                    unit: $servingWeightUnit,
                                     options: availableWeightUnits,
-                                    displayCustomOption: false,
-                                    selection: $servingWeightUnit
+                                    placeholder: allIngredientsHaveWeight
+                                        ? calculatedTotalWeight : nil
                                 )
                             }
                         }
@@ -539,10 +680,6 @@ struct AddRecipeView: View {
 
                     Card("Ingredients") {
                         ReorderableRows(items: $draftIngredients) { $draft in
-                            let unitConversionBinding = Binding<String>(
-                                get: { draft.unit },
-                                set: { draft.updateUnit(to: $0) }
-                            )
 
                             CustomSwipeRow {
                                 MealRow(
@@ -588,18 +725,18 @@ struct AddRecipeView: View {
                                 ) {
                                     HStack(spacing: 8) {
                                         InputPill(
-                                            text: $draft.quantity,
+                                            text: $draft.displayedQuantity(in: volumeUnit),
                                             keyboardType: .decimalPad
                                         )
 
                                         DropdownPill(
-                                            options: draft.unitOptions,
+                                            options: draft.unitOptions(in: volumeUnit),
                                             displayCustomOption: false,
-                                            selection:
-                                                unitConversionBinding
+                                            selection: $draft.displayedUnit(in: volumeUnit)
                                         )
                                     }
                                 }
+                                .drink(draft.drinkRowInfo)
                             } onDelete: {
                                 if let index =
                                     draftIngredients.firstIndex(where: {
@@ -648,21 +785,21 @@ struct AddRecipeView: View {
 
                     Spacer()
                 }
+                .nameSuggestionPanel(panelMatches, onSelect: applySuggestion)
             }
             .withCustomKeyboardToolbar()
             .navigationTitle("Add New Recipe")
-            .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showIngredientSelectionSheet) {
-                IngredientSelectionView(
-                    inRecipeIDs: Set(draftIngredients.compactMap(\.item?.id))
-                ) { selectedItems in
-                    draftIngredients.append(
-                        contentsOf: selectedItems.map {
-                            DraftRecipeIngredient(item: $0)
-                        }
-                    )
+            .toolbarTitleMenu {
+                StartFromMenuItem(
+                    type: .recipe,
+                    hasItems: hasStartFromItems
+                ) {
+                    UIApplication.shared.dismissKeyboard()
+                    showsStartFrom = true
                 }
+                ClearFormMenuItem(isEnabled: canClearForm) { confirmsClear = true }
             }
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if !isPushedView {
                     ToolbarItem(placement: .topBarLeading) {
@@ -682,7 +819,7 @@ struct AddRecipeView: View {
                         Image(systemName: "plus")
                             .foregroundStyle(.primary)
                     }
-                    .disabled(!isRecipeValid)
+                    .disabled(!isRecipeValid || draftState == copiedItem)
                     .tint(Color.accentColor)
                     .buttonStyle(.glassProminent)
                     .savePromptPopover(
@@ -724,12 +861,54 @@ struct AddRecipeView: View {
 
         }
         .environment(focusManager)
+        .clearFormAlert(isPresented: $confirmsClear, onClear: clearForm)
+        .alert(
+            "Replace Details?",
+            isPresented: Binding(
+                get: { pendingSuggestion != nil },
+                set: { if !$0 { pendingSuggestion = nil } }
+            ),
+            presenting: pendingSuggestion
+        ) { match in
+            Button("Replace", role: .destructive) { fillFromSuggestion(match) }
+            Button("Cancel", role: .cancel) {}
+        } message: { match in
+            ReplaceDetailsMessage.text(
+                from: match.food,
+                keepsName: keepsName && !match.fillsName,
+                replacesSource: ReplaceDetailsMessage.replaces(typedSource, with: match.food)
+            )
+        }
+        .sheet(isPresented: $showIngredientSelectionSheet) {
+            IngredientSelectionView(
+                inRecipeIDs: Set(draftIngredients.compactMap(\.item?.id))
+            ) { selectedItems in
+                draftIngredients.append(
+                    contentsOf: selectedItems.map {
+                        DraftRecipeIngredient(item: $0)
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $showsStartFrom, onDismiss: selectNameAfterPick) {
+            StartFromPickerView(
+                type: .recipe,
+                name: name,
+                confirmsReplace: hasTypedDetails,
+                keepsName: keepsName,
+                typedSource: typedSource,
+                onSelect: startFrom
+            )
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background && isDraftEnabled && !didFinishAdding {
                 saveDraft()
             }
         }
+        .onChange(of: name, initial: true) { refreshNameMatches() }
+        .onChange(of: filledFromID) { refreshNameMatches() }
         .onAppear {
+            hasStartFromItems = ((try? modelContext.fetchCount(FoodItem.descriptor(for: .recipe))) ?? 0) > 0
             if initialDraftState == nil {
                 initialDraftState = draftState
             }
