@@ -13,6 +13,9 @@ struct DropdownPill: View {
     var isEnabled: Bool = true
     var commitsCustomOnEnd: Bool = false
     var pendingCustom: Binding<String?>? = nil
+    var customKeyboardType: UIKeyboardType = .default
+    var customSuffix: String? = nil
+    var optionSubtitles: [String: String] = [:]
 
     @Binding var selection: String
 
@@ -23,14 +26,25 @@ struct DropdownPill: View {
     var body: some View {
         Group {
             if isCustomMode && displayCustomOption && isEnabled {
-                TextField("", text: commitsCustomOnEnd ? $customDraft : $selection)
-                    .textFieldStyle(.plain)
-                    .textInputAutocapitalization(.never)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(minWidth: 10)
-                    .focused($isFocused)
-                    .autoFloatingToolbar(for: .default)
+                HStack(spacing: 2) {
+                    TextField("", text: commitsCustomOnEnd ? $customDraft : $selection)
+                        .textFieldStyle(.plain)
+                        .textInputAutocapitalization(.never)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(minWidth: 10)
+                        .focused($isFocused)
+                        .numericKeyboardFilter(
+                            text: commitsCustomOnEnd ? $customDraft : $selection,
+                            type: customKeyboardType
+                        )
+                        .autoFloatingToolbar(for: customKeyboardType)
+
+                    if let customSuffix {
+                        Text(customSuffix)
+                            .foregroundColor(.tertiaryText)
+                    }
+                }
                     .pillBackground()
                     .onSubmit { validateAndRevert() }
                     .onChange(of: isFocused) { _, isNowFocused in
@@ -46,12 +60,28 @@ struct DropdownPill: View {
 
             } else {
                 Menu {
-                    Picker("Options", selection: $selection) {
+                    if optionSubtitles.isEmpty {
+                        Picker("Options", selection: $selection) {
+                            ForEach(options, id: \.self) { option in
+                                Text(option.isEmpty ? "-" : option).tag(option)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                    } else {
                         ForEach(options, id: \.self) { option in
-                            Text(option.isEmpty ? "-" : option).tag(option)
+                            Toggle(
+                                isOn: Binding(
+                                    get: { option == selection },
+                                    set: { if $0 { selection = option } }
+                                )
+                            ) {
+                                Text(option.isEmpty ? "-" : option)
+                                if let subtitle = optionSubtitles[option] {
+                                    Text(subtitle)
+                                }
+                            }
                         }
                     }
-                    .pickerStyle(.inline)
 
                     if displayCustomOption {
                         Divider()
@@ -127,7 +157,7 @@ struct DropdownPill: View {
             if !trimmed.isEmpty {
                 selection = trimmed
             }
-            if trimmed.isEmpty || options.contains(trimmed) {
+            if trimmed.isEmpty || options.contains(trimmed) || options.contains(selection) {
                 isCustomMode = false
             }
             return

@@ -25,7 +25,7 @@ struct DeleteFoodAlert: ViewModifier {
     func body(content: Content) -> some View {
         content
             .alert(
-                "Delete Food",
+                Text("Delete \(request?.food.type.rawValue.capitalized ?? EntryType.food.rawValue.capitalized)"),
                 isPresented: Binding(
                     get: { request != nil },
                     set: { presented in
@@ -137,7 +137,10 @@ struct DeleteFoodAlert: ViewModifier {
                 toastCenter?.show(.foodDeleted(record, in: modelContext, presenter: toastCenter))
             } catch {
                 toastCenter?.show(
-                    .failure(String(localized: "Couldn't Delete Food"), message: food.name)
+                    .failure(
+                        String(localized: "Couldn't Delete \(food.type.rawValue.capitalized)"),
+                        message: food.name
+                    )
                 )
             }
         }

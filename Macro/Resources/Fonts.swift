@@ -12,6 +12,14 @@ enum FontSize {
 
     static let rowLineHeight: CGFloat = UIFont.systemFont(ofSize: row).lineHeight
 
+    static let compact: CGFloat = 14
+
+    static let compactLineHeight: CGFloat = UIFont.systemFont(ofSize: compact).lineHeight
+
+    static let subtitle: CGFloat = 13
+
+    static let subtitleLineHeight: CGFloat = UIFont.systemFont(ofSize: subtitle).lineHeight
+
     static let display: CGFloat = 20
 }
 
@@ -22,15 +30,17 @@ extension Font {
 
     static let statValue = Font.system(size: FontSize.row, weight: .semibold, design: .rounded)
 
-    static let compactTitle = Font.system(size: 14, weight: .medium)
+    static let compactTitle = Font.system(size: FontSize.compact, weight: .medium)
 
-    static let compactValue = Font.system(size: 14)
+    static let compactValue = Font.system(size: FontSize.compact)
 
     static let cardTitle = Font.system(size: 14, weight: .bold)
 
     static let sectionTitle = Font.system(size: 14, weight: .semibold)
 
-    static let subtitle = Font.system(size: 13)
+    static let subtitle = Font.system(size: FontSize.subtitle)
+
+    static let subtitleEmphasis = Font.system(size: FontSize.subtitle, weight: .medium)
 
     static let detail = Font.system(size: 12)
 
@@ -58,6 +68,8 @@ extension Font {
 
     static let chevron = Font.system(size: 14, weight: .semibold)
 
+    static let goalMarker = Font.system(size: 16, weight: .bold)
+
     static let dropdownChevron = Font.system(size: 12, weight: .semibold)
 
     static let menuIcon = Font.system(size: 14, weight: .semibold)
@@ -67,6 +79,8 @@ extension Font {
     static let smallIcon = Font.system(size: 13)
 
     static let largeIcon = Font.system(size: 22)
+
+    static let largeAmount = Font.system(size: 34, weight: .bold, design: .rounded)
 
     static let buttonIcon = Font.system(size: 14, weight: .medium)
 }

@@ -9,6 +9,7 @@ import SwiftUI
 struct ReorderableRows<Item: Identifiable, Row: View>: View where Item.ID == UUID {
     @Binding var items: [Item]
     var isEnabled: Bool = true
+    var insertion: AnyTransition = .identity
     @ViewBuilder var row: (Binding<Item>) -> Row
 
     @Environment(SwipeFocusManager.self) private var focusManager
@@ -30,6 +31,7 @@ struct ReorderableRows<Item: Identifiable, Row: View>: View where Item.ID == UUI
                                 )
                         }
                     }
+                    .environment(\.backgroundMaterial, nil)
                     .contentShape(
                         .dragPreview,
                         RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -43,14 +45,13 @@ struct ReorderableRows<Item: Identifiable, Row: View>: View where Item.ID == UUI
                     .allowsHitTesting(isEnabled)
                     .transition(
                         .asymmetric(
-                            insertion: .identity,
+                            insertion: insertion,
                             removal: .opacity.combined(with: .scale(scale: 0.9))
                         )
                     )
             }
             .reorderable()
         }
-        .environment(\.backgroundMaterial, nil)
         .reorderContainer(for: Item.self) { difference in
             guard isEnabled else { return }
             withAnimation(.snappy) {
