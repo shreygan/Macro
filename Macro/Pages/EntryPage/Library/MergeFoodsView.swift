@@ -10,10 +10,12 @@ import SwiftUI
 
 struct MergeFoodsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.tracksHydration) private var tracksHydration
 
     @Query(sort: \EntrySource.displayOrder) private var savedSources: [EntrySource]
     @Query(sort: \CategorySource.displayOrder) private var savedCategories: [CategorySource]
     @Query(sort: \FoodGroupSource.displayOrder) private var savedFoodGroups: [FoodGroupSource]
+    @Query private var users: [User]
 
     let foods: [FoodItem]
     let servingUnits: [ServingSizeUnit]
@@ -43,17 +45,24 @@ struct MergeFoodsView: View {
 
     init(
         foods: [FoodItem],
-        kept: FoodItem,
+        kept initialKept: FoodItem,
         servingUnits: [ServingSizeUnit],
         onConfirm: @escaping (FoodMergePlan) -> Void
     ) {
+        let kept = initialKept
         self.foods = foods
         self.servingUnits = servingUnits
         self.onConfirm = onConfirm
 
+        let measuresByVolume = kept.type == .drink && kept.servingVolumeML != nil
         let unit =
-            Self.portionInName(kept.name, units: servingUnits)?.unit
-            ?? kept.servingUnit?.unit ?? "serving"
+            measuresByVolume
+            ? kept.servingUnit?.unit ?? "serving"
+            : Self.portionInName(kept.name, units: servingUnits)?.unit
+                ?? kept.servingUnit?.unit ?? "serving"
+        if measuresByVolume {
+            _servingQuantity = State(initialValue: EntryHelper.format(kept.servingSize))
+        }
         _keptID = State(initialValue: kept.id)
         _name = State(initialValue: kept.name)
         _source = State(initialValue: kept.source?.source ?? "")
@@ -81,8 +90,52 @@ struct MergeFoodsView: View {
         foods.filter { $0.id != keptID }
     }
 
+    private var isDrink: Bool {
+        kept?.type == .drink
+    }
+
+    private var usesVolume: Bool {
+        isDrink && kept?.servingVolumeML != nil
+    }
+
     private var foodsNeedingConversion: [FoodItem] {
-        foods.filter { $0.servingUnit?.unit != servingUnit }
+        if usesVolume {
+            return foods.filter { $0.servingVolumeML == nil }
+        }
+        return foods.filter { $0.servingUnit?.unit != servingUnit }
+    }
+
+    private var removedPinnedDrinks: [FoodItem] {
+        removedFoods
+            .filter { $0.hydrationOrder != nil }
+            .sorted { ($0.hydrationOrder ?? 0) < ($1.hydrationOrder ?? 0) }
+    }
+
+    private var movesPin: Bool {
+        isDrink && tracksHydration && !removedPinnedDrinks.isEmpty
+    }
+
+    private var pinSubtitle: String? {
+        guard let kept, let first = removedPinnedDrinks.first else { return nil }
+        guard kept.hydrationOrder != nil else {
+            return String(localized: "Takes \(first.name)'s spot")
+        }
+        let count = removedPinnedDrinks.count
+        return count == 1
+            ? String(localized: "Keeps \(kept.name)'s spot · 1 pin removed")
+            : String(localized: "Keeps \(kept.name)'s spot · \(count) pins removed")
+    }
+
+    private var removedBuiltIns: [FoodItem] {
+        removedFoods.filter { $0.seedKey != nil }
+    }
+
+    private var builtInNotice: String? {
+        guard !removedBuiltIns.isEmpty else { return nil }
+        let names = removedBuiltIns.map(\.name).formatted(.list(type: .and))
+        return removedBuiltIns.count == 1
+            ? String(localized: "\(names) stays available in Built-In")
+            : String(localized: "\(names) stay available in Built-In")
     }
 
     private var movesFavorite: Bool {
@@ -97,8 +150,11 @@ struct MergeFoodsView: View {
     private var plan: FoodMergePlan? {
         guard let kept else { return nil }
         var unitsPerServing: [UUID: Double] = [:]
+        let keptVolume = usesVolume ? kept.servingVolumeML : nil
         for food in foods {
-            if food.servingUnit?.unit == servingUnit {
+            if let keptVolume, keptVolume > 0, let volume = food.servingVolumeML {
+                unitsPerServing[food.id] = volume / keptVolume * kept.servingSize
+            } else if keptVolume == nil, food.servingUnit?.unit == servingUnit {
                 unitsPerServing[food.id] = food.servingSize
             } else if let value = Double(conversions[food.id] ?? ""), value > 0 {
                 unitsPerServing[food.id] = value
@@ -133,11 +189,7 @@ struct MergeFoodsView: View {
 
     private var recalculableLogCount: Int {
         guard let plan else { return 0 }
-        return sortedLogs.filter { item in
-            guard let macros = plan.recalculatedMacros(for: item.log, of: item.food) else { return false }
-            return abs(macros.calories - item.log.calories) >= 1
-        }
-        .count
+        return sortedLogs.filter { $0.changesWhenRecalculated(plan: plan) }.count
     }
 
     private var recalculateTarget: Bool? {
@@ -159,7 +211,14 @@ struct MergeFoodsView: View {
     }
 
     private var portionsConvertedSubtitle: String? {
-        foods.contains { $0.servingUnit?.unit != servingUnit }
+        if usesVolume {
+            let keptVolume = kept?.servingVolumeML ?? 0
+            let differs = foods.contains { food in
+                food.servingVolumeML.map { !HydrationLogger.isSameVolume($0, keptVolume) } ?? true
+            }
+            return differs ? String(localized: "Amounts converted by volume") : nil
+        }
+        return foods.contains { $0.servingUnit?.unit != servingUnit }
             ? String(localized: "Portions converted to \(pluralUnit)")
             : nil
     }
@@ -176,6 +235,11 @@ struct MergeFoodsView: View {
                     mergedFoodCard
                         .padding([.horizontal, .bottom])
 
+                    if usesVolume {
+                        sizesCard
+                            .padding([.horizontal, .bottom])
+                    }
+
                     if !foodsNeedingConversion.isEmpty {
                         conversionsCard
                             .padding([.horizontal, .bottom])
@@ -186,7 +250,7 @@ struct MergeFoodsView: View {
                             .padding([.horizontal, .bottom])
                     }
 
-                    if movesFavorite || recipeCount > 0 || draftCount > 0 {
+                    if movesFavorite || movesPin || recipeCount > 0 || draftCount > 0 {
                         alsoMovesCard
                             .padding([.horizontal, .bottom])
                     }
@@ -226,7 +290,7 @@ struct MergeFoodsView: View {
                 recalculateLogs = false
             }
         }
-        .navigationTitle("Merge \(foods.count) Foods")
+        .navigationTitle(isDrink ? "Merge \(foods.count) Drinks" : "Merge \(foods.count) Foods")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -251,7 +315,11 @@ struct MergeFoodsView: View {
                         switchKept(to: food)
                     } label: {
                         HStack(spacing: 0) {
-                            keepRow(food)
+                            if food.type == .drink {
+                                drinkKeepRow(food)
+                            } else {
+                                keepRow(food)
+                            }
 
                             if food.id == keptID {
                                 Image(systemName: "checkmark")
@@ -265,8 +333,68 @@ struct MergeFoodsView: View {
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(food.id == keptID ? .isSelected : [])
                 }
+
+                if let builtInNotice {
+                    BaseRowLayout(
+                        icon: .customSymbol("info.circle.fill", tint: .secondary),
+                        title: builtInNotice
+                    ) {
+                        EmptyView()
+                    }
+                }
             }
         }
+    }
+
+    private func drinkKeepRow(_ food: FoodItem) -> some View {
+        let info = DrinkRowInfo(food: food)
+        let hasMacros = [food.calories, food.protein, food.carbs, food.fat, food.fiber].contains { $0 > 0 }
+
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(food.name)
+                    .font(.compactTitle)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                if let info {
+                    DrinkBadge(symbol: info.symbol, tint: info.tint)
+                }
+
+                if food.seedKey != nil {
+                    Text("Built-In")
+                        .tagStyle()
+                }
+            }
+
+            Text(food.drinkAmountText(unit: volumeUnit) ?? String(localized: "No serving volume"))
+                .font(.subtitle)
+                .foregroundStyle(Color.tertiaryText)
+                .lineLimit(1)
+
+            if let facts = info?.factsText(unit: volumeUnit, includesHydration: tracksHydration) {
+                Text(facts)
+                    .font(.subtitle)
+                    .foregroundStyle(Color.tertiaryText)
+                    .lineLimit(1)
+            }
+
+            if hasMacros {
+                macrosText(
+                    FoodMergePlan.Macros(
+                        calories: food.calories,
+                        protein: food.protein,
+                        carbs: food.carbs,
+                        fat: food.fat,
+                        fiber: food.fiber
+                    )
+                )
+                .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     private func keepRow(_ food: FoodItem) -> some View {
@@ -319,7 +447,27 @@ struct MergeFoodsView: View {
         guard let kept, let weight = kept.servingWeight, weight > 0 else { return nil }
         guard plan?.servingMacros != nil else { return String(localized: "Needs conversion") }
         guard let plan, plan.servingSize > 0, let merged = plan.servingWeight else { return "-" }
+        if kept.servingVolumeML != nil {
+            return volumeUnit.formattedAmount(merged)
+        }
         return "\(EntryHelper.format(merged)) \(kept.servingWeightUnit)"
+    }
+
+    private var volumeUnit: VolumeUnit {
+        users.first?.volumeUnit ?? .localeDefault
+    }
+
+    private var caffeineText: String? {
+        guard kept?.caffeineMg != nil else { return nil }
+        guard let caffeine = plan?.servingCaffeine else { return String(localized: "Needs conversion") }
+        return String(localized: "\(EntryHelper.format(caffeine.rounded())) mg")
+    }
+
+    private var sizesText: String? {
+        guard let kept else { return nil }
+        let count = kept.sortedDrinkSizes.count + (plan?.addedSizes.count ?? 0)
+        guard count > 0 else { return nil }
+        return count == 1 ? String(localized: "1 size") : String(localized: "\(count) sizes")
     }
 
     private var keptDefaultPortionText: String? {
@@ -342,7 +490,7 @@ struct MergeFoodsView: View {
     }
 
     private var mergedFoodCard: some View {
-        Card("Merged Food") {
+        Card(isDrink ? "Merged Drink" : "Merged Food") {
             RowGroup(.divider) {
                 TextInputRow(
                     title: "Name",
@@ -351,6 +499,12 @@ struct MergeFoodsView: View {
                     maxWidth: nil,
                     fitsRightContent: true
                 )
+
+                if usesVolume, let kept {
+                    BaseRowLayout(title: "Icon") {
+                        DrinkBadge(symbol: kept.drinkSymbol, tint: kept.drinkTint)
+                    }
+                }
 
                 DropdownPillRow(
                     title: "Source",
@@ -371,7 +525,7 @@ struct MergeFoodsView: View {
                         options: [""] + savedFoodGroups.visibleNames(keeping: foodGroup),
                         selection: $foodGroup
                     )
-                } else if kept?.type == .food {
+                } else if kept?.type == .food || kept?.type == .drink {
                     DropdownPillRow(
                         title: "Category",
                         options: [""] + savedCategories.visibleNames(keeping: category),
@@ -379,50 +533,53 @@ struct MergeFoodsView: View {
                     )
                 }
 
-                PortionPillRow(
-                    title: "Serving",
-                    allowsCustomUnit: true,
-                    pendingCustomUnit: $pendingUnit,
-                    quantity: $servingQuantity,
-                    unit: $servingUnit,
-                    availableUnits: servingUnits.map(\.unit),
-                    servingUnits: servingUnits
-                )
-
-                BaseRowLayout(title: "Per Serving", fitsRightContent: true) {
-                    if let macros = plan?.servingMacros, (plan?.servingSize ?? 0) > 0 {
-                        macrosText(macros)
-                    } else if plan?.servingMacros == nil {
-                        Text("Needs conversion")
-                            .font(.rowValue)
-                            .foregroundStyle(Color.tertiaryText)
-                    } else {
-                        Text("-")
-                            .font(.rowValue)
-                            .foregroundStyle(Color.tertiaryText)
+                if usesVolume, let kept {
+                    BaseRowLayout(title: "Serving") {
+                        derivedValue(kept.drinkAmountText(unit: volumeUnit))
                     }
-                }
 
-                BaseRowLayout(title: "Serving Weight") {
-                    derivedValue(servingWeightText)
-                }
-
-                BaseRowLayout(title: "Default Portion") {
-                    if editedDefaultPortion == nil && keptDefaultPortionText == nil {
-                        derivedValue(String(localized: "Needs conversion"))
-                    } else {
-                        InputPill(
-                            text: defaultPortionBinding,
-                            unit: unitLabel(for: defaultPortionBinding.wrappedValue),
-                            keyboardType: .decimalPad,
-                            placeholder: servingQuantity
-                        )
+                    if keptHasMacros {
+                        BaseRowLayout(title: "Per Serving", fitsRightContent: true) {
+                            if let macros = plan?.servingMacros {
+                                macrosText(macros)
+                            }
+                        }
                     }
+                } else {
+                    servingRows
                 }
 
                 if kept?.isAIEstimated == true {
                     BaseRowLayout(title: "AI Estimated") {
                         derivedValue(String(localized: "Yes"))
+                    }
+                }
+
+                if let kept, kept.type == .drink {
+                    if !usesVolume {
+                        BaseRowLayout(title: "Sizes") {
+                            derivedValue(sizesText)
+                        }
+                    }
+
+                    BaseRowLayout(title: "Caffeine") {
+                        derivedValue(caffeineText)
+                    }
+
+                    BaseRowLayout(title: "Alcohol") {
+                        derivedValue(kept.abv.map { String(localized: "\(EntryHelper.format($0))% ABV") })
+                    }
+
+                    if tracksHydration {
+                        BaseRowLayout(title: "Water Goal") {
+                            derivedValue(
+                                kept.hydrationPercent >= 100
+                                    ? String(localized: "Counted")
+                                    : kept.hydrationPercent <= 0
+                                    ? String(localized: "Not counted")
+                                    : String(localized: "Counts as \(EntryHelper.format(kept.hydrationPercent))%")
+                            )
+                        }
                     }
                 }
 
@@ -449,7 +606,57 @@ struct MergeFoodsView: View {
             .buttonStyle(.plain)
             .padding(.vertical, -2)
             .padding(.trailing, -6)
-            .accessibilityLabel("Merged Food Options")
+            .accessibilityLabel(isDrink ? "Merged Drink Options" : "Merged Food Options")
+        }
+    }
+
+    private var keptHasMacros: Bool {
+        guard let kept else { return false }
+        return kept.hasNutrition
+            || [kept.calories, kept.protein, kept.carbs, kept.fat, kept.fiber].contains { $0 > 0 }
+    }
+
+    @ViewBuilder
+    private var servingRows: some View {
+        PortionPillRow(
+            title: "Serving",
+            allowsCustomUnit: true,
+            pendingCustomUnit: $pendingUnit,
+            quantity: $servingQuantity,
+            unit: $servingUnit,
+            availableUnits: servingUnits.map(\.unit),
+            servingUnits: servingUnits
+        )
+
+        BaseRowLayout(title: "Per Serving", fitsRightContent: true) {
+            if let macros = plan?.servingMacros, (plan?.servingSize ?? 0) > 0 {
+                macrosText(macros)
+            } else if plan?.servingMacros == nil {
+                Text("Needs conversion")
+                    .font(.rowValue)
+                    .foregroundStyle(Color.tertiaryText)
+            } else {
+                Text("-")
+                    .font(.rowValue)
+                    .foregroundStyle(Color.tertiaryText)
+            }
+        }
+
+        BaseRowLayout(title: kept?.type == .drink ? "Serving Volume" : "Serving Weight") {
+            derivedValue(servingWeightText)
+        }
+
+        BaseRowLayout(title: "Default Portion") {
+            if editedDefaultPortion == nil && keptDefaultPortionText == nil {
+                derivedValue(String(localized: "Needs conversion"))
+            } else {
+                InputPill(
+                    text: defaultPortionBinding,
+                    unit: unitLabel(for: defaultPortionBinding.wrappedValue),
+                    keyboardType: .decimalPad,
+                    placeholder: servingQuantity
+                )
+            }
         }
     }
 
@@ -473,6 +680,74 @@ struct MergeFoodsView: View {
         defaultLocation = kept.defaultLocation
         stickyNote = kept.stickyNote?.text ?? ""
         editedDefaultPortion = nil
+    }
+
+    private struct MergedSizeRow: Identifiable {
+        let id = UUID()
+        let name: String?
+        let volumeML: Double
+        let note: String?
+        var isDuplicate = false
+    }
+
+    private var mergedSizeRows: [MergedSizeRow] {
+        guard let kept, let plan, let servingVolume = kept.servingVolumeML else { return [] }
+        var rows = [
+            MergedSizeRow(
+                name: kept.defaultDrinkSize?.name,
+                volumeML: servingVolume,
+                note: String(localized: "Serving")
+            )
+        ]
+        for size in kept.sortedDrinkSizes where !HydrationLogger.isSameVolume(size.volumeML, servingVolume) {
+            rows.append(MergedSizeRow(name: size.name, volumeML: size.volumeML, note: nil))
+        }
+        for added in plan.addedSizes {
+            rows.append(
+                MergedSizeRow(
+                    name: added.name,
+                    volumeML: added.volumeML,
+                    note: String(localized: "From \(added.from.name)")
+                )
+            )
+        }
+        let finalRows = rows
+        for duplicate in plan.duplicateSizes {
+            guard let match = finalRows.first(where: { HydrationLogger.isSameVolume($0.volumeML, duplicate.volumeML) })
+            else { continue }
+            let duplicateName = duplicate.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let matchName = match.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !duplicateName.isEmpty, duplicateName.localizedCaseInsensitiveCompare(matchName) != .orderedSame
+            else { continue }
+            let target = matchName.isEmpty ? String(localized: "Serving") : matchName
+            rows.append(
+                MergedSizeRow(
+                    name: duplicateName,
+                    volumeML: duplicate.volumeML,
+                    note: String(localized: "Same as \(target)"),
+                    isDuplicate: true
+                )
+            )
+        }
+        return rows
+    }
+
+    private var sizesCard: some View {
+        Card("Serving & Sizes") {
+            RowGroup(.divider) {
+                ForEach(mergedSizeRows) { size in
+                    let amount = volumeUnit.formattedAmount(size.volumeML)
+                    BaseRowLayout(title: size.name ?? amount, subtitle: size.note) {
+                        if size.name != nil {
+                            Text(amount)
+                                .font(.rowValue)
+                                .foregroundStyle(size.isDuplicate ? Color.tertiaryText : .secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private var conversionsCard: some View {
@@ -511,7 +786,7 @@ struct MergeFoodsView: View {
 
                 if showsRecalculate {
                     ToggleRow(
-                        title: "Recalculate from Serving",
+                        title: isDrink ? "Recalculate from Merged Drink" : "Recalculate from Serving",
                         subtitle: recalculateSubtitle,
                         isOn: $recalculateLogs.animation(.snappy(duration: 0.3))
                     )
@@ -545,6 +820,16 @@ struct MergeFoodsView: View {
                     }
                 }
 
+                if movesPin {
+                    BaseRowLayout(
+                        icon: .customSymbol("pin.fill", tint: .secondary),
+                        title: "Hydration Card Pin",
+                        subtitle: pinSubtitle
+                    ) {
+                        EmptyView()
+                    }
+                }
+
                 if recipeCount > 0 {
                     BaseRowLayout(
                         icon: .appSymbol(EntryType.recipe.appSymbol, tint: .secondary),
@@ -569,6 +854,12 @@ struct MergeFoodsView: View {
     }
 
     private var recalculateSubtitle: String {
+        if isDrink {
+            if recalculateLogs { return "Logs use the merged drink's values" }
+            return recalculableLogCount == 1
+                ? "1 log keeps its own values"
+                : "\(recalculableLogCount) logs keep their own values"
+        }
         if recalculateLogs { return "Logs use the new serving's macros" }
         return recalculableLogCount == 1
             ? "1 log keeps its own macros"
@@ -583,6 +874,10 @@ struct MergeFoodsView: View {
         if foodGroup == kept.foodGroup?.foodGroup ?? "" { foodGroup = food.foodGroup?.foodGroup ?? "" }
         if defaultLocation == kept.defaultLocation { defaultLocation = food.defaultLocation }
         if stickyNote == kept.stickyNote?.text ?? "" { stickyNote = food.stickyNote?.text ?? "" }
+        if food.type == .drink, food.servingVolumeML != nil {
+            servingUnit = food.servingUnit?.unit ?? "serving"
+            servingQuantity = EntryHelper.format(food.servingSize)
+        }
         keptID = food.id
     }
 
@@ -743,11 +1038,39 @@ private struct MergeLog: Identifiable {
 
     var id: UUID { log.id }
 
+    private func recalculatedAmounts(plan: FoodMergePlan) -> DrinkAmounts? {
+        guard plan.kept.type == .drink, plan.canRecalculate(log),
+            let portion = plan.convertedPortion(quantity: log.loggedQuantity, unit: log.loggedUnit, of: food)
+        else { return nil }
+        return DrinkAmounts(food: plan.kept, quantity: portion.quantity, unit: portion.unit)
+    }
+
+    func changesWhenRecalculated(plan: FoodMergePlan) -> Bool {
+        guard let macros = plan.recalculatedMacros(for: log, of: food) else { return false }
+        if abs(macros.calories - log.calories) >= 1 { return true }
+        guard let amounts = recalculatedAmounts(plan: plan) else { return false }
+        return abs(amounts.caffeineMg - log.caffeineMg) >= 1
+            || abs(amounts.alcoholGrams - log.alcoholGrams) >= 0.1
+    }
+
     func override(plan: FoodMergePlan, recalculating: Bool) -> LogHistoryRow.Override {
         let portion =
             plan.convertedPortion(quantity: log.loggedQuantity, unit: log.loggedUnit, of: food)
             ?? (log.loggedQuantity, log.loggedUnit)
         let macros = recalculating ? plan.recalculatedMacros(for: log, of: food) : nil
+        var drink: DrinkRowInfo?
+        if plan.kept.type == .drink {
+            let amounts = (macros != nil ? recalculatedAmounts(plan: plan) : nil) ?? log.drinkAmounts
+            let calories = macros?.calories ?? log.calories
+            let others = [macros?.protein ?? log.protein, macros?.carbs ?? log.carbs, macros?.fat ?? log.fat, macros?.fiber ?? log.fiber]
+            drink = DrinkRowInfo(
+                symbol: plan.kept.drinkSymbol,
+                tint: plan.kept.drinkTint,
+                sizeName: macros != nil ? HydrationLogger.sizeName(for: plan.kept, volumeML: amounts.volumeML) : log.sizeName,
+                amounts: amounts,
+                hasMacros: calories > 0 || others.contains { $0 > 0 }
+            )
+        }
         return LogHistoryRow.Override(
             origin: food.name,
             quantity: portion.quantity,
@@ -757,7 +1080,8 @@ private struct MergeLog: Identifiable {
             carbs: macros?.carbs ?? log.carbs,
             fat: macros?.fat ?? log.fat,
             fiber: macros?.fiber ?? log.fiber,
-            isRecalculated: macros.map { abs($0.calories - log.calories) >= 1 } ?? false
+            isRecalculated: macros.map { abs($0.calories - log.calories) >= 1 } ?? false,
+            drink: drink
         )
     }
 }
