@@ -15,8 +15,12 @@ struct DraftRow: View {
     var icon: AppSymbols?
     var status: String?
     var statusSymbol: String?
+    var drink: DrinkRowInfo?
+    var drinkSource: String?
 
     var action: (() -> Void)?
+
+    @Environment(\.volumeUnit) private var volumeUnit
 
     init(
         draft: EntryDraft,
@@ -26,6 +30,11 @@ struct DraftRow: View {
         action: (() -> Void)? = nil
     ) {
         self.action = action
+
+        if let (drink, source) = Self.drinkDetails(for: draft, isHistory: !showsFoodName) {
+            self.drink = drink
+            self.drinkSource = source
+        }
 
         if !showsFoodName {
             let details = Self.historyDetails(for: draft, units: servingUnits)
@@ -61,6 +70,36 @@ struct DraftRow: View {
             )
             self.status = "Adding to Library · Edited \(edited)"
             self.statusSymbol = "book.pages"
+        }
+    }
+
+    private static func drinkDetails(
+        for draft: EntryDraft,
+        isHistory: Bool
+    ) -> (DrinkRowInfo, String?)? {
+        switch draft.kind {
+        case .logFood:
+            guard let food = draft.foodItem, food.type == .drink,
+                let state = draft.decodeState(LogEntryDraftState.self)
+            else { return nil }
+            let amounts = DrinkAmounts(
+                food: food,
+                quantity: Double(state.portionQuantity.replacingOccurrences(of: ",", with: ".")) ?? 0,
+                unit: state.portionUnitSelection
+            )
+            let source = state.sourceSelection
+            let showsSource =
+                !source.isEmpty && source != "None"
+                && (!isHistory || source != food.source?.source)
+            return (DrinkRowInfo(food: food, amounts: amounts, hasMacros: false), showsSource ? source : nil)
+        case .addFood:
+            guard draft.entryType == .drink,
+                let state = draft.decodeState(AddEntryDraftState.self)
+            else { return nil }
+            let form = state.drink ?? DrinkFormState(unit: .milliliters)
+            return (form.rowInfo(hasMacros: false), state.source.isEmpty ? nil : state.source)
+        default:
+            return nil
         }
     }
 
@@ -186,13 +225,20 @@ struct DraftRow: View {
     }
 
     var body: some View {
+        let subtitle =
+            drink?.amountText(unit: volumeUnit).map {
+                [drinkSource, $0].compactMap(\.self).joined(separator: " · ")
+            } ?? self.subtitle
+
         let rowContent = HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
                     titleText
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if let icon = icon {
+                    if let drink, icon != nil {
+                        DrinkBadge(symbol: drink.symbol, tint: drink.tint)
+                    } else if let icon = icon {
                         icon.image
                             .font(.smallIcon)
                             .foregroundColor(.tertiaryText)

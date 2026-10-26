@@ -9,6 +9,10 @@ import SwiftUI
 
 struct CompactMealRow: View {
     var food: FoodItem
+    var note: String?
+
+    @Environment(\.volumeUnit) private var volumeUnit
+    @Environment(\.tracksHydration) private var tracksHydration
 
     private var multiplier: Double {
         EntryHelper.defaultPortionMultiplier(for: food)
@@ -16,10 +20,15 @@ struct CompactMealRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            food.type.appSymbol.image
-                .font(.smallIcon)
-                .foregroundStyle(Color.tertiaryText)
-                .frame(width: 18)
+            if food.type == .drink {
+                DrinkBadge(symbol: food.drinkSymbol, tint: food.drinkTint)
+                    .frame(width: 18)
+            } else {
+                Image(systemName: food.rowSymbolName)
+                    .font(.smallIcon)
+                    .foregroundStyle(Color.tertiaryText)
+                    .frame(width: 18)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(food.name.isEmpty ? "New Food" : food.name)
@@ -27,14 +36,36 @@ struct CompactMealRow: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
-                macrosLine
+                if let drinkLine {
+                    Text(drinkLine)
+                        .font(.detail)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    macrosLine
+                }
             }
 
             Spacer(minLength: 0)
+
+            if let note {
+                Text(note)
+                    .font(.detail)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .contentShape(Rectangle())
+    }
+
+    private var drinkLine: String? {
+        guard let drink = DrinkRowInfo(food: food), !drink.hasMacros else { return nil }
+        let line = [drink.amountText(unit: volumeUnit), drink.factsText(unit: volumeUnit, includesHydration: tracksHydration)]
+            .compactMap(\.self)
+            .joined(separator: " · ")
+        return line.isEmpty ? nil : line
     }
 
     private var visibleMacros: [(RowIcon, Double)] {
@@ -60,6 +91,7 @@ struct CompactMealRow: View {
             macrosText(calories: calories, macros: [])
                 .lineLimit(1)
         }
+        .font(.system(size: 11, design: .rounded))
     }
 
     private func macrosText(calories: Double, macros: [(RowIcon, Double)]) -> Text {
