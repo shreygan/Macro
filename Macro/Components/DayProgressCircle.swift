@@ -27,7 +27,8 @@ struct DayGoalScore: Equatable {
         goals: UserGoals?,
         totals: DailyProgress,
         isComplete: Bool,
-        including included: [DayCircleGoal] = DayCircleGoal.allCases
+        including included: [DayCircleGoal] = DayCircleGoal.allCases,
+        hasMacroEntries: Bool = true
     ) {
         guard let goals else { return nil }
 
@@ -36,7 +37,8 @@ struct DayGoalScore: Equatable {
             return (
                 current: macro.total(in: totals),
                 goal: target.goal,
-                mode: target.mode
+                mode: target.mode,
+                isLogged: hasMacroEntries || macro == .water
             )
         }
         .filter { $0.mode != .off }
@@ -44,18 +46,19 @@ struct DayGoalScore: Equatable {
         guard !tracked.isEmpty else { return nil }
 
         let credits = tracked.map {
-            Self.credit(
-                current: $0.current,
-                goal: $0.goal,
-                mode: $0.mode,
-                isComplete: isComplete
-            )
+            $0.isLogged
+                ? Self.credit(
+                    current: $0.current,
+                    goal: $0.goal,
+                    mode: $0.mode,
+                    isComplete: isComplete
+                ) : 0
         }
         fraction = credits.reduce(0, +) / Double(credits.count)
         allHit =
-            isComplete
+            (isComplete || tracked.allSatisfy { $0.mode == .floor })
             && tracked.allSatisfy {
-                $0.mode == .floor ? $0.current >= $0.goal : $0.current <= $0.goal
+                $0.isLogged && ($0.mode == .floor ? $0.current >= $0.goal : $0.current <= $0.goal)
             }
     }
 
@@ -89,7 +92,9 @@ struct WeekGoalScores<Content: View>: View {
     private let weekDates: [Date]
     private let goalTimeline: GoalTimeline
     private let mode: DayCircleMode
-    private let goal: DayCircleGoal
+    private let goals: [DayCircleGoal]
+    private let showsAllDrinks: Bool
+    private let countsDrinkOnlyDays: Bool
     private let dayStartMinutes: Int
     private let logicalToday: Date
     private let content: ([Date: DayGoalScore]) -> Content
@@ -98,7 +103,9 @@ struct WeekGoalScores<Content: View>: View {
         weekDates: [Date],
         goalTimeline: GoalTimeline,
         mode: DayCircleMode,
-        goal: DayCircleGoal,
+        goals: [DayCircleGoal],
+        showsAllDrinks: Bool = false,
+        countsDrinkOnlyDays: Bool = false,
         dayStartMinutes: Int,
         logicalToday: Date,
         @ViewBuilder content: @escaping ([Date: DayGoalScore]) -> Content
@@ -106,7 +113,9 @@ struct WeekGoalScores<Content: View>: View {
         self.weekDates = weekDates
         self.goalTimeline = goalTimeline
         self.mode = mode
-        self.goal = goal
+        self.goals = goals
+        self.showsAllDrinks = showsAllDrinks
+        self.countsDrinkOnlyDays = countsDrinkOnlyDays
         self.dayStartMinutes = dayStartMinutes
         self.logicalToday = logicalToday
         self.content = content
@@ -152,19 +161,26 @@ struct WeekGoalScores<Content: View>: View {
             guard let dayEntries = entriesByDay[day], !dayEntries.isEmpty
             else { continue }
 
+            let hasMacroEntries = showsAllDrinks || dayEntries.contains(where: \.showsOnTimeline)
+
             guard mode != .loggedDays else {
-                result[day] = .logged
+                if hasMacroEntries || countsDrinkOnlyDays {
+                    result[day] = .logged
+                }
                 continue
             }
 
-            let goals = goalTimeline.goals(for: day)
+            let dayGoals = goalTimeline.goals(for: day)
+            let scoresWater = goals.contains(.water) && dayGoals?.waterGoalML != nil
+            guard hasMacroEntries || scoresWater else { continue }
 
             result[day] =
                 DayGoalScore(
-                    goals: goals,
+                    goals: dayGoals,
                     totals: DailyProgress(entries: dayEntries),
                     isComplete: day < logicalToday,
-                    including: mode == .oneGoal ? [goal] : DayCircleGoal.allCases
+                    including: goals,
+                    hasMacroEntries: hasMacroEntries
                 ) ?? .unscored
         }
         return result
@@ -174,37 +190,49 @@ struct WeekGoalScores<Content: View>: View {
 struct DayProgressCircle: View {
     var score: DayGoalScore?
     var hasDrafts = false
+    var fill: Color = .progressFill
+
+    @State private var shownScore: DayGoalScore?
+    @State private var showsDrafts: Bool
 
     private let size: CGFloat = 40
 
+    init(score: DayGoalScore?, hasDrafts: Bool = false, fill: Color = .progressFill) {
+        self.score = score
+        self.hasDrafts = hasDrafts
+        self.fill = fill
+        _shownScore = State(initialValue: score)
+        _showsDrafts = State(initialValue: hasDrafts)
+    }
+
     private var fraction: Double {
-        guard let score else { return 0 }
-        return score.allHit ? 1 : score.fraction
+        guard let shownScore else { return 0 }
+        return shownScore.allHit ? 1 : shownScore.fraction
     }
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            if score != nil {
+            if shownScore != nil {
                 Color.trackFill
                     .transition(.opacity)
             }
 
             Rectangle()
-                .fill(Color.progressFill)
+                .fill(fill)
                 .frame(height: size * fraction)
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
         .overlay {
-            if score == nil {
+            if shownScore == nil {
                 Circle()
                     .strokeBorder(Color.trackFill, lineWidth: 1.5)
                     .transition(.opacity)
             }
         }
         .overlay {
-            if score?.allHit == true {
-                Image(systemName: hasDrafts ? "star" : "star.fill")
+            if shownScore?.allHit == true {
+                Image(systemName: showsDrafts ? "star" : "star.fill")
                     .font(.smallIcon)
                     .foregroundStyle(.background)
                     .contentTransition(.symbolEffect(.replace))
@@ -212,19 +240,34 @@ struct DayProgressCircle: View {
             }
         }
         .overlay(alignment: .bottom) {
-            DraftDot(isVisible: hasDrafts)
+            DraftDot(isVisible: showsDrafts)
         }
-        .animation(.easeInOut(duration: 0.3), value: score)
-        .animation(.easeInOut(duration: 0.25), value: hasDrafts)
+        .onChange(of: score) { _, newValue in
+            withAnimation(.easeInOut(duration: 0.3)) {
+                shownScore = newValue
+            }
+        }
+        .onChange(of: hasDrafts) { _, newValue in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                showsDrafts = newValue
+            }
+        }
     }
 }
 
 struct DraftDot: View {
     let isVisible: Bool
 
+    @State private var showsDot: Bool
+
+    init(isVisible: Bool) {
+        self.isVisible = isVisible
+        _showsDot = State(initialValue: isVisible)
+    }
+
     var body: some View {
         ZStack {
-            if isVisible {
+            if showsDot {
                 Circle()
                     .fill(Color.white)
                     .overlay(
@@ -236,6 +279,11 @@ struct DraftDot: View {
                     .frame(width: 8, height: 8)
                     .offset(y: 4)
                     .transition(.opacity)
+            }
+        }
+        .onChange(of: isVisible) { _, newValue in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                showsDot = newValue
             }
         }
     }

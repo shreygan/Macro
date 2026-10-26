@@ -7,6 +7,18 @@
 
 import SwiftUI
 
+struct GoalMarker: View {
+    static let verticalOffset: CGFloat = -1
+
+    var mode: GoalLimitMode
+
+    var body: some View {
+        Text(mode == .floor ? "[" : "]")
+            .font(.goalMarker)
+            .foregroundColor(.primary)
+    }
+}
+
 struct MacroProgressRow: View {
     var title: String
     var iconSymbol: AppSymbols
@@ -30,7 +42,7 @@ struct MacroProgressRow: View {
 
                 HStack(spacing: 6) {
                     if mode == .off {
-                        Text("\(Int(current)) \(unit)")
+                        Text("\(currentText) \(unit)")
                             .font(.compactValue)
                             .foregroundColor(.secondary)
                             .contentTransition(.numericText(value: current))
@@ -38,7 +50,7 @@ struct MacroProgressRow: View {
                         let modeText = mode == .floor ? "min" : "max"
 
                         Text(
-                            "\(Int(current)) / \(Int(goal)) \(unit) \(modeText)"
+                            "\(currentText) \(unit) / \(Int(goal)) \(unit) \(modeText)"
                         )
                         .font(.compactValue)
                         .foregroundColor(.secondary)
@@ -70,17 +82,19 @@ struct MacroProgressRow: View {
                             .frame(width: fillWidth, height: 6)
                             .position(x: fillWidth / 2, y: 12)
 
-                        let isFloor = mode == .floor
-
-                        Text(isFloor ? "[" : "]")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.primary)
-                            .position(x: markerPosition, y: 11)
+                        GoalMarker(mode: mode)
+                            .position(x: markerPosition, y: 12 + GoalMarker.verticalOffset)
                     }
                 }
                 .frame(height: 14)
             }
         }
+    }
+
+    private var currentText: Text {
+        Text("\(Int(current))")
+            .font(.compactTitle)
+            .foregroundStyle(.primary)
     }
 
     @ViewBuilder

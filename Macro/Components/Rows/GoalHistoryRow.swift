@@ -8,6 +8,9 @@
 import SwiftUI
 
 struct GoalHistoryRow: View {
+    @Environment(\.volumeUnit) private var volumeUnit
+    @Environment(\.tracksHydration) private var tracksHydration
+
     var goals: UserGoals
     var title: String
     var isCurrent: Bool = false
@@ -15,54 +18,55 @@ struct GoalHistoryRow: View {
     private struct MacroDisplay: Identifiable {
         var id: String { title }
         var title: String
-        var symbol: AppSymbols
+        var symbol: String
         var tint: Color
-        var value: Double
+        var valueText: String
         var mode: GoalLimitMode
-        var unit: String
     }
 
     private var trackedMacros: [MacroDisplay] {
         [
             MacroDisplay(
                 title: "Calories",
-                symbol: .calorie,
+                symbol: AppSymbols.calorie.rawValue,
                 tint: .calorie,
-                value: goals.calories,
-                mode: goals.calorieMode,
-                unit: "kcal"
+                valueText: "\(Int(goals.calories)) kcal",
+                mode: goals.calorieMode
             ),
             MacroDisplay(
                 title: "Protein",
-                symbol: .protein,
+                symbol: AppSymbols.protein.rawValue,
                 tint: .protein,
-                value: goals.protein,
-                mode: goals.proteinMode,
-                unit: "g"
+                valueText: "\(Int(goals.protein)) g",
+                mode: goals.proteinMode
             ),
             MacroDisplay(
                 title: "Carbs",
-                symbol: .carbs,
+                symbol: AppSymbols.carbs.rawValue,
                 tint: .carbs,
-                value: goals.carbs,
-                mode: goals.carbsMode,
-                unit: "g"
+                valueText: "\(Int(goals.carbs)) g",
+                mode: goals.carbsMode
             ),
             MacroDisplay(
                 title: "Fat",
-                symbol: .fatfiber,
+                symbol: AppSymbols.fatfiber.rawValue,
                 tint: .fat,
-                value: goals.fat,
-                mode: goals.fatMode,
-                unit: "g"
+                valueText: "\(Int(goals.fat)) g",
+                mode: goals.fatMode
             ),
             MacroDisplay(
                 title: "Fiber",
-                symbol: .fatfiber,
+                symbol: AppSymbols.fatfiber.rawValue,
                 tint: .fiber,
-                value: goals.fiber,
-                mode: goals.fiberMode,
-                unit: "g"
+                valueText: "\(Int(goals.fiber)) g",
+                mode: goals.fiberMode
+            ),
+            MacroDisplay(
+                title: "Water",
+                symbol: "drop.fill",
+                tint: DrinkTint.blue.color,
+                valueText: volumeUnit.formattedTotal(goals.water),
+                mode: tracksHydration && goals.water > 0 ? goals.waterMode : .off
             ),
         ].filter { $0.mode != .off }
     }
@@ -83,15 +87,15 @@ struct GoalHistoryRow: View {
             }
 
             if trackedMacros.isEmpty {
-                Text("No macros tracked")
+                Text("No goals tracked")
                     .font(.subtitle)
                     .foregroundStyle(.secondary)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(trackedMacros) { macro in
                         HStack(spacing: 6) {
-                            Image(systemName: macro.symbol.rawValue)
-                                .font(.system(size: 12))
+                            Image(systemName: macro.symbol)
+                                .font(.detail)
                                 .foregroundStyle(macro.tint)
                                 .frame(width: 14)
 
@@ -101,10 +105,14 @@ struct GoalHistoryRow: View {
 
                             Spacer()
 
-                            Text(
-                                "\(Int(macro.value)) \(macro.unit) \(macro.mode == .floor ? "min" : "max")"
-                            )
-                            .font(.system(size: 13, weight: .medium))
+                            Group {
+                                if macro.mode == .floor {
+                                    Text("\(macro.valueText) min")
+                                } else {
+                                    Text("\(macro.valueText) max")
+                                }
+                            }
+                            .font(.subtitleEmphasis)
                             .foregroundStyle(.primary)
                         }
                     }

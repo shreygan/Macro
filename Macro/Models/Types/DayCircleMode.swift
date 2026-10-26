@@ -17,13 +17,11 @@ enum DayCircleMode: String, CaseIterable, Codable {
         switch self {
         case .goalProgress:
             String(
-                localized:
-                    "Fills based on how close you got to each goal. Today fills as you approach your limits. A star means you hit every goal, and it's outlined if that day still has drafts."
+                localized: "Fills based on how close you got to each goal. A star means you hit them all."
             )
         case .oneGoal:
             String(
-                localized:
-                    "Fills based on how close you got to a single goal you choose. A star means you hit it, and it's outlined if that day still has drafts."
+                localized: "Fills based on how close you got to the goal you choose. A star means you hit it."
             )
         case .loggedDays:
             String(localized: "Fills on days you logged anything. No scoring.")
@@ -39,6 +37,7 @@ enum DayCircleGoal: String, CaseIterable, Codable {
     case carbs = "Carbohydrates"
     case fat = "Fat"
     case fiber = "Fiber"
+    case water = "Water"
 
     func target(in goals: UserGoals) -> (goal: Double, mode: GoalLimitMode) {
         switch self {
@@ -47,6 +46,7 @@ enum DayCircleGoal: String, CaseIterable, Codable {
         case .carbs: (goals.carbs, goals.carbsMode)
         case .fat: (goals.fat, goals.fatMode)
         case .fiber: (goals.fiber, goals.fiberMode)
+        case .water: (goals.water, goals.water > 0 ? goals.waterMode : .off)
         }
     }
 
@@ -57,6 +57,7 @@ enum DayCircleGoal: String, CaseIterable, Codable {
         case .carbs: progress.carbs
         case .fat: progress.fat
         case .fiber: progress.fiber
+        case .water: progress.water
         }
     }
 }

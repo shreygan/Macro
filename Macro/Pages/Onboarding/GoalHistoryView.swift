@@ -18,6 +18,7 @@ struct GoalHistoryView: View {
     var isActive: ((UserGoals) -> Bool)?
 
     @State private var editingGoals: UserGoals?
+    @State private var editingWaterGoals: UserGoals?
     @State private var dateEdit: GoalDateEdit?
     @State private var isAddingGoals = false
     @State private var deletingPeriod: GoalPeriod?
@@ -44,7 +45,10 @@ struct GoalHistoryView: View {
         if let isActive {
             return isActive(goals)
         }
-        return user.currentGoals?.hasSameTargets(as: goals) ?? false
+        guard let current = user.currentGoals else { return false }
+        return user.tracksHydration
+            ? current.hasSameTargets(as: goals)
+            : current.hasSameMacroTargets(as: goals)
     }
 
     var body: some View {
@@ -91,7 +95,15 @@ struct GoalHistoryView: View {
                                         Button {
                                             editingGoals = period.goals
                                         } label: {
-                                            Label("Edit Goals", systemImage: "pencil")
+                                            Label("Edit Macro Goals", systemImage: "pencil")
+                                        }
+
+                                        if user.tracksHydration {
+                                            Button {
+                                                editingWaterGoals = period.goals
+                                            } label: {
+                                                Label("Edit Water Goal", systemImage: "drop")
+                                            }
                                         }
 
                                         if !period.isFirst {
@@ -217,6 +229,9 @@ struct GoalHistoryView: View {
                 isFiberActive: .constant(false),
                 editingGoals: goals
             )
+        }
+        .sheet(item: $editingWaterGoals) { goals in
+            WaterGoalSheet(editing: goals)
         }
         .sheet(item: $dateEdit) { edit in
             GoalDateSheet(

@@ -35,6 +35,8 @@ struct GoalSetupView: View {
     @State private var carbsMode: GoalLimitMode = .ceiling
     @State private var fatMode: GoalLimitMode = .ceiling
     @State private var fiberMode: GoalLimitMode = .ceiling
+    @State private var waterValue = 0.0
+    @State private var waterMode: GoalLimitMode = .off
 
     @State private var showInfoSheet = false
     @State private var showHistorySheet = false
@@ -82,7 +84,9 @@ struct GoalSetupView: View {
             fat: fatValue,
             fatMode: fatMode,
             fiber: fiberValue,
-            fiberMode: fiberMode
+            fiberMode: fiberMode,
+            water: waterValue,
+            waterMode: waterMode
         )
     }
 
@@ -363,6 +367,7 @@ struct GoalSetupView: View {
                 return
             }
             SyncDeduplicator.noteLocallyCreated(newUser)
+            try? AppSeeder.seedDrinks(into: context)
             dismiss()
             return
         }
@@ -430,10 +435,14 @@ struct GoalSetupView: View {
     }
 
     private func matchesSliders(_ goals: UserGoals) -> Bool {
-        goals.targets == targets
+        var goalTargets = goals.targets
+        goalTargets.water = waterValue
+        goalTargets.waterMode = waterMode
+        return goalTargets == targets
     }
 
     private func loadGoals(from savedGoals: UserGoals? = nil) {
+        let keepsWater = savedGoals != nil
         let editingGoals = editingGoals?.isLive == true ? editingGoals : nil
         let rangeGoals = addingRange.flatMap { users.first?.goalTimeline.goals(for: $0.start) }
         defer { prefilledTargets = targets }
@@ -448,6 +457,10 @@ struct GoalSetupView: View {
             fatMode = savedGoals.fatMode
             fiberValue = savedGoals.fiber
             fiberMode = savedGoals.fiberMode
+            if !keepsWater {
+                waterValue = savedGoals.water
+                waterMode = savedGoals.waterMode
+            }
         } else {
             calorieValue = 3000
             calorieMode = .ceiling
@@ -459,6 +472,8 @@ struct GoalSetupView: View {
             fatMode = .ceiling
             fiberValue = 30
             fiberMode = .ceiling
+            waterValue = 0
+            waterMode = .off
         }
     }
 }
