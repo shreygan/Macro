@@ -7,12 +7,13 @@
 
 import SwiftUI
 
-struct LogRecipeIngredient: Identifiable, Equatable {
+struct LogRecipeIngredient: Identifiable, Equatable, IngredientPortion {
     let id = UUID()
     var name: String
 
     var quantity: String
     var unit: String
+    var fluidOuncesText: String?
 
     var baseServingSize: Double
     var baseServingUnitName: String?
@@ -161,5 +162,18 @@ struct LogRecipeIngredient: Identifiable, Equatable {
             return baseWeight * activeMultiplier
         }
         return nil
+    }
+
+    var servingUnitName: String { baseServingUnitName ?? "serving" }
+
+    mutating func updateUnit(to newUnit: String) {
+        guard unit != newUnit else { return }
+        let currentMultiplier = activeMultiplier
+        if newUnit == baseServingWeightUnit, let baseWeight = baseServingWeight {
+            quantity = EntryHelper.format(currentMultiplier * baseWeight)
+        } else {
+            quantity = EntryHelper.format(currentMultiplier * baseServingSize)
+        }
+        unit = newUnit
     }
 }

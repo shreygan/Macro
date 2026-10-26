@@ -205,6 +205,7 @@ struct LogRecipeView: View {
     private var displayServingWeight: String {
         guard totalRecipeWeight > 0 else { return "" }
         let scaledWeight = activeMultiplier * totalRecipeWeight
+        if recipe.servingWeightUnit == VolumeUnit.milliliters.rawValue { return EntryHelper.format(scaledWeight) }
         return scaledWeight.formatted(.number.precision(.fractionLength(0...2)))
     }
 
@@ -365,6 +366,7 @@ struct LogRecipeView: View {
         modelContext.insert(mainLog)
         RecentLocationStore.record(location, in: modelContext)
 
+        var ingredientLogs: [LoggedEntry] = []
         for (index, draft) in draftIngredients.enumerated() {
             let baseDraftQuantity = parseDouble(draft.quantity)
             let scaledQuantity = baseDraftQuantity * activeMultiplier
@@ -390,7 +392,9 @@ struct LogRecipeView: View {
             )
 
             modelContext.insert(ingredientLog)
+            ingredientLogs.append(ingredientLog)
         }
+        mainLog.snapshotDrinkAmounts(children: ingredientLogs)
 
         if saveOption == .updateOriginal || saveOption == .saveAsNew {
             if saveOption == .updateOriginal {
@@ -793,12 +797,35 @@ struct LogRecipeView: View {
         }
     }
 
+    private var portionRow: some View {
+        BaseRowLayout(title: "Portion") {
+            HStack(spacing: 8) {
+                AmountUnitPills(
+                    amount: $portionQuantity,
+                    unit: $portionUnitSelection,
+                    options: availableUnits,
+                    keepsAmountOnUnitChange: false
+                )
+            }
+        }
+    }
+
     private var form: some View {
         ZStack {
             Color.background.ignoresSafeArea()
 
             ScrollView {
                 VStack {
+                    Card {
+                        portionRow
+                            .hidden()
+                            .disabled(true)
+                    }
+                    .overlay(alignment: .top) {
+                        portionRow
+                    }
+                    .padding([.leading, .trailing])
+
                     Card {
                         RowGroup(.divider) {
                             DropdownPillRow(
@@ -828,7 +855,7 @@ struct LogRecipeView: View {
                             )
                         }
                     }
-                    .padding([.leading, .trailing])
+                    .padding([.top, .leading, .trailing])
 
                     NotesCard(
                         pinnedNote: $stickyNote,
@@ -852,23 +879,6 @@ struct LogRecipeView: View {
                         onCameraCaptureChange: { pendingCameraCapture = $0 },
                         onCoverChange: { isPhotoCoverShown = $0 }
                     )
-
-                    Card {
-                        BaseRowLayout(title: "Portion") {
-                            HStack(spacing: 8) {
-                                InputPill(
-                                    text: $portionQuantity,
-                                    keyboardType: .decimalPad
-                                )
-                                DropdownPill(
-                                    options: availableUnits,
-                                    displayCustomOption: false,
-                                    selection: $portionUnitSelection
-                                )
-                            }
-                        }
-                    }
-                    .padding([.leading, .trailing])
 
                     Card("Ingredients") {
                         ReorderableRows(items: $draftIngredients) { $draft in
@@ -900,7 +910,7 @@ struct LogRecipeView: View {
                             showIngredientSelectionSheet = true
                         }
                     }
-                    .padding([.top, .leading, .trailing])
+                    .padding([.leading, .trailing])
 
                     Spacer()
                 }
@@ -908,20 +918,6 @@ struct LogRecipeView: View {
             .withCustomKeyboardToolbar()
             .navigationTitle("Log Recipe")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showIngredientSelectionSheet) {
-                IngredientSelectionView(
-                    inRecipeIDs: Set(
-                        draftIngredients.compactMap(\.ingredientItem?.id)
-                    ),
-                    excludedRecipe: recipe
-                ) { selectedItems in
-                    draftIngredients.append(
-                        contentsOf: selectedItems.map {
-                            LogRecipeIngredient(item: $0)
-                        }
-                    )
-                }
-            }
             .toolbar {
                 ToolbarItemGroup(placement: .cancellationAction) {
                     if !isPushedView {
@@ -1038,6 +1034,20 @@ struct LogRecipeView: View {
             }
         }
         .environment(focusManager)
+        .sheet(isPresented: $showIngredientSelectionSheet) {
+            IngredientSelectionView(
+                inRecipeIDs: Set(
+                    draftIngredients.compactMap(\.ingredientItem?.id)
+                ),
+                excludedRecipe: recipe
+            ) { selectedItems in
+                draftIngredients.append(
+                    contentsOf: selectedItems.map {
+                        LogRecipeIngredient(item: $0)
+                    }
+                )
+            }
+        }
         .onAppear {
             if initialDraftState == nil {
                 initialDraftState = draftState
@@ -1087,7 +1097,7 @@ struct LogRecipeView: View {
                     (currentQuantity / recipe.servingSize)
                     * totalRecipeWeight
                 portionQuantity = newQuantity.formatted(
-                    .number.precision(.fractionLength(0...2))
+                    .number.precision(.fractionLength(0...2)).grouping(.never)
                 )
 
             } else if oldUnit == recipe.servingWeightUnit
@@ -1097,7 +1107,7 @@ struct LogRecipeView: View {
                     (currentQuantity / totalRecipeWeight)
                     * recipe.servingSize
                 portionQuantity = newQuantity.formatted(
-                    .number.precision(.fractionLength(0...2))
+                    .number.precision(.fractionLength(0...2)).grouping(.never)
                 )
             }
         }

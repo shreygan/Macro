@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct IngredientRowView: View {
+    @Environment(\.volumeUnit) private var volumeUnit
+
     @Binding var draft: LogRecipeIngredient
     let portionUnitOptions: [ServingSizeUnit]
     let shouldShowIngredientIcons: Bool
@@ -15,31 +17,7 @@ struct IngredientRowView: View {
     let onDelete: () -> Void
 
     var body: some View {
-        let baseUnit = draft.baseServingUnitName ?? "serving"
-        let hasWeight = draft.baseServingWeight != nil
-
-        let unitConversionBinding = Binding<String>(
-            get: { draft.unit },
-            set: { newUnit in
-                let oldUnit = draft.unit
-                guard oldUnit != newUnit else { return }
-
-                let currentMultiplier = draft.activeMultiplier
-
-                if newUnit == draft.baseServingWeightUnit,
-                    let baseWeight = draft.baseServingWeight
-                {
-                    let convertedQuantity = currentMultiplier * baseWeight
-                    draft.quantity = EntryHelper.format(convertedQuantity)
-                } else {
-                    let convertedQuantity =
-                        currentMultiplier * draft.baseServingSize
-                    draft.quantity = EntryHelper.format(convertedQuantity)
-                }
-
-                draft.unit = newUnit
-            }
-        )
+        let baseUnit = draft.servingUnitName
 
         // Resolves the String? back to AppSymbols? for MealRow
         let rowIcon: AppSymbols? = {
@@ -71,21 +49,20 @@ struct IngredientRowView: View {
             if isEnabled {
                 HStack(spacing: 8) {
                     InputPill(
-                        text: $draft.quantity,
+                        text: $draft.displayedQuantity(in: volumeUnit),
                         keyboardType: .decimalPad
                     )
 
                     DropdownPill(
-                        options: hasWeight
-                            ? [baseUnit, draft.baseServingWeightUnit]
-                            : [baseUnit],
+                        options: draft.unitOptions(in: volumeUnit),
                         displayCustomOption: false,
-                        selection: unitConversionBinding
+                        selection: $draft.displayedUnit(in: volumeUnit)
                     )
                 }
                 .transition(.opacity)
             }
         }
+        .drink(draft.drinkRowInfo)
 
         // Swipe-to-delete is only available when editable
         ZStack {

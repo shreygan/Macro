@@ -7,13 +7,14 @@
 
 import SwiftUI
 
-struct DraftRecipeIngredient: Identifiable {
+struct DraftRecipeIngredient: Identifiable, IngredientPortion {
     let id = UUID()
     let item: FoodItem?
     var name: String
 
     var quantity: String = "1"
     var unit: String
+    var fluidOuncesText: String?
 
     var baseServingSize: Double
     var baseServingUnitName: String?
@@ -101,11 +102,6 @@ struct DraftRecipeIngredient: Identifiable {
     var displayType: EntryType { item?.type ?? .ingredient }
     var isCustomDefaultServing: Bool { item?.isCustomDefaultServing ?? false }
     var servingUnitName: String { baseServingUnitName ?? "serving" }
-
-    var unitOptions: [String] {
-        baseServingWeight != nil
-            ? [servingUnitName, baseServingWeightUnit] : [servingUnitName]
-    }
 
     func makeRecipeIngredient(
         quantity: Double,

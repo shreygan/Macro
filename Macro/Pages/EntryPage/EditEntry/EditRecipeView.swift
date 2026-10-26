@@ -27,6 +27,7 @@ struct EditRecipeView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.toastCenter) private var toastCenter
+    @Environment(\.volumeUnit) private var volumeUnit
 
     var onSaveInstantly: ((FoodItem) -> Void)?
     @State private var showSuccessAlert: Bool = false
@@ -574,21 +575,12 @@ struct EditRecipeView: View {
                             }
 
                             BaseRowLayout(title: "Total Weight") {
-                                InputPill(
-                                    text: $servingWeight,
-                                    keyboardType: .decimalPad,
-                                    placeholder: calculatedTotalWeight > 0
-                                        && allIngredientsHaveWeight
-                                        ? String(
-                                            format: "%g",
-                                            calculatedTotalWeight
-                                        )
-                                        : "-"
-                                )
-                                DropdownPill(
+                                AmountUnitPills(
+                                    amount: $servingWeight,
+                                    unit: $servingWeightUnit,
                                     options: availableWeightUnits,
-                                    displayCustomOption: false,
-                                    selection: $servingWeightUnit
+                                    placeholder: allIngredientsHaveWeight
+                                        ? calculatedTotalWeight : nil
                                 )
                             }
                         }
@@ -597,10 +589,6 @@ struct EditRecipeView: View {
 
                     Card("Ingredients") {
                         ReorderableRows(items: $draftIngredients) { $draft in
-                            let unitConversionBinding = Binding<String>(
-                                get: { draft.unit },
-                                set: { draft.updateUnit(to: $0) }
-                            )
 
                             CustomSwipeRow {
                                 MealRow(
@@ -643,16 +631,17 @@ struct EditRecipeView: View {
                                 ) {
                                     HStack(spacing: 8) {
                                         InputPill(
-                                            text: $draft.quantity,
+                                            text: $draft.displayedQuantity(in: volumeUnit),
                                             keyboardType: .decimalPad
                                         )
                                         DropdownPill(
-                                            options: draft.unitOptions,
+                                            options: draft.unitOptions(in: volumeUnit),
                                             displayCustomOption: false,
-                                            selection: unitConversionBinding
+                                            selection: $draft.displayedUnit(in: volumeUnit)
                                         )
                                     }
                                 }
+                                .drink(draft.drinkRowInfo)
                             } onDelete: {
                                 if let index = draftIngredients.firstIndex(
                                     where: { $0.id == draft.id })
@@ -708,18 +697,6 @@ struct EditRecipeView: View {
             }
             .navigationTitle("Edit Recipe")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showIngredientSelectionSheet) {
-                IngredientSelectionView(
-                    inRecipeIDs: Set(draftIngredients.compactMap(\.item?.id)),
-                    excludedRecipe: recipe
-                ) { selectedItems in
-                    draftIngredients.append(
-                        contentsOf: selectedItems.map {
-                            DraftRecipeIngredient(item: $0)
-                        }
-                    )
-                }
-            }
             .toolbar {
                 if !isPushedView {
                     ToolbarItem(placement: .topBarLeading) {
@@ -800,6 +777,18 @@ struct EditRecipeView: View {
             }
         }
         .environment(focusManager)
+        .sheet(isPresented: $showIngredientSelectionSheet) {
+            IngredientSelectionView(
+                inRecipeIDs: Set(draftIngredients.compactMap(\.item?.id)),
+                excludedRecipe: recipe
+            ) { selectedItems in
+                draftIngredients.append(
+                    contentsOf: selectedItems.map {
+                        DraftRecipeIngredient(item: $0)
+                    }
+                )
+            }
+        }
     }
 
     var body: some View {

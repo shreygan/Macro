@@ -101,12 +101,32 @@ struct FoodItemSnapshot {
         }
     }
 
+    struct DrinkFacts: Equatable {
+        struct Size: Equatable {
+            let name: String?
+            let volumeML: Double
+        }
+
+        let caffeineMg: Double?
+        let abv: Double?
+        let hydrationPercent: Double
+        let sizes: [Size]
+
+        init(_ food: FoodItem) {
+            caffeineMg = food.caffeineMg
+            abv = food.abv
+            hydrationPercent = food.hydrationPercent
+            sizes = food.sortedDrinkSizes.map { Size(name: $0.name, volumeML: $0.volumeML) }
+        }
+    }
+
     let name: String
     let type: EntryType
     let source: String?
     let category: String?
     let foodGroup: String?
     let basis: Basis
+    let drinkFacts: DrinkFacts
 
     init(_ food: FoodItem) {
         self.name = food.name
@@ -123,8 +143,9 @@ struct FoodItemSnapshot {
             fiber: food.fiber,
             ingredients: (food.recipeIngredients ?? [])
                 .sorted { $0.displayOrder < $1.displayOrder }
-                .map(Ingredient.init)
+                .map { Ingredient($0) }
         )
+        self.drinkFacts = DrinkFacts(food)
     }
 }
 
@@ -138,7 +159,14 @@ enum LoggedEntryUpdater {
     ) {
         let current = FoodItemSnapshot(food).basis
         let basisChanged = previous.basis != current
+        let drinkChanged = basisChanged || previous.type != food.type
+            || previous.drinkFacts != FoodItemSnapshot.DrinkFacts(food)
         var affectedParentEntries = Set<LoggedEntry>()
+        var drinkLogs: [LoggedEntry] = []
+
+        defer {
+            refreshDrinkAmounts(drinkLogs, for: food)
+        }
 
         for log in FoodItemStore.loggedEntries(for: food, in: context) {
             if let parent = log.parentEntry, !recipesUpdated,
@@ -148,8 +176,17 @@ enum LoggedEntryUpdater {
             }
 
             updateDetails(of: log, to: food, from: previous)
+            if food.type == .drink, drinkChanged {
+                drinkLogs.append(log)
+            }
 
-            guard basisChanged, !log.isManualOverride else { continue }
+            guard basisChanged else { continue }
+            if log.isManualOverride {
+                if food.type == .drink {
+                    _ = updatePortion(of: log, current: current, from: previous.basis)
+                }
+                continue
+            }
 
             if let parent = log.parentEntry {
                 rescale(log, to: food, current: current, from: previous.basis)
@@ -244,6 +281,26 @@ enum LoggedEntryUpdater {
         }
     }
 
+    private static func refreshDrinkAmounts(_ logs: [LoggedEntry], for food: FoodItem) {
+        var parents = Set<LoggedEntry>()
+        for log in logs {
+            let amounts = DrinkAmounts(food: food, quantity: log.loggedQuantity, unit: log.loggedUnit)
+            if log.isManualOverride {
+                let saved = log.drinkAmounts
+                log.drinkAmounts = amounts.overriding(caffeineMg: saved.caffeineMg, abv: saved.abv ?? 0)
+            } else {
+                log.drinkAmounts = amounts
+            }
+            log.sizeName = HydrationLogger.sizeName(for: food, volumeML: log.volumeML)
+            if let parent = log.parentEntry {
+                parents.insert(parent)
+            }
+        }
+        for parent in parents {
+            parent.drinkAmounts = (parent.childEntries ?? []).reduce(.zero) { $0 + $1.drinkAmounts }
+        }
+    }
+
     private static func usesIngredient(
         _ food: FoodItem,
         in recipe: FoodItem?
@@ -328,6 +385,7 @@ enum LoggedEntryUpdater {
         else { return }
 
         log.childEntries = []
+        var newChildren: [LoggedEntry] = []
         for child in oldChildren {
             context.delete(child)
         }
@@ -369,6 +427,7 @@ enum LoggedEntryUpdater {
                 displayOrder: index
             )
             context.insert(child)
+            newChildren.append(child)
 
             calories += child.calories
             protein += child.protein
@@ -382,6 +441,7 @@ enum LoggedEntryUpdater {
         log.carbs = carbs
         log.fat = fat
         log.fiber = fiber
+        log.snapshotDrinkAmounts(children: newChildren)
     }
 
     private static func matchesRecipe(
