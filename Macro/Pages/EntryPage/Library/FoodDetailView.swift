@@ -28,6 +28,7 @@ struct FoodDetailView: View {
 
 private struct FoodDetailContent: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.tracksHydration) private var tracksHydration
     @Environment(\.dismiss) private var dismiss
     @Environment(\.toastCenter) private var toastCenter
 
@@ -38,6 +39,7 @@ private struct FoodDetailContent: View {
     @Query private var logs: [LoggedEntry]
     @Query private var drafts: [EntryDraft]
     @Query private var recipeUses: [RecipeIngredient]
+    @Query private var users: [User]
     @Query(sort: \ServingSizeUnit.displayOrder) private var portionUnitOptions:
         [ServingSizeUnit]
 
@@ -46,6 +48,7 @@ private struct FoodDetailContent: View {
     @State private var foodToEdit: FoodItem? = nil
     @State private var foodToDelete: FoodItem? = nil
     @State private var foodToMerge: FoodItem? = nil
+    @State private var foodToDuplicate: FoodItem? = nil
     @State private var pendingMerge: FoodMergePlan? = nil
     @State private var showingAllNotes = false
     @State private var showingAllPhotos = false
@@ -63,6 +66,7 @@ private struct FoodDetailContent: View {
     @State private var isDismissing = false
     @State private var headerHeight: CGFloat = 0
     @State private var pageHeight: CGFloat = 0
+    @State private var hydrationDay: HydrationDayRequest? = nil
 
     private let recentLogLimit = 5
     private let recentDraftLimit = 3
@@ -164,18 +168,106 @@ private struct FoodDetailContent: View {
         recipeLogStats = FoodItemStore.logStats(for: recipes, in: modelContext)
     }
 
+    private var isDrink: Bool {
+        food.type == .drink
+    }
+
     private var usualPortion: String? {
         guard let usual = PortionKey.usual(in: logs) else { return nil }
-        return portionText(usual.quantity, usual.unit)
+        let text = portionText(usual.quantity, usual.unit)
+        guard isDrink, usual.unit == VolumeUnit.milliliters.rawValue,
+            let name = HydrationLogger.sizeName(for: food, volumeML: usual.quantity),
+            !name.isEmpty
+        else { return text }
+        return "\(name) · \(text)"
     }
+
+    private var dailyAverage: String? {
+        let drinkLogs = logs.filter { $0.volumeML > 0 }
+        guard !drinkLogs.isEmpty else { return nil }
+        let calendar = Calendar.current
+        let days = Set(drinkLogs.map {
+            calendar.logicalDay(for: $0.timestamp, dayStartMinutes: dayStartMinutes)
+        })
+        guard days.count >= 2 else { return nil }
+        let total = drinkLogs.reduce(0) { $0 + $1.volumeML }
+        return volumeUnit.formattedCompactAmount(total / Double(days.count))
+    }
+
+    private var caffeineText: String? {
+        guard let caffeine = food.caffeineMg else { return nil }
+        let amount = EntryHelper.format(caffeine)
+        if let name = food.defaultDrinkSize?.name, !name.isEmpty {
+            return String(localized: "\(amount) mg per \(name)")
+        }
+        if let volume = food.servingVolumeML {
+            return String(localized: "\(amount) mg per \(volumeUnit.formattedAmount(volume))")
+        }
+        return String(localized: "\(amount) mg per serving")
+    }
+
+    private var sizeItems: [DrinkSizeItem] {
+        let sizes = food.sortedDrinkSizes
+        guard !sizes.isEmpty else {
+            guard let volume = food.servingVolumeML, volume > 0 else { return [] }
+            return [DrinkSizeItem(id: food.id, name: nil, volumeML: volume, isServing: true)]
+        }
+        return (sizes.filter(\.isDefault) + sizes.filter { !$0.isDefault }).map {
+            DrinkSizeItem(
+                id: $0.id,
+                name: $0.name.flatMap { $0.isEmpty ? nil : $0 },
+                volumeML: $0.volumeML,
+                isServing: $0.isDefault
+            )
+        }
+    }
+
+    private func sizeFacts(_ volumeML: Double) -> String? {
+        guard let serving = food.servingVolumeML, serving > 0 else { return nil }
+        return DrinkRowInfo(
+            food: food,
+            amounts: DrinkAmounts(food: food, multiplier: volumeML / serving),
+            hasMacros: false
+        )
+        .factsText(unit: volumeUnit, includesHydration: false)
+    }
+
 
     private var servingUnitName: String {
         food.servingUnit?.unit ?? "serving"
     }
 
+    private var volumeUnit: VolumeUnit {
+        users.first?.volumeUnit ?? .localeDefault
+    }
+
+    private var dayStartMinutes: Int {
+        users.first?.dayStartMinutes ?? 0
+    }
+
+    private func logAgain(_ entry: LoggedEntry) {
+        guard EntryActions.opensAsHydrationLog(entry, tracksHydration: tracksHydration) else {
+            entryToLogAgain = entry
+            return
+        }
+        EntryActions.logHydrationAgain(
+            entry,
+            dayStartMinutes: dayStartMinutes,
+            unit: users.first?.volumeUnit ?? .localeDefault,
+            in: modelContext,
+            toastCenter: toastCenter
+        )
+    }
+
+    private var historyItems: [LogHistoryItem] {
+        LogHistoryItem.items(from: logs, dayStartMinutes: dayStartMinutes, groupsHydrationLogs: tracksHydration)
+    }
+
     private var servingText: String {
         var text = portionText(food.servingSize, servingUnitName)
-        if let weight = food.servingWeight {
+        if let volume = food.servingVolumeML {
+            text += " · \(volumeUnit.formattedAmount(volume))"
+        } else if let weight = food.servingWeight {
             text += " · \(EntryHelper.format(weight)) \(food.servingWeightUnit)"
         }
         return text
@@ -185,7 +277,8 @@ private struct FoodDetailContent: View {
         EntryHelper.portionText(
             quantity: quantity,
             unit: unit,
-            servingUnits: portionUnitOptions
+            servingUnits: portionUnitOptions,
+            volumeUnit: volumeUnit
         )
     }
 
@@ -235,6 +328,7 @@ private struct FoodDetailContent: View {
                         FoodActionMenuItems(
                             food: food,
                             onEdit: { foodToEdit = food },
+                            onDuplicate: { foodToDuplicate = food },
                             onMerge: { foodToMerge = food },
                             onDelete: {
                                 foodToDelete = food
@@ -311,9 +405,13 @@ private struct FoodDetailContent: View {
                 EditEntryView(foodItem: food)
             }
         }
+        .sheet(item: $foodToDuplicate) { food in
+            DuplicateFoodSheet(food: food)
+        }
         .sheet(item: $entryToLogAgain) { entry in
             LogAgainSheet(entry: entry)
         }
+        .hydrationDaySheet(item: $hydrationDay, dayStartMinutes: dayStartMinutes)
         .deleteFoodAlert(
             food: $foodToDelete,
             onWillDelete: { dismissOnce() }
@@ -333,143 +431,25 @@ private struct FoodDetailContent: View {
                 .padding(.horizontal)
                 .padding(.bottom, 6)
 
-                Card("Details") {
-                    RowGroup(.divider) {
-                        detailRow("Type", value: typeName)
+                detailsCard
+                    .padding([.horizontal])
 
-                        if let source = food.source?.source {
-                            detailRow("Source", value: source)
-                        }
-
-                        if let defaultLocation = food.defaultLocation {
-                            detailRow("Default Location", value: defaultLocation.name)
-                        }
-
-                        if let category = food.category?.category {
-                            detailRow("Category", value: category)
-                        }
-
-                        if let foodGroup = food.foodGroup?.foodGroup {
-                            detailRow("Food Group", value: foodGroup)
-                        }
-
-                        detailRow("Serving", value: servingText)
-
-                        if food.isCustomDefaultServing,
-                            let customServing = food.customServingSize
-                        {
-                            detailRow(
-                                "Default Portion",
-                                value: portionText(customServing, servingUnitName)
-                            )
-                        }
-
-                        detailRow(
-                            "Added",
-                            value: food.dateAdded.formatted(
-                                date: .abbreviated,
-                                time: .omitted
-                            )
-                        )
-
-                        if food.isAIEstimated {
-                            detailRow("AI Estimated", value: "Yes")
-                        }
-                    }
-                }
-                .padding([.horizontal])
-
-                if noteCount > 0 {
-                    Card("Notes") {
-                        RowGroup(.divider) {
-                            if let pinnedNote {
-                                WrappedInputRow(
-                                    placeholder: "",
-                                    text: .constant(pinnedNote.text),
-                                    caption: String(
-                                        localized:
-                                            "Updated \(pinnedNote.lastUpdated.formatted(.relative(presentation: .named)))"
-                                    ),
-                                    captionSymbol: "pin.fill",
-                                    captionTint: .orange,
-                                    isEditable: false
-                                )
-                            }
-
-                            if noteCount > (pinnedNote == nil ? 0 : 1) {
-                                Button {
-                                    showingAllNotes = true
-                                } label: {
-                                    BaseRowLayout(title: "All Notes") {
-                                        HStack(spacing: 8) {
-                                            Text(noteCount.formatted())
-                                                .font(.rowValue)
-                                                .foregroundStyle(.secondary)
-
-                                            Image(systemName: "chevron.right")
-                                                .font(.chevron)
-                                                .foregroundStyle(Color.tertiaryText)
-                                        }
-                                    }
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                    .padding([.top, .horizontal])
-                }
-
-                FoodPhotosCard(
-                    logs: logs,
-                    framingWidth: photoFramingWidth,
-                    onViewLog: { selectedEntry = LogSelection(entry: $0) },
-                    onShowAll: { showingAllPhotos = true }
-                )
-
-                FoodPlacesCard(
-                    food: food,
-                    logs: logs,
-                    servingUnits: portionUnitOptions,
-                    onSelect: { placeToShow = $0 },
-                    onSetDefault: {
-                        setDefaultLocation(
-                            $0,
-                            for: food,
-                            in: modelContext,
-                            toastCenter: toastCenter
-                        )
-                    },
-                    onShowAll: { showingAllPlaces = true },
-                    onShowMap: { showingMap = true }
-                )
-
-                if food.type == .recipe && !ingredients.isEmpty {
-                    Card("Ingredients") {
-                        RowGroup(.divider) {
-                            ForEach(ingredients) { ingredient in
-                                ingredientRow(ingredient)
-                            }
-                        }
-                    }
-                    .padding([.top, .horizontal])
-                }
-
-                if !usedInRecipes.isEmpty {
-                    usedInCard
-                        .padding([.top, .horizontal])
-                }
-
-                if !drafts.isEmpty {
-                    draftsCard
-                        .padding([.top, .horizontal])
-                        .transition(.opacity)
-                }
-
-                if !logs.isEmpty {
-                    historyCard
-                        .padding([.top, .horizontal])
-                        .transition(.opacity)
+                if isDrink {
+                    sizesSection
+                    draftsSection
+                    historySection
+                    notesSection
+                    photosSection
+                    placesSection
+                    usedInSection
+                } else {
+                    notesSection
+                    photosSection
+                    placesSection
+                    ingredientsSection
+                    usedInSection
+                    draftsSection
+                    historySection
                 }
             }
             .animation(.easeInOut(duration: 0.25), value: drafts.isEmpty)
@@ -487,6 +467,208 @@ private struct FoodDetailContent: View {
                     .padding(.horizontal)
                     .padding(.bottom, 24)
             }
+        }
+    }
+
+    private var detailsCard: some View {
+        Card("Details") {
+            RowGroup(.divider) {
+                if let source = food.source?.source {
+                    detailRow("Source", value: source)
+                }
+
+                if let defaultLocation = food.defaultLocation {
+                    detailRow("Default Location", value: defaultLocation.name)
+                }
+
+                if let category = food.category?.category {
+                    detailRow("Category", value: category)
+                }
+
+                if isDrink {
+                    if let caffeineText {
+                        detailRow("Caffeine", value: caffeineText)
+                    }
+                    if let abv = food.abv {
+                        detailRow(
+                            "Alcohol",
+                            value: String(localized: "\(EntryHelper.format(abv))% ABV")
+                        )
+                    }
+                    if tracksHydration, food.hydrationPercent != 100 {
+                        detailRow(
+                            "Water Goal",
+                            value: food.hydrationPercent <= 0
+                                ? String(localized: "Not counted")
+                                : String(localized: "Counts as \(EntryHelper.format(food.hydrationPercent))%")
+                        )
+                    }
+                } else {
+                    if let foodGroup = food.foodGroup?.foodGroup {
+                        detailRow("Food Group", value: foodGroup)
+                    }
+
+                    detailRow("Serving", value: servingText)
+
+                    if food.isCustomDefaultServing,
+                        let customServing = food.customServingSize
+                    {
+                        detailRow(
+                            "Default Portion",
+                            value: portionText(customServing, servingUnitName)
+                        )
+                    }
+                }
+
+                detailRow(
+                    "Added",
+                    value: food.dateAdded.formatted(
+                        date: .abbreviated,
+                        time: .omitted
+                    )
+                )
+
+                if food.isAIEstimated {
+                    detailRow("AI Estimated", value: "Yes")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var sizesSection: some View {
+        let sizes = sizeItems
+        if !sizes.isEmpty {
+            Card(sizes.count == 1 ? String(localized: "Serving") : String(localized: "Serving & Sizes")) {
+                RowGroup(.divider) {
+                    ForEach(sizes) { size in
+                        BaseRowLayout(
+                            title: size.name ?? volumeUnit.formattedAmount(size.volumeML),
+                            titleTag: size.isServing && sizes.count > 1 ? String(localized: "Serving") : nil,
+                            subtitle: sizeFacts(size.volumeML)
+                        ) {
+                            if size.name != nil {
+                                Text(volumeUnit.formattedAmount(size.volumeML))
+                                    .font(.rowValue)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding([.top, .horizontal])
+        }
+    }
+
+    @ViewBuilder
+    private var notesSection: some View {
+        if noteCount > 0 {
+            Card("Notes") {
+                RowGroup(.divider) {
+                    if let pinnedNote {
+                        WrappedInputRow(
+                            placeholder: "",
+                            text: .constant(pinnedNote.text),
+                            caption: String(
+                                localized:
+                                    "Updated \(pinnedNote.lastUpdated.formatted(.relative(presentation: .named)))"
+                            ),
+                            captionSymbol: "pin.fill",
+                            captionTint: .orange,
+                            isEditable: false
+                        )
+                    }
+
+                    if noteCount > (pinnedNote == nil ? 0 : 1) {
+                        Button {
+                            showingAllNotes = true
+                        } label: {
+                            BaseRowLayout(title: "All Notes") {
+                                HStack(spacing: 8) {
+                                    Text(noteCount.formatted())
+                                        .font(.rowValue)
+                                        .foregroundStyle(.secondary)
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.chevron)
+                                        .foregroundStyle(Color.tertiaryText)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding([.top, .horizontal])
+        }
+    }
+
+    private var photosSection: some View {
+        FoodPhotosCard(
+            logs: logs,
+            framingWidth: photoFramingWidth,
+            onViewLog: { selectedEntry = LogSelection(entry: $0) },
+            onShowAll: { showingAllPhotos = true }
+        )
+    }
+
+    private var placesSection: some View {
+        FoodPlacesCard(
+            food: food,
+            logs: logs,
+            servingUnits: portionUnitOptions,
+            onSelect: { placeToShow = $0 },
+            onSetDefault: {
+                setDefaultLocation(
+                    $0,
+                    for: food,
+                    in: modelContext,
+                    toastCenter: toastCenter
+                )
+            },
+            onShowAll: { showingAllPlaces = true },
+            onShowMap: { showingMap = true }
+        )
+    }
+
+    @ViewBuilder
+    private var ingredientsSection: some View {
+        if food.type == .recipe && !ingredients.isEmpty {
+            Card("Ingredients") {
+                RowGroup(.divider) {
+                    ForEach(ingredients) { ingredient in
+                        ingredientRow(ingredient)
+                    }
+                }
+            }
+            .padding([.top, .horizontal])
+        }
+    }
+
+    @ViewBuilder
+    private var usedInSection: some View {
+        if !usedInRecipes.isEmpty {
+            usedInCard
+                .padding([.top, .horizontal])
+        }
+    }
+
+    @ViewBuilder
+    private var draftsSection: some View {
+        if !drafts.isEmpty {
+            draftsCard
+                .padding([.top, .horizontal])
+                .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder
+    private var historySection: some View {
+        if !logs.isEmpty {
+            historyCard
+                .padding([.top, .horizontal])
+                .transition(.opacity)
         }
     }
 
@@ -571,24 +753,34 @@ private struct FoodDetailContent: View {
     }
 
     private var historyCard: some View {
-        Card("History") {
-            statStrip
+        let dailyAverage = isDrink ? dailyAverage : nil
+        let usualMeal = usualMeal
+        let usualPortion = usualPortion
+        let hasStats = dailyAverage != nil || usualMeal != nil || usualPortion != nil
 
-            Divider()
-                .padding(.horizontal, 16)
+        return Card("History", titleBottomPadding: hasStats ? 0 : -4) {
+            if hasStats {
+                statStrip(dailyAverage: dailyAverage, usualMeal: usualMeal, usualPortion: usualPortion)
+
+                Divider()
+                    .padding(.horizontal, 16)
+            }
+
+            let historyItems = historyItems
 
             LogHistoryList(
-                logs: Array(logs.prefix(recentLogLimit)),
+                items: Array(historyItems.prefix(recentLogLimit)),
                 servingUnits: portionUnitOptions,
                 onSelect: { selectedEntry = LogSelection(entry: $0) },
                 onEdit: {
                     selectedEntry = LogSelection(entry: $0, startsEditing: true)
                 },
-                onLogAgain: { entryToLogAgain = $0 },
-                onDelete: deleteEntry
+                onLogAgain: logAgain,
+                onDelete: deleteEntry,
+                onSelectHydrationDay: { hydrationDay = HydrationDayRequest(day: $0) }
             )
 
-            if logs.count > recentLogLimit {
+            if historyItems.count > recentLogLimit {
                 Divider()
                     .padding(.horizontal, 16)
 
@@ -602,12 +794,20 @@ private struct FoodDetailContent: View {
         }
     }
 
-    private var statStrip: some View {
+    private func statStrip(
+        dailyAverage: String?,
+        usualMeal: (value: String, label: String)?,
+        usualPortion: String?
+    ) -> some View {
         HStack(spacing: 0) {
-            statColumn(
-                value: logs.count.formatted(),
-                label: logs.count == 1 ? "Log" : "Logs"
-            )
+            if let dailyAverage {
+                statColumn(value: dailyAverage, label: "Per Day Logged")
+            } else {
+                statColumn(
+                    value: logs.count.formatted(),
+                    label: logs.count == 1 ? "Log" : "Logs"
+                )
+            }
 
             if let usualMeal {
                 Divider().frame(height: 32)
@@ -618,7 +818,7 @@ private struct FoodDetailContent: View {
             if let usualPortion {
                 Divider().frame(height: 32)
 
-                statColumn(value: usualPortion, label: "Usual Portion")
+                statColumn(value: usualPortion, label: isDrink ? "Usual Amount" : "Usual Portion")
             }
         }
         .padding(.horizontal, 8)
@@ -648,33 +848,42 @@ private struct FoodDetailContent: View {
             else { return nil }
             return category
         }
-        if let category = mostCommon(categories) {
+        if !isDrink, let category = mostCommon(categories) {
             return (category, "Usual Meal")
         }
 
-        let times = logs.map { entry -> String in
-            switch Calendar.current.component(.hour, from: entry.timestamp) {
-            case 5..<11: "Mornings"
-            case 11..<17: "Afternoons"
-            case 17..<22: "Evenings"
-            default: "Late Nights"
-            }
+        let calendar = Calendar.current
+        let minutes = logs.map { entry in
+            let parts = calendar.dateComponents([.hour, .minute], from: entry.timestamp)
+            return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
         }
-        guard let time = mostCommon(times) else { return nil }
+        guard let time = UsualTimeWindow(minutes: minutes)?.formatted else { return nil }
         return (time, "Usual Time")
     }
 
     @ViewBuilder
     private func ingredientRow(_ ingredient: RecipeIngredient) -> some View {
         let calories = ingredient.calories
+        let drinkAmount = ingredient.ingredientItem.flatMap { food in
+            food.type == .drink
+                ? DrinkRowInfo(
+                    food: food,
+                    amounts: DrinkAmounts(food: food, quantity: ingredient.quantity, unit: ingredient.unit),
+                    hasMacros: calories > 0
+                ).amountText(unit: volumeUnit) : nil
+        }
 
         let row = BaseRowLayout(
-            icon: .appSymbol(
-                ingredient.ingredientItem?.type.appSymbol ?? .ingredient,
-                tint: .secondary
-            ),
+            icon: ingredient.ingredientItem.flatMap { food in
+                food.type == .drink
+                    ? .customSymbol(food.drinkSymbol, tint: food.drinkTint.color) : nil
+            }
+                ?? .appSymbol(
+                    ingredient.ingredientItem?.type.appSymbol ?? .ingredient,
+                    tint: .secondary
+                ),
             title: ingredient.name,
-            subtitle: portionText(ingredient.quantity, ingredient.unit)
+            subtitle: drinkAmount ?? portionText(ingredient.quantity, ingredient.unit)
         ) {
             HStack(spacing: 8) {
                 Text("\(EntryHelper.formatMacro(calories)) kcal")
@@ -717,18 +926,75 @@ private struct LogSelection: Hashable {
 }
 
 private func mostCommon<Value: Hashable>(_ values: [Value]) -> Value? {
+    guard values.count >= 3 else { return nil }
     var counts: [Value: Int] = [:]
-    var best: Value?
-    var bestCount = 0
     for value in values {
-        let count = counts[value, default: 0] + 1
-        counts[value] = count
-        if count > bestCount {
-            best = value
-            bestCount = count
-        }
+        counts[value, default: 0] += 1
     }
-    return best
+    let ranked = counts.sorted { $0.value > $1.value }
+    guard let top = ranked.first, top.value * 2 >= values.count else { return nil }
+    if let runnerUp = ranked.dropFirst().first, runnerUp.value == top.value {
+        return nil
+    }
+    return top.key
+}
+
+struct UsualTimeWindow {
+    private static let dayMinutes = 24 * 60
+    private static let windowMinutes = 3 * 60
+
+    let startMinute: Int
+    let endMinute: Int
+
+    init?(minutes: [Int]) {
+        guard minutes.count >= 3,
+            let best = Self.densestWindow(in: minutes),
+            best.logs.count * 2 >= minutes.count
+        else { return nil }
+
+        var remaining = minutes
+        for minute in best.logs {
+            if let index = remaining.firstIndex(of: minute) {
+                remaining.remove(at: index)
+            }
+        }
+        if let rival = Self.densestWindow(in: remaining), rival.logs.count == best.logs.count {
+            return nil
+        }
+
+        startMinute = best.start / 60 * 60
+        endMinute = (best.start + best.span) / 60 * 60 + 60
+    }
+
+    var formatted: String {
+        let base = Date(timeIntervalSinceReferenceDate: 0)
+        let from = base.addingTimeInterval(Double(startMinute) * 60)
+        let to = base.addingTimeInterval(Double(endMinute % Self.dayMinutes) * 60)
+        guard endMinute >= Self.dayMinutes else {
+            var style = Date.IntervalFormatStyle().hour()
+            style.timeZone = .gmt
+            return (from..<base.addingTimeInterval(Double(endMinute) * 60)).formatted(style)
+        }
+        var style = Date.FormatStyle().hour()
+        style.timeZone = .gmt
+        return "\(from.formatted(style)) – \(to.formatted(style))"
+    }
+
+    private static func densestWindow(in minutes: [Int]) -> (start: Int, span: Int, logs: [Int])? {
+        var best: (start: Int, span: Int, logs: [Int])?
+        for start in Set(minutes).sorted() {
+            let inside = minutes.filter { (($0 - start + dayMinutes) % dayMinutes) < windowMinutes }
+            let span = inside.map { ($0 - start + dayMinutes) % dayMinutes }.max() ?? 0
+            if let current = best,
+                inside.count < current.logs.count
+                    || (inside.count == current.logs.count && span >= current.span)
+            {
+                continue
+            }
+            best = (start, span, inside)
+        }
+        return best
+    }
 }
 
 struct PortionKey: Hashable {
@@ -736,8 +1002,19 @@ struct PortionKey: Hashable {
     let unit: String
 
     static func usual(in logs: [LoggedEntry]) -> PortionKey? {
-        mostCommon(logs.map { PortionKey(quantity: $0.loggedQuantity, unit: $0.loggedUnit) })
+        mostCommon(logs.map { entry in
+            entry.typeRawValue == EntryType.drink.rawValue && entry.volumeML > 0
+                ? PortionKey(quantity: entry.volumeML.rounded(), unit: VolumeUnit.milliliters.rawValue)
+                : PortionKey(quantity: entry.loggedQuantity, unit: entry.loggedUnit)
+        })
     }
+}
+
+private struct DrinkSizeItem: Identifiable {
+    let id: UUID
+    let name: String?
+    let volumeML: Double
+    let isServing: Bool
 }
 
 struct FoodPlace {
@@ -952,6 +1229,8 @@ struct FoodPlaceRow: View {
     var onSelect: (EntryLocation) -> Void
     var onSetDefault: (EntryLocation?) -> Void
 
+    @Environment(\.volumeUnit) private var volumeUnit
+
     private var isDefault: Bool {
         guard let current = food.defaultLocation else { return false }
         return RecentLocationStore.isSamePlace(current, place.location)
@@ -976,11 +1255,17 @@ struct FoodPlaceRow: View {
             let usual = PortionKey.usual(in: place.logs),
             usual != usualPortion
         else { return nil }
-        return EntryHelper.portionText(
+        let text = EntryHelper.portionText(
             quantity: usual.quantity,
             unit: usual.unit,
-            servingUnits: servingUnits
+            servingUnits: servingUnits,
+            volumeUnit: volumeUnit
         )
+        guard food.type == .drink, usual.unit == VolumeUnit.milliliters.rawValue,
+            let name = HydrationLogger.sizeName(for: food, volumeML: usual.quantity),
+            !name.isEmpty
+        else { return text }
+        return "\(name) · \(text)"
     }
 
     var body: some View {
@@ -1146,6 +1431,8 @@ private struct UsedInRecipeRow: View {
     let servingUnits: [ServingSizeUnit]
     var onSelect: () -> Void
 
+    @Environment(\.volumeUnit) private var volumeUnit
+
     private var portion: String {
         usedIn.uses
             .sorted { $0.displayOrder < $1.displayOrder }
@@ -1153,7 +1440,8 @@ private struct UsedInRecipeRow: View {
                 EntryHelper.portionText(
                     quantity: $0.quantity,
                     unit: $0.unit,
-                    servingUnits: servingUnits
+                    servingUnits: servingUnits,
+                    volumeUnit: volumeUnit
                 )
             }
             .joined(separator: " + ")
@@ -1260,6 +1548,7 @@ struct FoodLogsView: View {
 
 private struct FoodLogsContent: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.tracksHydration) private var tracksHydration
     @Environment(\.toastCenter) private var toastCenter
 
     @Query private var logs: [LoggedEntry]
@@ -1271,6 +1560,9 @@ private struct FoodLogsContent: View {
     @State private var isVisible = false
     @State private var isDismissing = false
     @State private var showingMap = false
+    @State private var hydrationDay: HydrationDayRequest? = nil
+
+    @Query private var users: [User]
 
     @Environment(\.dismiss) private var dismiss
 
@@ -1293,22 +1585,40 @@ private struct FoodLogsContent: View {
         }
     }
 
+    private var dayStartMinutes: Int {
+        users.first?.dayStartMinutes ?? 0
+    }
+
+    private func logAgain(_ entry: LoggedEntry) {
+        guard EntryActions.opensAsHydrationLog(entry, tracksHydration: tracksHydration) else {
+            entryToLogAgain = entry
+            return
+        }
+        EntryActions.logHydrationAgain(
+            entry,
+            dayStartMinutes: dayStartMinutes,
+            unit: users.first?.volumeUnit ?? .localeDefault,
+            in: modelContext,
+            toastCenter: toastCenter
+        )
+    }
+
     private struct LogMonth: Identifiable {
         let id: Date
-        var logs: [LoggedEntry]
+        var items: [LogHistoryItem]
     }
 
     private var months: [LogMonth] {
         let calendar = Calendar.current
         var result: [LogMonth] = []
-        for entry in shownLogs {
+        for item in LogHistoryItem.items(from: shownLogs, dayStartMinutes: dayStartMinutes, groupsHydrationLogs: tracksHydration) {
             let month =
-                calendar.dateInterval(of: .month, for: entry.timestamp)?.start
-                ?? entry.timestamp
+                calendar.dateInterval(of: .month, for: item.date)?.start
+                ?? item.date
             if result.last?.id == month {
-                result[result.count - 1].logs.append(entry)
+                result[result.count - 1].items.append(item)
             } else {
-                result.append(LogMonth(id: month, logs: [entry]))
+                result.append(LogMonth(id: month, items: [item]))
             }
         }
         return result
@@ -1340,7 +1650,7 @@ private struct FoodLogsContent: View {
                             titleBottomPadding: -4
                         ) {
                             LogHistoryList(
-                                logs: month.logs,
+                                items: month.items,
                                 servingUnits: portionUnitOptions,
                                 onSelect: { selectedEntry = LogSelection(entry: $0) },
                                 onEdit: {
@@ -1349,8 +1659,9 @@ private struct FoodLogsContent: View {
                                         startsEditing: true
                                     )
                                 },
-                                onLogAgain: { entryToLogAgain = $0 },
-                                onDelete: deleteEntry
+                                onLogAgain: logAgain,
+                                onDelete: deleteEntry,
+                                onSelectHydrationDay: { hydrationDay = HydrationDayRequest(day: $0) }
                             )
                         }
                         .padding(.horizontal)
@@ -1363,6 +1674,7 @@ private struct FoodLogsContent: View {
             .tabBarScrollInsets()
         }
         .withGlobalSwipeDismissal()
+        .hydrationDaySheet(item: $hydrationDay, dayStartMinutes: dayStartMinutes)
         .navigationTitle(place?.name ?? String(localized: "All Logs"))
         .navigationSubtitle(place == nil ? "" : food.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -1529,48 +1841,116 @@ private struct FoodDraftList: View {
     }
 }
 
+private enum LogHistoryItem: Identifiable, Equatable {
+    case log(LoggedEntry)
+    case hydrationDay(Date, HydrationDaySummary)
+
+    var id: String {
+        switch self {
+        case .log(let entry): entry.id.uuidString
+        case .hydrationDay(let day, _): "hydration-\(day.timeIntervalSinceReferenceDate)"
+        }
+    }
+
+    var date: Date {
+        switch self {
+        case .log(let entry): entry.timestamp
+        case .hydrationDay(let day, _): day
+        }
+    }
+
+    static func items(
+        from logs: [LoggedEntry],
+        dayStartMinutes: Int,
+        groupsHydrationLogs: Bool = true
+    ) -> [LogHistoryItem] {
+        let calendar = Calendar.current
+        var items: [LogHistoryItem] = []
+        var dayLogs: [Date: [LoggedEntry]] = [:]
+        for entry in logs {
+            guard groupsHydrationLogs, entry.isHydrationLog else {
+                items.append(.log(entry))
+                continue
+            }
+            let day = calendar.logicalDay(for: entry.timestamp, dayStartMinutes: dayStartMinutes)
+            if dayLogs[day] == nil {
+                items.append(.hydrationDay(day, HydrationDaySummary(logs: [])))
+            }
+            dayLogs[day, default: []].append(entry)
+        }
+        return items.map { item in
+            guard case .hydrationDay(let day, _) = item else { return item }
+            return .hydrationDay(day, HydrationDaySummary(logs: dayLogs[day] ?? []))
+        }
+    }
+}
+
 private struct LogHistoryList: View {
-    let logs: [LoggedEntry]
+    @Environment(\.tracksHydration) private var tracksHydration
+
+    let items: [LogHistoryItem]
     let servingUnits: [ServingSizeUnit]
     var onSelect: (LoggedEntry) -> Void
     var onEdit: (LoggedEntry) -> Void
     var onLogAgain: (LoggedEntry) -> Void
     var onDelete: (LoggedEntry) -> Void
+    var onSelectHydrationDay: (Date) -> Void
+
+    @State private var focusManager = SwipeFocusManager()
 
     var body: some View {
-        EntryList(
-            items: logs,
-            allowSwipeActions: true,
-            showCard: false,
-            isLazy: false,
-            rowContent: { entry in
-                LogHistoryRow(entry: entry, servingUnits: servingUnits) {
-                    onSelect(entry)
-                }
-                .contextMenu {
-                    Button {
-                        onLogAgain(entry)
-                    } label: {
-                        Label("Log Again", systemImage: "plus.square.on.square")
-                    }
-
-                    Button {
-                        onEdit(entry)
-                    } label: {
-                        Label("Edit Entry", systemImage: "pencil")
-                    }
-
-                    Divider()
-
-                    Button(role: .destructive) {
-                        onDelete(entry)
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+        RowGroup(.divider, isLazy: false) {
+            ForEach(items) { item in
+                switch item {
+                case .log(let entry):
+                    CustomSwipeRow(
+                        content: { logRow(entry) },
+                        onDelete: { onDelete(entry) }
+                    )
+                    .transition(
+                        .asymmetric(
+                            insertion: .identity,
+                            removal: .opacity.combined(with: .scale(scale: 0.9))
+                        )
+                    )
+                case .hydrationDay(let day, let summary):
+                    HydrationDayHistoryRow(day: day, summary: summary) {
+                        onSelectHydrationDay(day)
                     }
                 }
-            },
-            onDelete: onDelete
-        )
+            }
+        }
+        .environment(focusManager)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: items)
+    }
+
+    private func logRow(_ entry: LoggedEntry) -> some View {
+        LogHistoryRow(entry: entry, servingUnits: servingUnits) {
+            onSelect(entry)
+        }
+        .contextMenu {
+            if EntryActions.canLogAgain(entry, tracksHydration: tracksHydration) {
+                Button {
+                    onLogAgain(entry)
+                } label: {
+                    Label("Log Again", systemImage: "plus.square.on.square")
+                }
+            }
+
+            Button {
+                onEdit(entry)
+            } label: {
+                Label("Edit Entry", systemImage: "pencil")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                onDelete(entry)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
 }
 
@@ -1644,6 +2024,32 @@ private struct LogAgainSheet: View {
 
     return NavigationStack {
         FoodDetailView(food: rice)
+    }
+    .modelContainer(container)
+}
+
+#Preview("Drink") {
+    let container = try! ModelContainer(
+        for: User.self, FoodItem.self, LoggedEntry.self, ServingSizeUnit.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+    )
+    let context = container.mainContext
+    context.insert(User(onboardingComplete: true))
+    AppSeeder.resetListSeeding()
+    try? AppSeeder.seedDefaults(into: context)
+    let foods = (try? context.fetch(FetchDescriptor<FoodItem>())) ?? []
+    let coffee = foods.first { $0.seedKey == "coffee" }!
+
+    for dayOffset in 0..<6 {
+        let day = Date().addingTimeInterval(Double(-dayOffset) * 86400)
+        _ = try? HydrationLogger.log(coffee, volumeML: 240, sizeName: "Cup", at: day, in: context)
+        if dayOffset.isMultiple(of: 2) {
+            _ = try? HydrationLogger.log(coffee, volumeML: 350, sizeName: "Mug", at: day, in: context)
+        }
+    }
+
+    return NavigationStack {
+        FoodDetailView(food: coffee)
     }
     .modelContainer(container)
 }

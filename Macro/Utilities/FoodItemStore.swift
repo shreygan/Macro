@@ -58,9 +58,14 @@ enum FoodItemStore {
         return (try? context.fetch(descriptor)) ?? []
     }
 
-    static func logStats(in context: ModelContext) -> [UUID: FoodLogStats] {
+    static func logStats(
+        in context: ModelContext,
+        includingHydrationLogs: Bool = false
+    ) -> [UUID: FoodLogStats] {
         var descriptor = FetchDescriptor<LoggedEntry>(
-            predicate: #Predicate { $0.parentEntry == nil }
+            predicate: includingHydrationLogs
+                ? #Predicate { $0.parentEntry == nil }
+                : #Predicate { $0.parentEntry == nil && !$0.isHydrationLog }
         )
         descriptor.propertiesToFetch = [\.timestamp]
         descriptor.relationshipKeyPathsForPrefetching = [\.originalFoodItem]
@@ -219,6 +224,29 @@ enum FoodItemStore {
             context.delete(favorite)
         } else {
             insertFavorite(food, at: orderIndex, in: context)
+            food.isInLibrary = true
+        }
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
+        return previousOrder
+    }
+
+    static func setInLibrary(
+        _ isInLibrary: Bool,
+        for food: FoodItem,
+        restoringFavoriteAt favoriteOrder: Int? = nil,
+        in context: ModelContext
+    ) throws -> Int? {
+        let previousOrder = food.favoriteEntry?.orderIndex
+        food.isInLibrary = isInLibrary
+        if !isInLibrary, let favorite = food.favoriteEntry {
+            context.delete(favorite)
+        } else if isInLibrary, let favoriteOrder, food.favoriteEntry == nil {
+            insertFavorite(food, at: favoriteOrder, in: context)
         }
         do {
             try context.save()

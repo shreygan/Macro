@@ -67,8 +67,12 @@ struct LibraryView<Header: View>: View {
     var popToRootTrigger: Int
     let headerContent: Header
 
-    @Query(sort: \FoodItem.dateAdded, order: .reverse) var savedMeals:
-        [FoodItem]
+    @Query(
+        filter: #Predicate<FoodItem> { $0.isInLibrary },
+        sort: \FoodItem.dateAdded,
+        order: .reverse
+    ) var savedMeals: [FoodItem]
+    @Query(filter: #Predicate<FoodItem> { $0.seedKey != nil }) private var storedBuiltIns: [FoodItem]
     @Query(sort: \ServingSizeUnit.displayOrder) var portionUnitOptions:
         [ServingSizeUnit]
     @Query private var sourceOptions: [EntrySource]
@@ -77,8 +81,10 @@ struct LibraryView<Header: View>: View {
     @State private var selectedChip: LibraryChip = .all
     @State private var listToManage: LibraryListKind? = nil
     @State private var isManagingSavedLocations = false
+    @State private var showsBuiltInDrinks = false
 
     @State private var foodToLog: FoodItem? = nil
+    @State private var storedBuiltInIDs: Set<UUID> = []
 
     @State private var selectedFood: FoodItem?
     @State private var searchText = ""
@@ -117,6 +123,10 @@ struct LibraryView<Header: View>: View {
     private var usesLogStats: Bool {
         sortOption == .lastLogged || sortOption == .mostLogged
             || sortOption == .lastUsedInRecipe
+    }
+
+    private var countsHydrationLogs: Bool {
+        selectedTypes == [EntryType.drink.rawValue.capitalized]
     }
 
     private var usesRecipeStats: Bool {
@@ -169,6 +179,13 @@ struct LibraryView<Header: View>: View {
         return result
     }
 
+    private var builtInFoods: [FoodItem] {
+        guard !searchText.isEmpty, !hasListFilters, selectedChip != .favorites else { return [] }
+        return BuiltInCatalog.matches(searchText, stored: storedBuiltIns).filter {
+            selectedTypes.isEmpty || selectedTypes.contains($0.type.rawValue.capitalized)
+        }
+    }
+
     var filteredFoods: [FoodItem] {
         // 4. Search text filter
         let pool = filterPool
@@ -181,6 +198,8 @@ struct LibraryView<Header: View>: View {
         }
         let result =
             searchText.isEmpty ? pool : pool.filter { relevance[$0.id] != nil }
+        let aliases = DrinkAliasSearch(searchText)
+        let aliased = pool.filter { relevance[$0.id] == nil && aliases.includes($0) }
 
         // 5. Sort filtered results
         let stats = logStats
@@ -203,7 +222,7 @@ struct LibraryView<Header: View>: View {
             stats[food.id]?.lastLogged ?? food.dateAdded
         }
 
-        return result.sorted { lhs, rhs in
+        let sorted = result.sorted { lhs, rhs in
             if let lhsRelevance = relevance[lhs.id],
                 let rhsRelevance = relevance[rhs.id]
             {
@@ -241,6 +260,7 @@ struct LibraryView<Header: View>: View {
                 return ordered(lhs, rhs) { $0.fiber }
             }
         }
+        return sorted + aliased
     }
 
     init(
@@ -274,14 +294,74 @@ struct LibraryView<Header: View>: View {
         )
     }
 
+    private func foodList(_ foods: [FoodItem], showCard: Bool) -> some View {
+        EntryList(
+            items: foods,
+            allowSwipeActions: !swipeActions.isEmpty,
+            showCard: showCard,
+            rowContent: { food in
+                if isTabRoot {
+                    foodRow(for: food)
+                        .contextMenu {
+                            FoodActionMenuItems(
+                                food: food,
+                                onLog: { foodToLog = food },
+                                onEdit: { foodToEdit = food },
+                                onDelete: {
+                                    confirmDelete(food)
+                                }
+                            )
+                        }
+                } else {
+                    foodRow(for: food)
+                }
+            },
+            onDelete: swipeActions.contains(.delete)
+                ? { food in
+                    confirmDelete(food)
+                } : nil,
+            onEdit: swipeActions.contains(.edit)
+                ? { food in
+                    foodToEdit = food
+                } : nil,
+            onFavorite: swipeActions.contains(.favorite)
+                ? { food in
+                    EntryActions.toggleFavorite(
+                        food,
+                        in: modelContext,
+                        toastCenter: toastCenter
+                    )
+                } : nil,
+            isFavorited: { food in
+                food.favoriteEntry != nil
+            }
+        )
+    }
+
+    private func createFromSearch(name: String, source: String) {
+        newEntryName = name
+        newEntrySource = source
+        entryTypeToAdd = addableEntryType
+    }
+
+    private var createFromSearchButtons: some View {
+        CreateFromSearchButtons(
+            query: searchText,
+            title: "Create New \(addableEntryType.rawValue.capitalized)",
+            onCreate: createFromSearch
+        )
+    }
+
     var body: some View {
         let foods = filteredFoods
+        let builtIns = builtInFoods
+        let isEmpty = foods.isEmpty && builtIns.isEmpty
 
         ZStack {
             (isTabRoot ? Color.clear : Color.background)
                 .ignoresSafeArea()
 
-            if foods.isEmpty {
+            if isEmpty {
                 VStack(spacing: 0) {
                     headerContent
                         .padding([.horizontal, .bottom])
@@ -297,47 +377,24 @@ struct LibraryView<Header: View>: View {
                         headerContent
                             .padding([.horizontal, .bottom])
 
-                        EntryList(
-                            items: foods,
-                            allowSwipeActions: !swipeActions.isEmpty,
-                            rowContent: { food in
-                                if isTabRoot {
-                                    foodRow(for: food)
-                                        .contextMenu {
-                                            FoodActionMenuItems(
-                                                food: food,
-                                                onLog: { foodToLog = food },
-                                                onEdit: { foodToEdit = food },
-                                                onDelete: {
-                                                    confirmDelete(food)
-                                                }
-                                            )
-                                        }
-                                } else {
-                                    foodRow(for: food)
-                                }
-                            },
-                            onDelete: swipeActions.contains(.delete)
-                                ? { food in
-                                    confirmDelete(food)
-                                } : nil,
-                            onEdit: swipeActions.contains(.edit)
-                                ? { food in
-                                    foodToEdit = food
-                                } : nil,
-                            onFavorite: swipeActions.contains(.favorite)
-                                ? { food in
-                                    EntryActions.toggleFavorite(
-                                        food,
-                                        in: modelContext,
-                                        toastCenter: toastCenter
-                                    )
-                                } : nil,
-                            isFavorited: { food in
-                                food.favoriteEntry != nil
+                        if !searchText.isEmpty {
+                            LibrarySearchCard(
+                                query: searchText,
+                                hasResults: !foods.isEmpty,
+                                onCreate: createFromSearch
+                            ) {
+                                foodList(foods, showCard: false)
                             }
-                        )
-                        .padding(.horizontal)
+                            .padding(.horizontal)
+                        } else if !foods.isEmpty {
+                            foodList(foods, showCard: true)
+                                .padding(.horizontal)
+                        }
+
+                        if !builtIns.isEmpty {
+                            builtInList(builtIns)
+                                .padding([.top, .horizontal])
+                        }
                     }
                 }
                 .tabBarScrollInsets()
@@ -347,7 +404,7 @@ struct LibraryView<Header: View>: View {
             }
         }
         .withGlobalSwipeDismissal()
-        .animation(.easeInOut(duration: 0.25), value: foods.isEmpty)
+        .animation(.easeInOut(duration: 0.25), value: isEmpty)
         .navigationTitle(title)
         .navigationSubtitle(selectionSubtitle)
         .navigationBarTitleDisplayMode(.inline)
@@ -368,11 +425,20 @@ struct LibraryView<Header: View>: View {
         .navigationDestination(item: $selectedFood) { food in
             FoodDetailView(food: food)
         }
+        .onChange(of: selectedFood) { oldFood, newFood in
+            if newFood == nil, let oldFood {
+                discardIfUnused(oldFood)
+            }
+        }
         .navigationDestination(item: $listToManage) { kind in
             ManageListView(kind: kind)
         }
         .navigationDestination(isPresented: $isManagingSavedLocations) {
             ManageSavedLocationsView()
+        }
+        .sheet(isPresented: $showsBuiltInDrinks) {
+            DrinkListView(mode: .manage)
+                .environment(\.tabBarHeight, 0)
         }
         .onAppear {
             var transaction = Transaction()
@@ -392,6 +458,9 @@ struct LibraryView<Header: View>: View {
         .onChange(of: usesRecipeStats) {
             refreshStats()
         }
+        .onChange(of: countsHydrationLogs) {
+            refreshStats()
+        }
         .onChange(of: popToRootTrigger) {
             selectedFood = nil
             listToManage = nil
@@ -405,6 +474,16 @@ struct LibraryView<Header: View>: View {
         }
         .sheet(item: $foodToLog, onDismiss: refreshStats) { food in
             LogFoodSheet(food: food)
+        }
+        .onChange(of: foodToLog) { oldFood, newFood in
+            if newFood == nil, let oldFood {
+                discardIfUnused(oldFood)
+            }
+        }
+        .onChange(of: foodToEdit) { oldFood, newFood in
+            if newFood == nil, let oldFood {
+                discardIfUnused(oldFood)
+            }
         }
         .sheet(item: $foodToEdit) { food in
             if food.type == .recipe {
@@ -459,6 +538,7 @@ struct LibraryView<Header: View>: View {
         ) {
             handleSelect(food)
         }
+        .aliasNote(DrinkAliasSearch(searchText).alias(for: food))
 
         if let selection {
             let isBlocked = selection.isBlocked(food)
@@ -487,7 +567,55 @@ struct LibraryView<Header: View>: View {
         return nil
     }
 
+    private func storedBuiltIn(_ food: FoodItem) -> FoodItem? {
+        guard !BuiltInCatalog.isStored(food) else { return food }
+        do {
+            let stored = try BuiltInCatalog.stored(food, in: modelContext)
+            storedBuiltInIDs.insert(stored.id)
+            return stored
+        } catch {
+            toastCenter?.show(.failure(String(localized: "Couldn't Open \(food.name)")))
+            return nil
+        }
+    }
+
+    private func discardIfUnused(_ food: FoodItem) {
+        guard storedBuiltInIDs.remove(food.id) != nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            BuiltInCatalog.discardIfUnused(food, in: modelContext)
+        }
+    }
+
+    private func builtInList(_ foods: [FoodItem]) -> some View {
+        EntryList(
+            title: "Built-In",
+            items: foods,
+            allowSwipeActions: false,
+            rowContent: { food in
+                if isTabRoot {
+                    foodRow(for: food)
+                        .contextMenu {
+                            BuiltInMenuItems(
+                                food: food,
+                                onLog: { foodToLog = storedBuiltIn(food) },
+                                onEdit: { foodToEdit = storedBuiltIn(food) }
+                            )
+                        }
+                } else {
+                    foodRow(for: food)
+                }
+            }
+        )
+    }
+
     private func handleSelect(_ food: FoodItem) {
+        guard BuiltInCatalog.isStored(food) else {
+            if let stored = storedBuiltIn(food) {
+                if selection != nil { storedBuiltInIDs.remove(stored.id) }
+                handleSelect(stored)
+            }
+            return
+        }
         if let selection {
             guard !selection.isBlocked(food) else { return }
             withAnimation(.snappy) {
@@ -501,7 +629,13 @@ struct LibraryView<Header: View>: View {
     }
 
     private func refreshStats() {
-        logStats = usesLogStats ? FoodItemStore.logStats(in: modelContext) : [:]
+        logStats =
+            usesLogStats
+            ? FoodItemStore.logStats(
+                in: modelContext,
+                includingHydrationLogs: countsHydrationLogs
+            )
+            : [:]
         recipeStats =
             usesRecipeStats ? FoodItemStore.recipeStats(in: modelContext) : [:]
     }
@@ -584,17 +718,13 @@ struct LibraryView<Header: View>: View {
             .font(.subheadline)
         } actions: {
             if !searchText.isEmpty {
-                CreateFromSearchButtons(
-                    query: searchText,
-                    title: "Create New \(addableEntryType.rawValue.capitalized)"
-                ) { name, source in
-                    newEntryName = name
-                    newEntrySource = source
-                    entryTypeToAdd = addableEntryType
-                }
+                createFromSearchButtons
             } else if let type = singleType {
                 Button("Add \(type)") { entryTypeToAdd = addableEntryType }
                     .tint(.accentColor)
+                if isTabRoot && addableEntryType == .drink {
+                    Button("View Built-In Drinks") { showsBuiltInDrinks = true }
+                }
             } else {
                 Button("Add \(fallbackEntryType.rawValue.capitalized)") {
                     entryTypeToAdd = fallbackEntryType

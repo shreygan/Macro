@@ -34,6 +34,7 @@ struct NewEntryView: View {
         [FoodItem]
     @Query(sort: \EntryDraft.updatedAt, order: .reverse) private var drafts:
         [EntryDraft]
+    @Query private var users: [User]
     @Query(NewEntryView.recentEntriesDescriptor) private var recentEntries:
         [LoggedEntry]
 
@@ -50,7 +51,7 @@ struct NewEntryView: View {
             predicate: #Predicate { $0.parentEntry == nil },
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
         )
-        descriptor.fetchLimit = 100
+        descriptor.fetchLimit = 200
         descriptor.relationshipKeyPathsForPrefetching = [\.originalFoodItem]
         return descriptor
     }
@@ -68,8 +69,11 @@ struct NewEntryView: View {
     @State private var showAddIngredient = false
     @State private var showAddFood = false
     @State private var showAddRecipe = false
+    @State private var showAddDrink = false
     @State private var foodToCreate: NewFoodRequest? = nil
     @State private var foodToLog: FoodItem? = nil
+    @State private var drinkToLog: FoodItem? = nil
+    @State private var storedBuiltInIDs: Set<UUID> = []
     @State private var recipeToLog: FoodItem? = nil
 
     @State private var showReorderFavoritesSheet = false
@@ -77,12 +81,23 @@ struct NewEntryView: View {
     @State private var foodToEdit: FoodItem? = nil
     @State private var foodToDelete: FoodItem? = nil
 
+    private var tracksHydration: Bool {
+        users.first?.tracksHydration ?? true
+    }
+
     private var isSearching: Bool {
         !searchText.isEmpty
     }
 
     private var searchResults: [FoodItem] {
-        FoodSearch(searchText).ranked(allFoods, stats: logStats())
+        let library = allFoods.filter(\.isInLibrary)
+        let ranked = FoodSearch(searchText).ranked(library, stats: logStats())
+        let aliases = DrinkAliasSearch(searchText)
+        return ranked + library.filter { aliases.includes($0) && !ranked.contains($0) }
+    }
+
+    private var builtInResults: [FoodItem] {
+        BuiltInCatalog.matches(searchText, stored: allFoods)
     }
 
     private func logStats() -> [UUID: FoodLogStats] {
@@ -115,13 +130,40 @@ struct NewEntryView: View {
         ) {
             log(food)
         }
+        .aliasNote(DrinkAliasSearch(searchText).alias(for: food))
     }
 
     private func log(_ food: FoodItem) {
+        guard BuiltInCatalog.isStored(food) else {
+            do {
+                let stored = try BuiltInCatalog.stored(food, in: modelContext)
+                storedBuiltInIDs.insert(stored.id)
+                log(stored)
+            } catch {
+                toastCenter?.show(.failure(String(localized: "Couldn't Open \(food.name)")))
+            }
+            return
+        }
         if food.type == .recipe {
             recipeToLog = food
+        } else if tracksHydration, food.isLoggableDrink {
+            drinkToLog = food
         } else {
             foodToLog = food
+        }
+    }
+
+    private func edit(_ food: FoodItem) {
+        guard !BuiltInCatalog.isStored(food) else {
+            foodToEdit = food
+            return
+        }
+        do {
+            let stored = try BuiltInCatalog.stored(food, in: modelContext)
+            storedBuiltInIDs.insert(stored.id)
+            foodToEdit = stored
+        } catch {
+            toastCenter?.show(.failure(String(localized: "Couldn't Open \(food.name)")))
         }
     }
 
@@ -167,6 +209,42 @@ struct NewEntryView: View {
             },
             isFavorited: { food in
                 food.favoriteEntry != nil
+            }
+        )
+    }
+
+    private func discardIfUnused(_ food: FoodItem) {
+        guard storedBuiltInIDs.remove(food.id) != nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            BuiltInCatalog.discardIfUnused(food, in: modelContext)
+        }
+    }
+
+    private func discardStoredBuiltIns() {
+        let foods = allFoods.filter { storedBuiltInIDs.contains($0.id) }
+        storedBuiltInIDs = []
+        guard !foods.isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            for food in foods {
+                BuiltInCatalog.discardIfUnused(food, in: modelContext)
+            }
+        }
+    }
+
+    private func builtInList(_ foods: [FoodItem]) -> some View {
+        EntryList(
+            title: "Built-In",
+            items: foods,
+            allowSwipeActions: false,
+            rowContent: { food in
+                foodRow(for: food)
+                    .contextMenu {
+                        BuiltInMenuItems(
+                            food: food,
+                            onLog: { log(food) },
+                            onEdit: { edit(food) }
+                        )
+                    }
             }
         )
     }
@@ -252,20 +330,28 @@ struct NewEntryView: View {
             ) { searchText = $0 }
             .font(.subheadline)
         } actions: {
-            CreateFromSearchButtons(
-                query: searchText,
-                title: "Create New Food"
-            ) { name, source in
-                foodToCreate = NewFoodRequest(name: name, source: source)
-            }
+            createFromSearchButtons
         }
+    }
+
+    private func createFromSearch(name: String, source: String) {
+        foodToCreate = NewFoodRequest(name: name, source: source)
+    }
+
+    private var createFromSearchButtons: some View {
+        CreateFromSearchButtons(
+            query: searchText,
+            title: "Create New Food",
+            onCreate: createFromSearch
+        )
     }
 
     var body: some View {
         let favoritedFoods = favoriteEntries.compactMap { $0.foodItem }
         let recentFoods = recentFoods
         let searchResults = isSearching ? searchResults : []
-        let showsNoResults = isSearching && searchResults.isEmpty
+        let builtInResults = isSearching ? builtInResults : []
+        let showsNoResults = isSearching && searchResults.isEmpty && builtInResults.isEmpty
 
         NavigationStack {
             ZStack {
@@ -295,8 +381,18 @@ struct NewEntryView: View {
                                     ButtonRow(
                                         icon: .appSymbol(.recipe),
                                         title: "Add Recipe",
+                                        bottomPadding: tracksHydration ? 2 : 16
                                     ) {
                                         showAddRecipe = true
+                                    }
+
+                                    if tracksHydration {
+                                        ButtonRow(
+                                            icon: .appSymbol(.drink),
+                                            title: "Add Drink",
+                                        ) {
+                                            showAddDrink = true
+                                        }
                                     }
                                 }
                                 .padding([.leading, .trailing])
@@ -384,13 +480,25 @@ struct NewEntryView: View {
                                 }
                             }
                             .transition(.opacity)
-                        } else if !searchResults.isEmpty {
-                            Card {
-                                foodList(searchResults)
+                        } else {
+                            if !showsNoResults {
+                                LibrarySearchCard(
+                                    query: searchText,
+                                    hasResults: !searchResults.isEmpty,
+                                    onCreate: createFromSearch
+                                ) {
+                                    foodList(searchResults)
+                                        .transition(.opacity)
+                                }
+                                .padding([.leading, .trailing])
+                                .transition(.opacity)
+                            }
+
+                            if !builtInResults.isEmpty {
+                                builtInList(builtInResults)
+                                    .padding([.top, .leading, .trailing])
                                     .transition(.opacity)
                             }
-                            .padding([.leading, .trailing])
-                            .transition(.opacity)
                         }
 
                         Spacer()
@@ -430,6 +538,10 @@ struct NewEntryView: View {
                     .animation(
                         .spring(response: 0.4, dampingFraction: 0.8),
                         value: searchResults
+                    )
+                    .animation(
+                        .easeInOut(duration: 0.25),
+                        value: builtInResults.isEmpty
                     )
                 }
                 .contentMargins(.bottom, 8, for: .scrollContent)
@@ -474,11 +586,23 @@ struct NewEntryView: View {
                         prefill: .named(request.name, source: request.source)
                     )
                 }
+                .navigationDestination(isPresented: $showAddDrink) {
+                    AddEntryView(
+                        entryType: .drink,
+                        isPushedView: true,
+                        offersLogNow: true
+                    )
+                }
                 .navigationDestination(isPresented: $showAddRecipe) {
                     AddRecipeView(offersLogNow: true, isPushedView: true)
                 }
                 .navigationDestination(item: $foodToLog) { food in
                     LogEntryView(food: food, isPushedView: true)
+                }
+                .onChange(of: foodToLog) { oldFood, newFood in
+                    if newFood == nil, let oldFood {
+                        discardIfUnused(oldFood)
+                    }
                 }
                 .navigationDestination(item: $recipeToLog) { recipe in
                     LogRecipeView(recipe: recipe, isPushedView: true)
@@ -505,8 +629,31 @@ struct NewEntryView: View {
             .animation(.easeInOut(duration: 0.25), value: showsNoResults)
         }
         .environment(\.rootDismiss, { finishLogging() })
+        .onDisappear(perform: discardStoredBuiltIns)
+        .sheet(item: $drinkToLog) { drink in
+            let dayStartMinutes = users.first?.dayStartMinutes ?? 0
+            let today = Calendar.current.logicalDay(for: .now, dayStartMinutes: dayStartMinutes)
+            LogDrinkSheet(
+                day: today,
+                dayStartMinutes: dayStartMinutes,
+                logicalToday: today,
+                drink: drink,
+                focusesAmount: false,
+                onLogged: finishLogging
+            )
+        }
+        .onChange(of: drinkToLog) { oldDrink, newDrink in
+            if newDrink == nil, let oldDrink {
+                discardIfUnused(oldDrink)
+            }
+        }
         .sheet(isPresented: $showReorderFavoritesSheet) {
             ReorderFavoritesView()
+        }
+        .onChange(of: foodToEdit) { oldFood, newFood in
+            if newFood == nil, let oldFood {
+                discardIfUnused(oldFood)
+            }
         }
         .sheet(item: $foodToEdit) { food in
             if food.type == .recipe {

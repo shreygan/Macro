@@ -50,6 +50,7 @@ final class IngredientSelection {
 struct IngredientSelectionView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.tracksHydration) private var tracksHydration
 
     var excludedRecipe: FoodItem?
     var onAdd: ([FoodItem]) -> Void
@@ -58,7 +59,7 @@ struct IngredientSelectionView: View {
 
     @State private var activeSheet: ActiveSheet?
     enum ActiveSheet: Identifiable {
-        case newIngredient, newFood
+        case newIngredient, newFood, newDrink
         var id: Int { hashValue }
     }
 
@@ -99,8 +100,16 @@ struct IngredientSelectionView: View {
 
                                     ButtonRow(
                                         icon: .appSymbol(.food),
-                                        title: "Add Food"
+                                        title: "Add Food",
+                                        bottomPadding: tracksHydration ? 2 : 16
                                     ) { activeSheet = .newFood }
+
+                                    if tracksHydration {
+                                        ButtonRow(
+                                            icon: .appSymbol(.drink),
+                                            title: "Add Drink"
+                                        ) { activeSheet = .newDrink }
+                                    }
                                 }
                             }
                             .padding(.bottom)
@@ -113,6 +122,7 @@ struct IngredientSelectionView: View {
                                     )
                                     libraryLink("Foods", type: .food)
                                     libraryLink("Recipes", type: .recipe)
+                                    libraryLink("Drinks", type: .drink)
                                 }
                             }
                         }
@@ -136,6 +146,12 @@ struct IngredientSelectionView: View {
                 case .newFood:
                     AddEntryView(
                         entryType: .food,
+                        isPushedView: true,
+                        onSelectInstantly: selectCreated
+                    )
+                case .newDrink:
+                    AddEntryView(
+                        entryType: .drink,
                         isPushedView: true,
                         onSelectInstantly: selectCreated
                     )
